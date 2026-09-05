@@ -29,6 +29,13 @@ spm-go は標準レジストリに存在しないため、ローカルレジス�
 `policy.yaml` は `AQUA_POLICY_CONFIG` 環境変数で渡す (端末ごとの `aqua policy allow` を
 使わないのは、端末ローカルの許可状態を作らないため)。
 
+go-arch-lint v1.18.0 は `filepath.Walk` でプロジェクトツリー全体を lstat するため、
+サンドボックス環境ではプロジェクト直下の `.env` の lstat が拒否されて
+`failed to walk project tree: lstat .../.env: operation not permitted` で落ちる。
+修正は upstream の PR #90 (`Walk` → `WalkDir`) で、リリースされるまでは
+同じ `aqua/registry.yaml` にある `usadamasa/go-arch-lint` の `go_build` 定義を
+そのまま使ってタグを固定できる。
+
 ---
 
 ## GitHub Actions ワークフロー
