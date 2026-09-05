@@ -197,8 +197,15 @@ if TEST_OUTPUT=$(go test ./... -cover 2>&1); then
     fi
 else
     printf '%s\n' "  カバレッジ: テスト失敗のため測定不可"
-    printf '%s\n' "警告: go test が失敗したためカバレッジを測定できません。出力の末尾:" >&2
-    printf '%s\n' "$TEST_OUTPUT" | tail -5 >&2
+    printf '%s\n' "警告: go test が失敗したためカバレッジを測定できません。" >&2
+    # go test は失敗したパッケージの後も ok 行を出し続けるので、末尾を切り出すと
+    # 原因の行に届かないことがある。FAIL 行を拾い、無いときだけ末尾に落とす。
+    if FAIL_LINES=$(printf '%s\n' "$TEST_OUTPUT" | grep -E '^[[:space:]]*(--- )?FAIL'); then
+        printf '%s\n' "$FAIL_LINES" | head -10 >&2
+    else
+        printf '%s\n' "出力の末尾:" >&2
+        printf '%s\n' "$TEST_OUTPUT" | tail -5 >&2
+    fi
 fi
 
 printf '%s\n' ""

@@ -38,6 +38,13 @@ write_failing_test() {
         'func TestAnswer(t *testing.T) {' \
         '	t.Fatal("deliberate failure")' \
         '}' > "${PROJECT}/fixture_test.go"
+
+    # go test は失敗したパッケージの後も ok 行を出し続ける。パッケージ順で後ろに
+    # 並ぶ成功パッケージを置き、FAIL 行が出力の末尾に来ない状況を作る。
+    mkdir -p "${PROJECT}/zzlast"
+    printf '%s\n' 'package zzlast' '' 'func Noop() {}' > "${PROJECT}/zzlast/zzlast.go"
+    printf '%s\n' 'package zzlast' '' 'import "testing"' '' \
+        'func TestNoop(t *testing.T) { Noop() }' > "${PROJECT}/zzlast/zzlast_test.go"
 }
 
 @test "go test が落ちても JSON サマリを出して exit 0 する" {
@@ -47,6 +54,8 @@ write_failing_test() {
 
     [ "$status" -eq 0 ]
     [[ "$output" == *"カバレッジ: テスト失敗のため測定不可"* ]]
+    # 後ろの成功パッケージの ok 行に埋もれず、失敗した関数名まで届く
+    [[ "$output" == *"--- FAIL: TestAnswer"* ]]
     # 参考値が取れなくても測定結果そのものは残る
     ls "${PROJECT}"/baseline-*.json
 }
