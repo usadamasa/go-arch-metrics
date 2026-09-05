@@ -72,6 +72,26 @@ jobs:
       - name: Run shellcheck
         run: shellcheck skills/*/scripts/*.sh
 
+  bats:
+    name: bats
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      # baseline.sh のテストは fixture の Go module を go test で回す
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Install bats-core
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y bats
+
+      - name: Run bats tests
+        run: bats tests/
+
   plugin-validate:
     name: plugin validate
     runs-on: ubuntu-latest
@@ -89,7 +109,7 @@ jobs:
           claude plugin validate --strict skills
 
   ci-status-check:
-    needs: [go-test, go-lint, shellcheck, plugin-validate]
+    needs: [go-test, go-lint, bats, shellcheck, plugin-validate]
     if: failure()
     runs-on: ubuntu-latest
     timeout-minutes: 10

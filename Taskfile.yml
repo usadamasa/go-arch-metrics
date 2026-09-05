@@ -7,9 +7,10 @@ tasks:
       - go build -o ./bin/ ./...
 
   test:
-    desc: Go テストを実行
+    desc: Go テストと baseline.sh の bats テストを実行
     cmds:
       - go test ./...
+      - bats tests/
 
   test-cover:
     desc: カバレッジ付きテスト
