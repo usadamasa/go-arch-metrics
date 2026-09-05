@@ -1,0 +1,40 @@
+version: '3'
+
+tasks:
+  build:
+    desc: cmd/ の全 Go バイナリを bin/ にビルド
+    cmds:
+      - go build -o ./bin/ ./...
+
+  test:
+    desc: Go テストを実行
+    cmds:
+      - go test ./...
+
+  test-cover:
+    desc: カバレッジ付きテスト
+    cmds:
+      - go test -coverprofile=coverage.out ./...
+      - go tool cover -func=coverage.out
+
+  lint:
+    desc: Go の全静的解析を実行
+    env:
+      # aqua v2 は標準レジストリ以外のパッケージを既定で拒否する (code 002)｡lint が呼ぶ
+      # spm-go がローカルレジストリ由来なので､許可を宣言した aqua/policy.yaml を渡す｡
+      # 端末ごとの `aqua policy allow` を使わないのは端末ローカルの状態を作らないため｡
+      #
+      # 相対パスにはできない｡go-arch-lint は各パッケージのディレクトリを cwd にして
+      # go を起動するため、cwd 相対だと cmd/<pkg>/../aqua を探しに行く｡
+      AQUA_POLICY_CONFIG: '{{.TASKFILE_DIR}}/aqua/policy.yaml'
+    cmds:
+      - golangci-lint run --timeout 5m ./...
+      - go-arch-lint check
+      # go-arch-lint はコードが設定に違反していないかしか見ない｡設定そのものが
+      # パッケージツリーの転記へ劣化していく方向はこちらが止める｡指標の意味と対処は
+      # analyze-arch-lint --metrics｡
+      - go run ./cmd/analyze-arch-lint --strict .
+      - govulncheck ./...
+      - gosec ./...
+      - go run ./cmd/analyze-modularity --strict .
+      - spm-go all

@@ -1,0 +1,9 @@
+[tagpr]
+    releaseBranch = main
+    # vPrefix = false は必須｡`v2026.0905.0` は Go module が major 2026 の semver と
+    # 解釈し､module path に /v2026 が無いと拒否する｡`v` 無しなら Go にとって semver
+    # tag ではないので無視され､@latest は default branch の pseudo-version に解決される｡
+    vPrefix = false
+    calendarVersioning = YYYY.0M0D.MICRO
+    versionFile = .claude-plugin/plugin.json
+    release = true

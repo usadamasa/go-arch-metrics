@@ -1,0 +1,56 @@
+# .golangci.yml
+# アーキテクチャメトリクス向け golangci-lint v2 設定 (このリポジトリ自身への適用)
+# テンプレートは skills/setup/references/golangci-config.md
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    # --- テスト可能性メトリクス ---
+    - gocognit   # 認知的複雑度: コードの理解しやすさを数値化
+    - gocyclo    # 循環複雑度: 分岐の多さを数値化 (McCabe)
+    - cyclop     # 循環複雑度: パッケージ全体も対象
+    - funlen     # 関数の長さ: 行数と文数の上限
+    - nestif     # ネストの深さ: if/for の入れ子レベル
+    # --- 保守性メトリクス ---
+    - maintidx   # 保守性指数: 複雑度・行数・Halstead の複合指標
+    # --- 高度な静的解析 ---
+    - staticcheck  # standard に含まれるが明示的に指定
+
+  settings:
+    # 実測最大値 26 (analyze-arch-lint の analyze) の直上｡
+    # TODO: analyze を分割して 20 まで引き下げる
+    gocognit:
+      min-complexity: 27
+
+    gocyclo:
+      min-complexity: 20
+
+    cyclop:
+      max-complexity: 20
+
+    funlen:
+      lines: 100
+      statements: 60
+
+    nestif:
+      min-complexity: 5
+
+    maintidx:
+      under: 20
+
+  exclusions:
+    # 生成コードは全チェックを除外
+    paths:
+      - ".*\\.pb\\.go$"
+      - ".*_gen\\.go$"
+    # テーブル駆動テストは複雑度・長さ・保守性指数がどうしても悪化する
+    rules:
+      - path: "_test\\.go"
+        linters:
+          - cyclop
+          - errcheck   # テストセットアップ関数 (os.MkdirAll 等) の戻り値チェックを緩める
+          - funlen
+          - gocognit
+          - gocyclo
+          - maintidx

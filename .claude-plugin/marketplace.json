@@ -1,0 +1,37 @@
+{
+  "name": "go-arch-metrics",
+  "owner": {
+    "name": "usadamasa",
+    "email": "usadamasa@users.noreply.github.com"
+  },
+  "metadata": {
+    "description": "Go architecture metrics: modularity and testability measurement, evaluation and remediation skills"
+  },
+  "plugins": [
+    {
+      "name": "go-arch-metrics",
+      "source": "./",
+      "description": "Measure and improve Go project modularity and testability with go-arch-lint, golangci-lint, spm-go and two purpose-built CLIs",
+      "author": {
+        "name": "usadamasa"
+      },
+      "repository": "https://github.com/usadamasa/go-arch-metrics",
+      "license": "MIT",
+      "keywords": [
+        "go",
+        "architecture",
+        "metrics",
+        "lint"
+      ],
+      "category": "development",
+      "tags": [
+        "go",
+        "golang",
+        "architecture",
+        "modularity",
+        "testability",
+        "static-analysis"
+      ]
+    }
+  ]
+}

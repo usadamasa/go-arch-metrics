@@ -1,0 +1,24 @@
+changelog:
+  exclude:
+    labels:
+      - chore
+      - documentation
+      - tagpr
+  categories:
+    - title: New Features 🎉
+      labels:
+        - minor
+        - enhancement
+    - title: Breaking Changes 🛠
+      labels:
+        - major
+        - breaking-change
+    - title: Bug Fixes 🐛
+      labels:
+        - bug
+    - title: Dependencies
+      labels:
+        - dependencies
+    - title: Other Changes
+      labels:
+        - "*"
