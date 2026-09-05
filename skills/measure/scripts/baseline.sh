@@ -171,17 +171,35 @@ else
 fi
 printf '%s\n' ""
 
+# パッケージ統計とテストカバレッジは参考値なので、失敗しても測定全体は止めない。
+# どちらも pipefail 下でコマンド置換に直接パイプを書くと、go の非ゼロ終了が
+# そのまま set -e に拾われ、JSON サマリを出す前に script が黙って死ぬ。
+# stderr は捨てず、失敗の理由を残す。
+
 # パッケージ統計 (go list)
 printf '%s\n' "--- パッケージ統計 ---"
-PKG_COUNT=$(go list ./... 2>/dev/null | wc -l | tr -d ' ')
-printf '%s\n' "  パッケージ数: $PKG_COUNT"
+if PKG_LIST=$(go list ./... 2>&1); then
+    printf '%s\n' "  パッケージ数: $(printf '%s\n' "$PKG_LIST" | wc -l | tr -d ' ')"
+else
+    printf '%s\n' "  パッケージ数: 測定不可 (go list が失敗)"
+    printf '%s\n' "警告: go list が失敗しました。出力の末尾:" >&2
+    printf '%s\n' "$PKG_LIST" | tail -5 >&2
+fi
 
 # テストカバレッジ (参考値)
 printf '%s\n' "  テストカバレッジを測定中..."
-COVERAGE=$(go test ./... -cover 2>/dev/null | \
-    grep -oE '[0-9]+\.[0-9]+%' | \
-    awk -F'%' '{ sum += $1; n++ } END { if (n>0) printf "  平均カバレッジ: %.1f%%\n", sum/n; else print "  カバレッジ: 測定不可" }')
-printf '%s\n' "$COVERAGE"
+if TEST_OUTPUT=$(go test ./... -cover 2>&1); then
+    if COVERAGE_LINES=$(printf '%s\n' "$TEST_OUTPUT" | grep -oE '[0-9]+\.[0-9]+%'); then
+        printf '%s\n' "$COVERAGE_LINES" |
+            awk -F'%' '{ sum += $1; n++ } END { printf "  平均カバレッジ: %.1f%%\n", sum/n }'
+    else
+        printf '%s\n' "  カバレッジ: 測定不可 (カバレッジ行が出力にない)"
+    fi
+else
+    printf '%s\n' "  カバレッジ: テスト失敗のため測定不可"
+    printf '%s\n' "警告: go test が失敗したためカバレッジを測定できません。出力の末尾:" >&2
+    printf '%s\n' "$TEST_OUTPUT" | tail -5 >&2
+fi
 
 printf '%s\n' ""
 

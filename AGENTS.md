@@ -16,6 +16,7 @@ aqua/             registry.yaml (spm-go のローカル定義) と policy.yaml
 ```sh
 task test                            # go test ./...
 task lint                            # 全静的解析。aqua のツールが要る
+bats tests/                          # baseline.sh のシェルテスト
 claude plugin validate --strict .    # plugin / marketplace manifest
 ```
 
