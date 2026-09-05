@@ -1,0 +1,5 @@
+/bin/
+/tmp/
+coverage.out
+baseline-*.json
+.DS_Store

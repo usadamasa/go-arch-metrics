@@ -1,0 +1,16 @@
+{
+  "name": "go-arch-metrics",
+  "version": "0.0.0",
+  "description": "Measure and improve Go project modularity and testability with go-arch-lint, golangci-lint, spm-go and two purpose-built CLIs",
+  "author": {
+    "name": "usadamasa"
+  },
+  "repository": "https://github.com/usadamasa/go-arch-metrics",
+  "license": "MIT",
+  "skills": [
+    "./skills/setup",
+    "./skills/measure",
+    "./skills/evaluate",
+    "./skills/remediate"
+  ]
+}

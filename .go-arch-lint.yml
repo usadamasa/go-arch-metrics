@@ -1,0 +1,20 @@
+version: 3
+
+workdir: .
+
+# この設定自体の健全性は `go run ./cmd/analyze-arch-lint --metrics` と `--strict .` で見る｡
+# cmd/ 配下の 2 つの main パッケージだけの構成なので component は役割 1 つで足りる｡
+# internal パッケージを足したら cmd_internal / shared_internal を切ること
+# (skills/remediate/references/arch-lint-remediation.md)｡
+components:
+  cmd_main:
+    in: "cmd/*"
+
+vendors:
+  yaml:
+    in: gopkg.in/yaml.v3
+
+deps:
+  cmd_main:
+    canUse:
+      - yaml

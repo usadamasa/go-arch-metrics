@@ -1,0 +1,97 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  go-test:
+    name: go test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test -coverprofile=coverage.out ./...
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage
+          path: coverage.out
+
+  go-lint:
+    name: go lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      # task も含めて aqua.yaml がバージョンを固定する｡lazy install なので
+      # aqua install は呼ばず､task の起動時に必要なものだけ入る｡
+      # aqua-installer は major だけの浮動タグを打たないので patch まで書く
+      - uses: aquaproj/aqua-installer@v3.1.2
+        with:
+          aqua_version: v2.53.3
+
+      - name: Run all linters
+        run: task lint
+
+  shellcheck:
+    name: shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install shellcheck
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y shellcheck
+
+      - name: Run shellcheck
+        run: shellcheck skills/*/scripts/*.sh
+
+  plugin-validate:
+    name: plugin validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      # ubuntu-latest は node と npm を同梱するので setup-node は要らない
+      - name: Install Claude Code
+        run: npm i -g @anthropic-ai/claude-code
+
+      - name: Validate manifests and skills
+        run: |
+          claude plugin validate --strict .
+          claude plugin validate --strict .claude-plugin/plugin.json
+          claude plugin validate --strict skills
+
+  ci-status-check:
+    needs: [go-test, go-lint, shellcheck, plugin-validate]
+    if: failure()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - run: exit 1
