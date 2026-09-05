@@ -15,3 +15,23 @@ packages:
     version_source: github_tag
     files:
       - name: spm-go
+
+  # usadamasa/go-arch-lint は upstream (fe3dback/go-arch-lint) v1.18.0 の
+  # filepath.Walk を WalkDir に置き換えた fork｡upstream PR #90 がリリースされたら
+  # aqua.yaml を fe3dback/go-arch-lint に戻し､この定義ごと消す｡
+  # go.mod の module path が github.com/fe3dback/go-arch-lint のままなので go_install は
+  # 使えず (path 不一致で拒否される)､GitHub Releases も無いため､タグの source tarball を
+  # 取って go build する go_build を使う｡
+  - name: usadamasa/go-arch-lint
+    type: go_build
+    repo_owner: usadamasa
+    repo_name: go-arch-lint
+    description: go-arch-lint fork carrying the filepath.WalkDir fix until upstream PR #90 ships
+    link: https://github.com/usadamasa/go-arch-lint
+    version_source: github_tag
+    files:
+      # dir は source tarball を展開したディレクトリ (<repo>-<tag から v を落としたもの)､
+      # src はその中のビルド対象パッケージ｡main.go はリポジトリ直下にある｡
+      - name: go-arch-lint
+        src: .
+        dir: go-arch-lint-{{trimV .Version}}

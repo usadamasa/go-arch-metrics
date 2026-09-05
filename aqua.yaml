@@ -12,7 +12,12 @@ registries:
 
 packages:
   - name: go-task/task@v3.51.1
-  - name: fe3dback/go-arch-lint@v1.18.0
+  # upstream v1.18.0 は filepath.Walk で全エントリを lstat するため､strict sandbox 内では
+  # <project>/.env の lstat 拒否で `failed to walk project tree` と落ちる｡修正は upstream へ
+  # PR #90 (Walk -> WalkDir) を出してあり､リリースされたら下の upstream 行へ戻す｡
+  # - name: fe3dback/go-arch-lint@v1.18.0
+  - name: usadamasa/go-arch-lint@v1.18.1-walkdir.1
+    registry: local
   - name: securego/gosec@v2.28.0
   - name: golangci/golangci-lint@v2.13.1
   - name: golang/vuln/govulncheck@v1.7.0

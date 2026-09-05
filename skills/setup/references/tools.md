@@ -92,6 +92,9 @@ go-arch-lint check --json-output ./...
 go-arch-lint graph ./... | dot -Tsvg > arch.svg
 ```
 
+v1.18.0 をサンドボックス環境で動かすと `.env` の lstat 拒否で落ちる。回避策は
+`references/ci-integration.md` の aqua の節を参照。
+
 ---
 
 ## govulncheck
