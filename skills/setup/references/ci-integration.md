@@ -58,7 +58,7 @@ jobs:
           cache: true
 
       - name: Setup aqua
-        uses: aquaproj/aqua-installer@v3
+        uses: aquaproj/aqua-installer@v3.1.2   # major だけの浮動タグは無いので patch まで書く
         with:
           aqua_version: v2.53.3
 
@@ -77,7 +77,7 @@ jobs:
           cache: true
 
       - name: Setup aqua
-        uses: aquaproj/aqua-installer@v3
+        uses: aquaproj/aqua-installer@v3.1.2   # major だけの浮動タグは無いので patch まで書く
         with:
           aqua_version: v2.53.3
 
@@ -137,7 +137,7 @@ jobs:
           go-version-file: go.mod
           cache: false
 
-      - uses: aquaproj/aqua-installer@v3
+      - uses: aquaproj/aqua-installer@v3.1.2   # major だけの浮動タグは無いので patch まで書く
         with:
           aqua_version: v2.53.3
 

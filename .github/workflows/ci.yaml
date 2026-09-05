@@ -50,7 +50,8 @@ jobs:
 
       # task も含めて aqua.yaml がバージョンを固定する｡lazy install なので
       # aqua install は呼ばず､task の起動時に必要なものだけ入る｡
-      - uses: aquaproj/aqua-installer@v3
+      # aqua-installer は major だけの浮動タグを打たないので patch まで書く
+      - uses: aquaproj/aqua-installer@v3.1.2
         with:
           aqua_version: v2.53.3
 
