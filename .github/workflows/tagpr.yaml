@@ -22,11 +22,17 @@ jobs:
         with:
           persist-credentials: false
 
-      # GITHUB_TOKEN が作った PR / tag は workflow を起動しない｡だで release PR には
-      # ci.yaml が付かない｡CI を走らせたくなったら他リポジトリと同じく
-      # actions/create-github-app-token@v2 (vars.TAGPR_APP_ID / secrets.TAGPR_PRIVATE_KEY)
-      # へ差し替える｡
+      # GITHUB_TOKEN では release PR を作れない (403 "GitHub Actions is not permitted
+      # to create or approve pull requests")｡加えて GITHUB_TOKEN が作った PR や tag は
+      # workflow を起動しないため､release PR に ci.yaml が付かない｡どちらも
+      # usadamasa-tagpr App のトークンで解決する｡
+      - uses: actions/create-github-app-token@v2
+        id: app-token
+        with:
+          app-id: ${{ vars.TAGPR_APP_ID }}
+          private-key: ${{ secrets.TAGPR_PRIVATE_KEY }}
+
       - uses: Songmu/tagpr@v1
         id: tagpr
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
