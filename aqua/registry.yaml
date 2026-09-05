@@ -26,7 +26,9 @@ packages:
     type: go_build
     repo_owner: usadamasa
     repo_name: go-arch-lint
-    description: go-arch-lint fork carrying the filepath.WalkDir fix until upstream PR #90 ships
+    # ダブルクォートが要る｡素で書くと ` #90 ships` が YAML のコメントとして落ち､
+    # description が "…until upstream PR" で切れる｡
+    description: "go-arch-lint fork carrying the filepath.WalkDir fix until upstream PR #90 ships"
     link: https://github.com/usadamasa/go-arch-lint
     version_source: github_tag
     files:
