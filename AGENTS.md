@@ -9,19 +9,19 @@ Go アーキテクチャメトリクスの Claude Code plugin。skill 4 本と C
 skills/           setup / measure / evaluate / remediate
 cmd/              analyze-arch-lint, analyze-modularity (どちらも package main)
 aqua/             registry.yaml (spm-go のローカル定義) と policy.yaml
+.claude/skills/   develop (このリポジトリ自身の開発環境と検証)
 ```
 
 ## 検証
 
 ```sh
-task test                            # go test ./...
+task test                            # go test ./... と bats tests/
 task lint                            # 全静的解析。aqua のツールが要る
-bats tests/                          # baseline.sh のシェルテスト
 claude plugin validate --strict .    # plugin / marketplace manifest
 ```
 
-`task lint` は `AQUA_POLICY_CONFIG` に `aqua/policy.yaml` を渡す。spm-go が
-ローカルレジストリ由来で、aqua v2 が標準レジストリ以外を既定で拒否するため。
+環境の用意、各コマンドが何を回しているか、つまずきどころは `develop` skill
+(`.claude/skills/develop`)。
 
 ## skill を書くときの決めごと
 
