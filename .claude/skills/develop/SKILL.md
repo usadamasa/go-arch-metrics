@@ -32,14 +32,16 @@ aqua は lazy install なので `aqua install` は要らない。`task` を起�
 
 ## 検証
 
-| コマンド | 中身 | CI job |
-|---------|------|--------|
-| `task test` | `go test ./...` と `bats tests/` | go-test / bats |
-| `task test-cover` | カバレッジ付き `go test` | go-test |
-| `task lint` | golangci-lint, go-arch-lint, analyze-arch-lint --strict, govulncheck, gosec, analyze-modularity --strict, spm-go | go-lint |
-| `task build` | `cmd/` の全バイナリを `bin/` へ | — |
-| `shellcheck skills/*/scripts/*.sh` | skill の script | shellcheck |
-| `claude plugin validate --strict .` | plugin manifest (`.claude-plugin/plugin.json` と `skills` も個別に通す) | plugin-validate |
+task が何を回すかは `task --list` を見る (`Taskfile.yml` の `desc` が正本)。
+ここでは CI のどの job に対応するかだけを持つ。
+
+| コマンド | CI job |
+|---------|--------|
+| `task test` | go-test / bats |
+| `task lint` | go-lint |
+| `task build` | — |
+| `shellcheck skills/*/scripts/*.sh` | shellcheck |
+| `claude plugin validate --strict .` | plugin-validate |
 
 PR を出す前にこの全部を通す。job の定義は `.github/workflows/ci.yaml`。
 
@@ -57,5 +59,7 @@ PR を出す前にこの全部を通す。job の定義は `.github/workflows/ci
   (Walk -> WalkDir) がリリースされたら `aqua.yaml` を標準レジストリ側へ戻す
 - **`analyze-arch-lint --strict` が落ちたとき**: 指標の意味としきい値と対処は
   `analyze-arch-lint --metrics` が出す。ドキュメント側に表を書き写さない
-- **skill を足したとき**: `.claude-plugin/plugin.json` の `skills` に追記する。
-  追記しないと `claude plugin validate --strict .` は通っても plugin から見えない
+- **配布用の skill (`skills/`) を足したとき**: `.claude-plugin/plugin.json` の `skills`
+  に追記する。追記しないと `claude plugin validate --strict skills` は通っても plugin
+  からは見えない。このリポジトリ自身のための skill (`.claude/skills/`) は plugin の
+  外なので追記しない

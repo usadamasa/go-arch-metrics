@@ -11,9 +11,8 @@ Go プロジェクトのモジュール性とテスト可能性を測り、改�
 /plugin install go-arch-metrics@go-arch-metrics
 ```
 
-測定に使う CLI (`analyze-arch-lint` / `analyze-modularity`) と外部ツール
-(go-arch-lint / golangci-lint / gosec / govulncheck / spm-go) は測定対象の
-プロジェクト側に入れる。手順は `go-arch-metrics:setup` skill が案内する。
+測定に使うツールは測定対象のプロジェクト側に入れる。何が要るかと入れ方は
+`go-arch-metrics:setup` skill が案内する。
 
 ## 5 ステップワークフロー
 
