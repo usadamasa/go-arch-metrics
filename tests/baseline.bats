@@ -109,3 +109,15 @@ write_failing_test() {
     [[ "$output" == *"failed to walk project tree"* ]]
     [[ "$output" != *"依存方向違反なし"* ]]
 }
+
+@test "spm-go が実行に失敗したら理由を出して止まる" {
+    write_passing_test
+    # aqua の shim は PATH にあるので require_tool は通るが、policy が無いと実行時に拒否される
+    printf '%s\n' '#!/bin/sh' "echo \"this package isn't allowed\" >&2" 'exit 1' \
+        > "${STUB_BIN}/spm-go"
+
+    run bash "$BASELINE" "$PROJECT"
+
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"this package isn't allowed"* ]]
+}
