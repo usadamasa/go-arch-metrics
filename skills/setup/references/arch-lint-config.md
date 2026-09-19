@@ -198,13 +198,13 @@ components:
 
 ```bash
 # 違反チェック
-go-arch-lint check ./...
+go-arch-lint check
 
 # JSON 形式で出力 (CI 向け)
-go-arch-lint check --json-output ./...
+go-arch-lint check --json
 
-# 依存グラフの可視化 (graphviz が必要)
-go-arch-lint graph ./... | dot -Tsvg > arch-dependency.svg
+# 依存グラフの可視化 (./go-arch-lint-graph.svg に出る)
+go-arch-lint graph
 ```
 
 ## よくあるエラーと対処
