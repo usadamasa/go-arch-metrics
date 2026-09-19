@@ -10,28 +10,17 @@ CI でも同じ `aqua.yaml` を使ってツールバージョンを固定する�
 > golangci-lint は GitHub Actions では `golangci/golangci-lint-action` が自前でインストールするため aqua 不要。
 > ローカル環境では `go.mod` の `tool` directive でも可 (`references/tools.md`)。
 
-```yaml
----
-# yaml-language-server: $schema=https://raw.githubusercontent.com/aquaproj/aqua/main/json-schema/aqua-yaml.json
-aqua_version: ">=2.0.0"
-
-registries:
-  - type: standard
-    ref: v4.227.0  # 定期的に更新する
-
-packages:
-  - name: golangci/golangci-lint@v2.13.1   # golangci-lint v2 系を使う (v1 と設定非互換)
-  - name: fe3dback/go-arch-lint@v1.19.0
+```sh
+aqua init                                                # aqua.yaml を作る
+aqua g -i golangci/golangci-lint fe3dback/go-arch-lint   # 最新版を aqua.yaml へ追記する
 ```
+
+golangci-lint は v2 系を使う (v1 と設定非互換)。
 
 spm-go は標準レジストリに存在しないため、ローカルレジストリの定義が別に要る。
 このプラグインのリポジトリの `aqua/registry.yaml` と `aqua/policy.yaml` がそのまま使える。
 `policy.yaml` は `AQUA_POLICY_CONFIG` 環境変数で渡す (端末ごとの `aqua policy allow` を
 使わないのは、端末ローカルの許可状態を作らないため)。
-
-go-arch-lint は v1.19.0 以上を使う。v1.18.0 以前は `filepath.Walk` でプロジェクトツリー全体を
-lstat するため、サンドボックス環境ではプロジェクト直下の `.env` の lstat が拒否されて
-`failed to walk project tree: lstat .../.env: operation not permitted` で落ちる。
 
 ---
 

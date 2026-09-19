@@ -53,8 +53,6 @@ PR を出す前にこの全部を通す。job の定義は `.github/workflows/ci
   go-arch-lint は各パッケージのディレクトリを cwd にして go を起動するので、相対パスだと
   `cmd/<pkg>/../aqua` を探しに行く。端末ごとの `aqua policy allow` は使わない
   (端末ローカルの状態を作らないため)
-- **go-arch-lint は v1.19.0 以上**: v1.18.0 以前は `filepath.Walk` で全エントリを lstat するため、
-  strict sandbox 内では `.env` の lstat 拒否で `failed to walk project tree` と落ちる
 - **`analyze-arch-lint --strict` が落ちたとき**: 指標の意味としきい値と対処は
   `analyze-arch-lint --metrics` が出す。ドキュメント側に表を書き写さない
 - **配布用の skill (`skills/`) を足したとき**: `.claude-plugin/plugin.json` の `skills`
