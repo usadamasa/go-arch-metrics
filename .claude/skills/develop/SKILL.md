@@ -20,9 +20,12 @@ skill を書くときの決めごと、リリース手順はリポジトリル�
 Go の版は `go.mod`。lint が呼ぶ外部ツールは `aqua.yaml` が固定する。
 
 ```sh
-brew install aquaproj/aqua/aqua   # 未導入なら
-export PATH="${AQUA_ROOT_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/aquaproj-aqua}/bin:$PATH"
+brew install aquaproj/aqua/aqua direnv   # 未導入なら
+direnv allow
 ```
+
+`.envrc` が aqua の bin を PATH に足し、`AQUA_POLICY_CONFIG` を渡す。`baseline.sh` のように
+task を通さずにツールを呼ぶときも、これで spm-go が policy で拒否されない。
 
 aqua は lazy install なので `aqua install` は要らない。`task` を起動した時点で必要な
 ものだけ入る (CI も `aqua install` を呼んでいない)。先に全部入れておきたいときだけ
@@ -49,7 +52,7 @@ PR を出す前にこの全部を通す。job の定義は `.github/workflows/ci
 
 - **`task lint` の `AQUA_POLICY_CONFIG`**: spm-go がローカルレジストリ
   (`aqua/registry.yaml`) 由来で、aqua v2 は標準レジストリ以外を既定で拒否する (code 002)。
-  そのため Taskfile が `aqua/policy.yaml` を渡している。**絶対パスでなければならない** —
+  そのため Taskfile と `.envrc` が `aqua/policy.yaml` を渡している。**絶対パスでなければならない** —
   go-arch-lint は各パッケージのディレクトリを cwd にして go を起動するので、相対パスだと
   `cmd/<pkg>/../aqua` を探しに行く。端末ごとの `aqua policy allow` は使わない
   (端末ローカルの状態を作らないため)
