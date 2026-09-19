@@ -1,129 +1,22 @@
-# CI 統合ガイド (GitHub Actions)
+# CI への組み込み
 
-ツールは対象プロジェクトの `go.mod` の `tool` directive から入れる (`references/tools.md`)。
+CI で回すコマンド。ツールを PATH に用意する方法はプロジェクトに任せる。
 golangci-lint は v2 系を使う (v1 と設定非互換)。
 
-## GitHub Actions ワークフロー
-
-### 方法 1: tool directive から入れる
-
-```yaml
-# .github/workflows/arch-metrics.yml
-name: Architecture Metrics
-
-on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-
-jobs:
-  golangci-lint:
-    name: golangci-lint (Testability & Maintainability)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod  # go.mod がサブディレクトリにある場合: go-version-file: cmd/go.mod
-          cache: true
-
-      - run: go install tool
-
-      - name: Run golangci-lint
-        run: golangci-lint run --timeout 5m ./...
-
-  go-arch-lint:
-    name: go-arch-lint (Modularity)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      - run: go install tool
-
-      - name: Check architecture rules
-        run: go-arch-lint check
+```sh
+golangci-lint run --timeout 5m ./...
+go-arch-lint check
+analyze-arch-lint --strict .
+govulncheck ./...
+gosec ./...
+analyze-modularity --strict .
+spm-go all
+go test -coverprofile=coverage.out ./...
 ```
 
-### 方法 2: golangci-lint 公式 Action を使う (golangci-lint のみ)
-
-```yaml
-# .github/workflows/golangci-lint.yml
-name: golangci-lint
-
-on:
-  push:
-    branches: [main]
-  pull_request:
-
-jobs:
-  golangci-lint:
-    name: lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-          cache: false
-
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v7
-        with:
-          version: v2.13.1   # v2 系を指定する。v1 を指定すると .golangci.yml が読めない
-          # .golangci.yml を自動で読み込む
-          args: --timeout 5m
-```
-
----
-
-## 全 linter を 1 ジョブにまとめる
-
-`go.mod` の `tool` directive を使うと `go install` の対象を CI に列挙せずに済む:
-
-```yaml
-  lint:
-    name: Lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-          cache: false
-
-      - uses: arduino/setup-task@v2
-        with:
-          version: 3.x
-
-      # 対象は go.mod の tool directive が持つので、ここで名前を列挙しない
-      - name: Install repo-owned linters
-        run: go install tool
-
-      - name: Run all linters
-        run: task lint
-```
-
-## カバレッジ計測
-
-```yaml
-      - name: go test with coverage
-        run: go test -coverprofile=coverage.out ./...
-
-      - name: Upload coverage
-        uses: actions/upload-artifact@v7
-        with:
-          name: coverage
-          path: coverage.out
-```
+ベースライン測定 (`baseline.sh`) はプラグインのディレクトリに置かれ、パスが
+プラグインのバージョンによって変わるため CI には書かない。
+`go-arch-metrics:measure` から実行する。
 
 ---
 
@@ -134,8 +27,7 @@ jobs:
 golangci-lint v2 では `issues.new` / `issues.new-from-rev` の設定キーが廃止された。
 既存違反が多いプロジェクトでの段階的導入は、**しきい値を実測最大値の直上に置いて
 CI を緑にし、そこから絞る** 方式で行う (`references/golangci-config.md` の
-「しきい値の調整」)。差分だけを見たい場合は `golangci/golangci-lint-action` の
-差分チェック機能を使う。
+「しきい値の調整」)。
 
 ### 違反数レポートをコメントとして投稿
 
@@ -165,27 +57,3 @@ CI を緑にし、そこから絞る** 方式で行う (`references/golangci-con
         body: `## Architecture Metrics\n\n${body || 'No violations found!'}`
       });
 ```
-
----
-
-## Taskfile への統合
-
-```yaml
-version: '3'
-
-tasks:
-  lint:
-    desc: "全静的解析を実行"
-    cmds:
-      - golangci-lint run --timeout 5m ./...
-      - go-arch-lint check
-      - analyze-arch-lint --strict .
-      - govulncheck ./...
-      - gosec ./...
-      - analyze-modularity --strict .
-      - spm-go all
-```
-
-ベースライン測定 (`baseline.sh`) はプラグインのディレクトリに置かれ、パスが
-プラグインのバージョンによって変わるため Taskfile には書かない。
-`go-arch-metrics:measure` から実行する。

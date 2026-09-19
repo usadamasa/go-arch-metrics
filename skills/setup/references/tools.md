@@ -3,12 +3,6 @@
 出力例は `go-arch-metrics:measure` の `references/output-examples.md`、
 しきい値の根拠は `go-arch-metrics:evaluate` の `references/thresholds.md` にある。
 
-## ツール管理方針
-
-`go.mod` の `tool` directive に宣言し `go install tool` で入れる。
-`go get -tool <パス>` と `go install tool` は各ツールの節に書いてある。
-一覧はどこにも置かない (置くと `go.mod` とずれる)。
-
 ---
 
 ## golangci-lint
@@ -33,13 +27,9 @@
 
 > **注意**: `deadcode` は golangci-lint v2 に存在しない。`golangci-lint run --enable deadcode` を実行すると `Error: unknown linters: 'deadcode'` になる。未使用コードの検出は `staticcheck` の U1000 系チェックが代替する。
 
-### インストールと実行
+### 実行
 
 ```bash
-# go.mod へ宣言して入れる
-go get -tool github.com/golangci/golangci-lint/v2/cmd/golangci-lint
-go install tool
-
 # 実行
 golangci-lint run ./...
 
@@ -59,13 +49,9 @@ golangci-lint run --output.json.path stdout ./... 2>/dev/null
 パッケージ間の依存方向を `.go-arch-lint.yml` で宣言し、違反を検出するツール。
 レイヤードアーキテクチャ・クリーンアーキテクチャの依存方向を強制できる。
 
-### インストールと実行
+### 実行
 
 ```bash
-# go.mod へ宣言して入れる
-go get -tool github.com/fe3dback/go-arch-lint
-go install tool
-
 # 実行 (プロジェクトルートから)
 go-arch-lint check ./...
 
@@ -85,13 +71,9 @@ go-arch-lint graph ./... | dot -Tsvg > arch.svg
 Go の既知の脆弱性データベース (vuln.go.dev) に基づき、プロジェクトの依存関係に
 脆弱性がないかスキャンするツール。Go チーム公式。
 
-### インストールと実行
+### 実行
 
 ```bash
-# go.mod へ宣言して入れる
-go get -tool golang.org/x/vuln/cmd/govulncheck
-go install tool
-
 # 実行
 govulncheck ./...
 ```
@@ -105,13 +87,9 @@ govulncheck ./...
 Go ソースコードのセキュリティ問題を検出する静的解析ツール。
 SQL インジェクション、ハードコードされた認証情報、弱い暗号等を検出する。
 
-### インストールと実行
+### 実行
 
 ```bash
-# go.mod へ宣言して入れる
-go get -tool github.com/securego/gosec/v2/cmd/gosec
-go install tool
-
 # 実行
 gosec ./...
 ```
@@ -135,13 +113,9 @@ Robert C. Martin の Package Metrics (Ca/Ce/A/I/D) を Go パッケージに適�
 
 Zone 分類と構造的制約の扱いは `go-arch-metrics:evaluate`。
 
-### インストールと実行
+### 実行
 
 ```bash
-# go.mod へ宣言して入れる
-go get -tool github.com/fdaines/spm-go
-go install tool
-
 # 全メトリクスを表示
 spm-go all
 
@@ -169,16 +143,9 @@ spm-go がカバーしない exported/unexported 比率とパッケージサイ�
 | Exported funcs/methods | 公開関数・メソッド数 |
 | Exported types | 公開型 (struct/interface) 数 |
 
-### インストールと実行
+### 実行
 
 ```bash
-# go.mod へ宣言して入れる
-go get -tool github.com/usadamasa/go-arch-metrics/cmd/analyze-modularity@latest
-go install tool
-
-# プロジェクトの go.mod を触りたくない場合
-go install github.com/usadamasa/go-arch-metrics/cmd/analyze-modularity@latest
-
 # 実行
 analyze-modularity <directory>...
 
@@ -203,16 +170,9 @@ analyze-modularity . | jq '.warnings'
 **指標の一覧・しきい値・意味・対処は `analyze-arch-lint --metrics` が出す。**
 ここにもドキュメント側にも表を置かない。
 
-### インストールと実行
+### 実行
 
 ```bash
-# go.mod へ宣言して入れる (analyze-modularity と同じモジュールにある)
-go get -tool github.com/usadamasa/go-arch-metrics/cmd/analyze-arch-lint@latest
-go install tool
-
-# プロジェクトの go.mod を触りたくない場合
-go install github.com/usadamasa/go-arch-metrics/cmd/analyze-arch-lint@latest
-
 # 実行
 analyze-arch-lint <project-dir>
 

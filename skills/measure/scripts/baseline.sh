@@ -40,26 +40,12 @@ printf '%s\n' "プロジェクト: $PROJECT_ROOT"
 printf '%s\n' "測定日時: $(date '+%Y-%m-%d %H:%M:%S')"
 printf '%s\n' ""
 
-# PATH 上のツール存在チェック (未インストール時はエラー終了)
-require_tool() {
-    local tool="$1"
-    local install_hint="$2"
+# 前提ツールが PATH にあるか確かめる。入れ方は利用者に任せるので案内しない
+for tool in go jq golangci-lint go-arch-lint gosec govulncheck spm-go analyze-modularity analyze-arch-lint; do
     if ! command -v "$tool" &>/dev/null; then
-        printf '%s\n' "エラー: $tool が見つかりません" >&2
-        if [[ -n "$install_hint" ]]; then
-            printf '%s\n' "  インストール: ${install_hint}" >&2
-        fi
+        printf '%s\n' "エラー: $tool が PATH に見つかりません" >&2
         exit 1
     fi
-}
-
-# 前提ツールの一括チェック。インストール手段はツールごとに書き分けず、
-# go.mod の tool directive へ寄せる (SKILL.md「前提: ツールのインストール」節)。
-go_tool_hint="go.mod の tool directive に宣言して 'go install tool' (SKILL.md 参照)"
-require_tool go ""
-require_tool jq "brew install jq (macOS) / apt install jq (Linux)"
-for tool in golangci-lint go-arch-lint gosec govulncheck spm-go analyze-modularity analyze-arch-lint; do
-    require_tool "$tool" "$go_tool_hint"
 done
 
 # 全ツールが PROJECT_ROOT で実行されるため、一度だけ cd する
