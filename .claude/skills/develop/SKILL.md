@@ -47,16 +47,14 @@ PR を出す前にこの全部を通す。job の定義は `.github/workflows/ci
 
 ## つまずきどころ
 
-- **`task lint` の `AQUA_POLICY_CONFIG`**: spm-go と go-arch-lint がローカルレジストリ
+- **`task lint` の `AQUA_POLICY_CONFIG`**: spm-go がローカルレジストリ
   (`aqua/registry.yaml`) 由来で、aqua v2 は標準レジストリ以外を既定で拒否する (code 002)。
   そのため Taskfile が `aqua/policy.yaml` を渡している。**絶対パスでなければならない** —
   go-arch-lint は各パッケージのディレクトリを cwd にして go を起動するので、相対パスだと
   `cmd/<pkg>/../aqua` を探しに行く。端末ごとの `aqua policy allow` は使わない
   (端末ローカルの状態を作らないため)
-- **go-arch-lint は fork を使う**: `usadamasa/go-arch-lint@v1.18.1-walkdir.1`。upstream の
-  v1.18.0 は `filepath.Walk` で全エントリを lstat するため、strict sandbox 内では `.env`
-  の lstat 拒否で `failed to walk project tree` と落ちる。upstream の PR #90
-  (Walk -> WalkDir) がリリースされたら `aqua.yaml` を標準レジストリ側へ戻す
+- **go-arch-lint は v1.19.0 以上**: v1.18.0 以前は `filepath.Walk` で全エントリを lstat するため、
+  strict sandbox 内では `.env` の lstat 拒否で `failed to walk project tree` と落ちる
 - **`analyze-arch-lint --strict` が落ちたとき**: 指標の意味としきい値と対処は
   `analyze-arch-lint --metrics` が出す。ドキュメント側に表を書き写さない
 - **配布用の skill (`skills/`) を足したとき**: `.claude-plugin/plugin.json` の `skills`
