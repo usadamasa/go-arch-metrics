@@ -1,8 +1,8 @@
 ---
 name: setup
 description: >-
-  Use when introducing Go architecture metrics tooling to a project: installing the tools,
-  writing `.golangci.yml` / `.go-arch-lint.yml`, and wiring the checks into CI.
+  Use when introducing Go architecture metrics tooling to a project: listing the required
+  tools, writing `.golangci.yml` / `.go-arch-lint.yml`, and wiring the checks into CI.
   Triggers for requests like "set up go-arch-lint", "configure golangci-lint for metrics",
   "メトリクスを CI に入れたい", "アーキテクチャメトリクスを導入したい".
 ---
@@ -10,7 +10,7 @@ description: >-
 # ツール導入と設定ファイルの配置
 
 「ソフトウェアアーキテクチャメトリクス (ISBN: 9784814400607)」の観点で Go プロジェクトを
-測るための、ツールのインストールと設定ファイルの配置を扱う。
+測るための、必要なツールと設定ファイルの配置を扱う。
 
 測定そのものは `go-arch-metrics:measure`、数値の解釈は `go-arch-metrics:evaluate`。
 
@@ -31,18 +31,9 @@ description: >-
 
 しきい値は `go-arch-metrics:evaluate` が持つ。ここでは何を入れるかだけを決める。
 
-## Step 1: ツールをインストールする
+## Step 1: 必要なコマンド
 
-ツールの一覧は対象プロジェクトの `go.mod` の `tool` directive が持つ (Go 1.24 以降)。
-バージョンが `go.mod` / `go.sum` に固定され、CI とローカルで同じものが入る。
-
-```bash
-go get -tool <import path>   # 宣言を go.mod へ足す
-go install tool              # 宣言された全ツールを GOBIN へ
-```
-
-import path は `references/tools.md` の各ツールの節にある。
-aqua で固定する運用もできる (同じく `references/tools.md`)。
+上の表のツールと `jq` が PATH にあること。入れ方はプロジェクトに任せる。
 
 ## Step 2: 設定ファイルを配置する
 
@@ -81,8 +72,7 @@ aqua で固定する運用もできる (同じく `references/tools.md`)。
 
 ## Step 3: CI に組み込む
 
-`.github/workflows/` に golangci-lint と go-arch-lint のジョブを追加する。
-設定例は `references/ci-integration.md`。
+CI で回すコマンドは `references/ci-integration.md`。
 
 初期導入時はしきい値を既存コードの実測最大値の直上に置き、CI を緑にしてから
 段階的に絞る。最初から全違反を 0 にしようとするのは逆効果。
@@ -91,10 +81,10 @@ aqua で固定する運用もできる (同じく `references/tools.md`)。
 
 | ファイル | 内容 |
 |---------|------|
-| `references/tools.md` | 各ツールの概要とインストール手順 |
+| `references/tools.md` | 各ツールの概要と実行方法 |
 | `references/golangci-config.md` | `.golangci.yml` テンプレートとカスタマイズ |
 | `references/arch-lint-config.md` | `.go-arch-lint.yml` テンプレートとよくあるエラー |
-| `references/ci-integration.md` | GitHub Actions / Taskfile への組み込み |
+| `references/ci-integration.md` | CI で回すコマンドと PR ゲート |
 
 ## 次のステップ
 

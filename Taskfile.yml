@@ -21,12 +21,7 @@ tasks:
   lint:
     desc: Go の全静的解析を実行
     env:
-      # aqua v2 は標準レジストリ以外のパッケージを既定で拒否する (code 002)｡lint が呼ぶ
-      # spm-go がローカルレジストリ由来なので､許可を宣言した aqua/policy.yaml を渡す｡
-      # 端末ごとの `aqua policy allow` を使わないのは端末ローカルの状態を作らないため｡
-      #
-      # 相対パスにはできない｡go-arch-lint は各パッケージのディレクトリを cwd にして
-      # go を起動するため、cwd 相対だと cmd/<pkg>/../aqua を探しに行く｡
+      # spm-go がローカルレジストリ由来なので policy を渡す (CI は direnv を通らない)｡
       AQUA_POLICY_CONFIG: '{{.TASKFILE_DIR}}/aqua/policy.yaml'
     cmds:
       - golangci-lint run --timeout 5m ./...
