@@ -5,25 +5,9 @@
 
 ## ツール管理方針
 
-- **原則: `go.mod` の `tool` directive** に宣言し `go install tool` で入れる
-- **オプション: aqua** で go 以外のものも含めて固定したい場合に使用
-
+`go.mod` の `tool` directive に宣言し `go install tool` で入れる。
 `go get -tool <パス>` と `go install tool` は各ツールの節に書いてある。
 一覧はどこにも置かない (置くと `go.mod` とずれる)。
-
-### aqua (オプション: バージョン固定)
-
-バージョンを厳密に固定したい場合は aqua で管理できる。
-
-```bash
-brew install aquaproj/aqua/aqua
-export PATH="${AQUA_ROOT_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/aquaproj-aqua}/bin:$PATH"
-aqua install
-```
-
-`aqua.yaml` の書き方は `references/ci-integration.md`。
-spm-go は aqua の標準レジストリに存在しないため、ローカルレジストリの定義が要る
-(このプラグインのリポジトリの `aqua/registry.yaml` がそのまま使える)。
 
 ---
 

@@ -1,32 +1,11 @@
 # CI 統合ガイド (GitHub Actions)
 
-## ツールバージョン管理: aqua
-
-CI でも同じ `aqua.yaml` を使ってツールバージョンを固定する。
-
-### aqua.yaml (プロジェクトルート)
-
-> **注意**: aqua は go-arch-lint の管理に主に使う。
-> golangci-lint は GitHub Actions では `golangci/golangci-lint-action` が自前でインストールするため aqua 不要。
-> ローカル環境では `go.mod` の `tool` directive でも可 (`references/tools.md`)。
-
-```sh
-aqua init                                                # aqua.yaml を作る
-aqua g -i golangci/golangci-lint fe3dback/go-arch-lint   # 最新版を aqua.yaml へ追記する
-```
-
+ツールは対象プロジェクトの `go.mod` の `tool` directive から入れる (`references/tools.md`)。
 golangci-lint は v2 系を使う (v1 と設定非互換)。
-
-spm-go は標準レジストリに存在しないため、ローカルレジストリの定義が別に要る。
-このプラグインのリポジトリの `aqua/registry.yaml` と `aqua/policy.yaml` がそのまま使える。
-`policy.yaml` は `AQUA_POLICY_CONFIG` 環境変数で渡す (端末ごとの `aqua policy allow` を
-使わないのは、端末ローカルの許可状態を作らないため)。
-
----
 
 ## GitHub Actions ワークフロー
 
-### 方法 1: aqua でツールを統一管理 (推奨)
+### 方法 1: tool directive から入れる
 
 ```yaml
 # .github/workflows/arch-metrics.yml
@@ -50,10 +29,7 @@ jobs:
           go-version-file: go.mod  # go.mod がサブディレクトリにある場合: go-version-file: cmd/go.mod
           cache: true
 
-      - name: Setup aqua
-        uses: aquaproj/aqua-installer@v3.1.2   # major だけの浮動タグは無いので patch まで書く
-        with:
-          aqua_version: v2.53.3
+      - run: go install tool
 
       - name: Run golangci-lint
         run: golangci-lint run --timeout 5m ./...
@@ -69,17 +45,11 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Setup aqua
-        uses: aquaproj/aqua-installer@v3.1.2   # major だけの浮動タグは無いので patch まで書く
-        with:
-          aqua_version: v2.53.3
+      - run: go install tool
 
       - name: Check architecture rules
-        run: go-arch-lint check ./...
+        run: go-arch-lint check
 ```
-
-aqua は lazy install なので、`aqua install` を明示的に呼ばなくてもコマンド起動時に入る。
-先に全部入れておきたいなら `run: aqua install -l` のステップを足す。
 
 ### 方法 2: golangci-lint 公式 Action を使う (golangci-lint のみ)
 
@@ -129,10 +99,6 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
-
-      - uses: aquaproj/aqua-installer@v3.1.2   # major だけの浮動タグは無いので patch まで書く
-        with:
-          aqua_version: v2.53.3
 
       - uses: arduino/setup-task@v2
         with:

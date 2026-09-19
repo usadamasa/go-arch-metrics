@@ -42,7 +42,6 @@ go install tool              # 宣言された全ツールを GOBIN へ
 ```
 
 import path は `references/tools.md` の各ツールの節にある。
-aqua で固定する運用もできる (同じく `references/tools.md`)。
 
 ## Step 2: 設定ファイルを配置する
 
