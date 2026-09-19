@@ -16,12 +16,27 @@ setup() {
         chmod +x "${STUB_BIN}/${tool}"
     done
     PATH="${STUB_BIN}:${PATH}"
+    # go-arch-lint は違反なしの JSON を返す (--json 以外のフラグでは何も出さず落ちる)
+    stub_go_arch_lint 0 '{"Type":"models.Check","Payload":{"ArchHasWarnings":false,"ArchWarningsDeps":[],"ArchWarningsNotMatched":[],"ArchWarningsDeepScan":[]}}'
 
     printf '%s\n' 'module baseline-fixture' 'go 1.26.1' > "${PROJECT}/go.mod"
     # .go-arch-lint.yml が無いと baseline.sh は測定前に exit 1 する
     printf '%s\n' 'version: 3' 'workdir: .' > "${PROJECT}/.go-arch-lint.yml"
     printf '%s\n' 'package fixture' '' 'func Answer() int { return 42 }' \
         > "${PROJECT}/fixture.go"
+}
+
+# stub_go_arch_lint <exit-code> <stdout> [stderr]
+# 引数に --json があるときだけ stdout を出す。実物の v1.19.0 は --json-output を知らない。
+stub_go_arch_lint() {
+    local rc="$1" out="$2" err="${3:-}"
+    printf '%s\n' '#!/bin/sh' \
+        'for a in "$@"; do [ "$a" = --json ] && json=1; done' \
+        '[ -n "$json" ] || { echo "unknown flag" >&2; exit 1; }' \
+        "printf '%s' '${out}'" \
+        "printf '%s' '${err}' >&2" \
+        "exit ${rc}" > "${STUB_BIN}/go-arch-lint"
+    chmod +x "${STUB_BIN}/go-arch-lint"
 }
 
 write_passing_test() {
@@ -68,4 +83,29 @@ write_failing_test() {
     [ "$status" -eq 0 ]
     [[ "$output" == *"平均カバレッジ:"* ]]
     ls "${PROJECT}"/baseline-*.json
+}
+
+@test "go-arch-lint の依存方向違反を件数と中身で出し、JSON に残す" {
+    write_passing_test
+    # 違反があると go-arch-lint は JSON を出したうえで exit 1 する
+    stub_go_arch_lint 1 '{"Type":"models.Check","Payload":{"ArchHasWarnings":true,"ArchWarningsDeps":[{"ComponentName":"domain","ResolvedImportName":"example.com/infra"}],"ArchWarningsNotMatched":[],"ArchWarningsDeepScan":[]}}'
+
+    run bash "$BASELINE" "$PROJECT"
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"依存方向違反数: 1"* ]]
+    [[ "$output" == *"domain -> example.com/infra"* ]]
+    [ "$(jq '.go_arch_lint.Payload.ArchWarningsDeps | length' "${PROJECT}"/baseline-*.json)" -eq 1 ]
+}
+
+@test "go-arch-lint が実行に失敗したら理由を出して止まる" {
+    write_passing_test
+    # 実行エラーのときは stdout が空で、理由は stderr に出る
+    stub_go_arch_lint 1 '' 'failed to walk project tree'
+
+    run bash "$BASELINE" "$PROJECT"
+
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"failed to walk project tree"* ]]
+    [[ "$output" != *"依存方向違反なし"* ]]
 }
