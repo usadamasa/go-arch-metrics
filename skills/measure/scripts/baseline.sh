@@ -138,10 +138,11 @@ trap 'rm -f "$SPM_TMP"' EXIT
 
 printf '%s\n' "--- spm-go + analyze-modularity (統合メトリクス) ---"
 
-# spm-go は -f json でも進捗メッセージ (先頭) と Time 行 (末尾) を stdout に出すため、JSON 部分のみ抽出
-if ! spm-go all -f json 2>/dev/null | awk '/^\{$/{found=1} found{print} /^\}$/ && found{exit}' > "$SPM_TMP"; then
-    printf '%s\n' "  spm-go 実行失敗" >&2
-    : > "$SPM_TMP"
+# spm-go は -f json でも進捗メッセージ (先頭) と Time 行 (末尾) を stdout に出すため、JSON 部分のみ抽出。
+# awk は途中で exit させない。先に閉じると spm-go が SIGPIPE で落ち、pipefail で失敗に見える。
+if ! spm-go all -f json | awk '/^\{$/{found=1} found{print} /^\}$/{found=0}' > "$SPM_TMP"; then
+    printf '%s\n' "エラー: spm-go の実行に失敗しました。理由は上の出力を参照" >&2
+    exit 1
 fi
 
 # analyze-modularity の実行 (spm-go 統合)
