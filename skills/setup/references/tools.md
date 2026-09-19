@@ -83,13 +83,13 @@ go get -tool github.com/fe3dback/go-arch-lint
 go install tool
 
 # 実行 (プロジェクトルートから)
-go-arch-lint check ./...
+go-arch-lint check
 
 # JSON 出力
-go-arch-lint check --json-output ./...
+go-arch-lint check --json
 
-# 依存関係のグラフ生成 (graphviz 要)
-go-arch-lint graph ./... | dot -Tsvg > arch.svg
+# 依存関係のグラフ生成 (./go-arch-lint-graph.svg に出る)
+go-arch-lint graph
 ```
 
 ---

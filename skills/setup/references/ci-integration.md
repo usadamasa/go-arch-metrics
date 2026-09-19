@@ -75,7 +75,7 @@ jobs:
           aqua_version: v2.53.3
 
       - name: Check architecture rules
-        run: go-arch-lint check ./...
+        run: go-arch-lint check
 ```
 
 aqua は lazy install なので、`aqua install` を明示的に呼ばなくてもコマンド起動時に入る。

@@ -97,20 +97,25 @@ if [[ ! -f ".go-arch-lint.yml" ]]; then
     printf '%s\n' "  テンプレート: go-arch-metrics:setup skill の references/arch-lint-config.md" >&2
     exit 1
 else
-    # 違反検出時の非ゼロ終了は許容
-    ARCH_JSON=$(go-arch-lint check --json-output ./... 2>/dev/null || true)
-    if [[ -n "$ARCH_JSON" ]]; then
-        ARCH_VIOLATIONS=$(printf '%s' "$ARCH_JSON" | jq -r '
-          (.violations // []) |
-          "依存方向違反数: \(length)",
-          (.[0:10][] | "  \(.packageName // "?") -> \(.dependencyName // "?")"),
-          if length > 10 then "  ... 他 \(length - 10) 件" else empty end
-        ' 2>/dev/null || printf '%s\n' "  集計スキップ (jq が必要)")
-        printf '%s\n' "$ARCH_VIOLATIONS"
-        ARCH_RESULT="$ARCH_JSON"
-    else
-        printf '%s\n' "  依存方向違反なし"
+    # go-arch-lint は違反があっても実行エラーでも exit 1 するので、終了コードでは見分けられない。
+    # 違反なら stdout に check の JSON が出て、実行エラーなら stdout は空で理由が stderr に出る。
+    ARCH_RC=0
+    ARCH_JSON=$(go-arch-lint check --json) || ARCH_RC=$?
+    if ! printf '%s' "$ARCH_JSON" | jq -e '.Type == "models.Check"' >/dev/null 2>&1; then
+        printf '%s\n' "エラー: go-arch-lint の実行に失敗しました (exit ${ARCH_RC})。理由は上の出力を参照" >&2
+        exit 1
     fi
+    # Go の nil slice は null で出るので // [] で受ける
+    printf '%s' "$ARCH_JSON" | jq -r '
+      .Payload |
+      (.ArchWarningsDeps // []) as $deps |
+      "依存方向違反数: \($deps | length)",
+      ($deps[0:10][] | "  \(.ComponentName) -> \(.ResolvedImportName)"),
+      if ($deps | length) > 10 then "  ... 他 \(($deps | length) - 10) 件" else empty end,
+      "どの component にも属さないファイル: \(.ArchWarningsNotMatched // [] | length)",
+      "deepScan 違反数: \(.ArchWarningsDeepScan // [] | length)"
+    '
+    ARCH_RESULT="$ARCH_JSON"
 fi
 printf '%s\n' ""
 
