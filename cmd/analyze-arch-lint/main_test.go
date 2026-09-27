@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -101,6 +102,52 @@ deps:
 func TestLoadConfigMissingFile(t *testing.T) {
 	if _, err := loadConfig(filepath.Join(t.TempDir(), "absent.yml")); err == nil {
 		t.Fatal("存在しないファイルでエラーを期待したが nil")
+	}
+}
+
+// TestParseGoListRootPackage はモジュールルート直下のパッケージを go-arch-lint mapping と
+// 同じ "." で表すことを確かめる｡キーが食い違うと、ルートの main は component に属さない
+// ことになり、その import も辺の裏付けに数えられない｡
+func TestParseGoListRootPackage(t *testing.T) {
+	const module = "example.com/app"
+	line := func(fields ...string) string { return strings.Join(fields, goListSep) }
+	listed := strings.Join([]string{
+		line(module, module+"/cmd,"+module+"/internal/version,fmt", "", ""),
+		line(module+"/cmd", "github.com/spf13/cobra", module, ""),
+		line(module+"/internal/version", "", "", ""),
+	}, "\n")
+
+	imports, testImports := parseGoList(listed, module)
+
+	wantImports := map[string][]string{
+		".":                {"cmd", "internal/version", "fmt"},
+		"cmd":              {"github.com/spf13/cobra"},
+		"internal/version": nil,
+	}
+	if !reflect.DeepEqual(imports, wantImports) {
+		t.Errorf("imports = %v, want %v", imports, wantImports)
+	}
+	if got := testImports["cmd"]; !slices.Equal(got, []string{"."}) {
+		t.Errorf("testImports[cmd] = %v, want [.]", got)
+	}
+
+	cfg := archConfig{
+		Components: map[string]any{"cli": nil, "shared_internal": nil},
+		Deps: map[string]depSpec{
+			"cli": {MayDependOn: []string{"cli", "shared_internal"}},
+		},
+	}
+	g := graph{
+		componentPkgs: map[string][]string{
+			"cli":             {".", "cmd"},
+			"shared_internal": {"internal/version"},
+		},
+		imports:     imports,
+		testImports: testImports,
+	}
+	r := analyze(cfg, g)
+	if len(r.UncoveredPackages) != 0 || r.UnusedEdges != 0 {
+		t.Errorf("uncovered = %v, unused edges = %d, want none", r.UncoveredPackages, r.UnusedEdges)
 	}
 }
 

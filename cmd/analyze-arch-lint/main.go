@@ -146,39 +146,55 @@ func collectGraph(absDir, archFile string) (graph, error) {
 		}
 	}
 
-	const sep = "\x1f"
 	format := strings.Join([]string{
 		"{{.ImportPath}}", "{{join .Imports \",\"}}",
 		"{{join .TestImports \",\"}}", "{{join .XTestImports \",\"}}",
-	}, sep)
+	}, goListSep)
 	listed, err := run(absDir, "go", "list", "-f", format, "./...")
 	if err != nil {
 		return g, err
 	}
 
-	prefix := m.Payload.ModuleName + "/"
+	g.imports, g.testImports = parseGoList(listed, m.Payload.ModuleName)
+	if len(g.imports) == 0 {
+		return g, fmt.Errorf("%s に Go パッケージが見つかりません", absDir)
+	}
+	return g, nil
+}
+
+const goListSep = "\x1f"
+
+// parseGoList は go list の出力をモジュール相対のパッケージ名で引ける形にする｡
+// ルート直下のパッケージは go-arch-lint mapping 側の filepath.Rel に合わせて "." にする｡
+func parseGoList(listed, module string) (imports, testImports map[string][]string) {
+	imports = map[string][]string{}
+	testImports = map[string][]string{}
+	prefix := module + "/"
+	rel := func(path string) string {
+		if path == module {
+			return "."
+		}
+		return strings.TrimPrefix(path, prefix)
+	}
 	trim := func(csv string) []string {
 		var out []string
 		for _, imp := range strings.Split(csv, ",") {
 			if imp != "" {
-				out = append(out, strings.TrimPrefix(imp, prefix))
+				out = append(out, rel(imp))
 			}
 		}
 		return out
 	}
 	for _, line := range strings.Split(strings.TrimSpace(listed), "\n") {
-		fields := strings.Split(line, sep)
+		fields := strings.Split(line, goListSep)
 		if len(fields) != 4 {
 			continue
 		}
-		pkg := strings.TrimPrefix(fields[0], prefix)
-		g.imports[pkg] = trim(fields[1])
-		g.testImports[pkg] = append(trim(fields[2]), trim(fields[3])...)
+		pkg := rel(fields[0])
+		imports[pkg] = trim(fields[1])
+		testImports[pkg] = append(trim(fields[2]), trim(fields[3])...)
 	}
-	if len(g.imports) == 0 {
-		return g, fmt.Errorf("%s に Go パッケージが見つかりません", absDir)
-	}
-	return g, nil
+	return imports, testImports
 }
 
 func run(dir, name string, args ...string) (string, error) {
