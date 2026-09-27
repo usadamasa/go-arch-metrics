@@ -3,6 +3,7 @@ changelog:
     labels:
       - chore
       - documentation
+      - tagpr
   categories:
     - title: New Features 🎉
       labels:
