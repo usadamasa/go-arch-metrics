@@ -6,9 +6,11 @@ Go プロジェクトのモジュール性とテスト可能性を測り、改�
 
 ## インストール
 
-```
-/plugin marketplace add usadamasa/go-arch-metrics
-/plugin install go-arch-metrics@go-arch-metrics
+[usadamasa/agents-marketplace](https://github.com/usadamasa/agents-marketplace) から配布する。
+
+```sh
+claude plugin marketplace add usadamasa/agents-marketplace
+claude plugin install go-arch-metrics@usadamasa
 ```
 
 測定に使うツールは測定対象のプロジェクト側に入れる。何が要るかと入れ方は
