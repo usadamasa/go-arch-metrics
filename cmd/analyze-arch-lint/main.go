@@ -165,11 +165,15 @@ func collectGraph(absDir, archFile string) (graph, error) {
 const goListSep = "\x1f"
 
 // parseGoList は go list の出力をモジュール相対のパッケージ名で引ける形にする｡
+// ルート直下のパッケージは go-arch-lint mapping 側の filepath.Rel に合わせて "." にする｡
 func parseGoList(listed, module string) (imports, testImports map[string][]string) {
 	imports = map[string][]string{}
 	testImports = map[string][]string{}
 	prefix := module + "/"
 	rel := func(path string) string {
+		if path == module {
+			return "."
+		}
 		return strings.TrimPrefix(path, prefix)
 	}
 	trim := func(csv string) []string {
