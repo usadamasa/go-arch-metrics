@@ -124,22 +124,30 @@ trap 'rm -f "$SPM_TMP"' EXIT
 
 printf '%s\n' "--- spm-go + analyze-modularity (統合メトリクス) ---"
 
+# spm-go は go/build 経由で $GOROOT/bin/go list を呼ぶ。GOROOT が無いと spm-go をビルドした Go を使い、
+# 対象の go.mod がそれより新しい go を要求すると toolchain の切り替えで失敗する。他のツールと同じ go に揃える。
+if ! SPM_GOROOT=$(go env GOROOT); then
+    printf '%s\n' "エラー: go env GOROOT の実行に失敗しました" >&2
+    exit 1
+fi
+
 # spm-go は -f json でも進捗メッセージ (先頭) と Time 行 (末尾) を stdout に出すため、JSON 部分のみ抽出。
 # awk は途中で exit させない。先に閉じると spm-go が SIGPIPE で落ち、pipefail で失敗に見える。
-if ! spm-go all -f json | awk '/^\{$/{found=1} found{print} /^\}$/{found=0}' > "$SPM_TMP"; then
+if ! GOROOT="$SPM_GOROOT" spm-go all -f json | awk '/^\{$/{found=1} found{print} /^\}$/{found=0}' > "$SPM_TMP"; then
     printf '%s\n' "エラー: spm-go の実行に失敗しました。理由は上の出力を参照" >&2
+    exit 1
+fi
+
+# spm-go は読めなかったパッケージを黙って捨て、exit 0 のまま packages を null で返す
+if ! jq -e '(.packages // []) | length > 0' "$SPM_TMP" >/dev/null; then
+    printf '%s\n' "エラー: spm-go がパッケージを 1 件も返しませんでした。go list ./... が通るか確認してください" >&2
     exit 1
 fi
 
 # analyze-modularity の実行 (spm-go 統合)
 MODULARITY_RESULT='null'
 
-SPM_ARGS=()
-if [[ -s "$SPM_TMP" ]]; then
-    SPM_ARGS=(--spm-json "$SPM_TMP")
-fi
-
-MOD_JSON=$(analyze-modularity "${SPM_ARGS[@]}" "$PROJECT_ROOT" || { printf '%s\n' "  analyze-modularity 実行失敗" >&2; true; })
+MOD_JSON=$(analyze-modularity --spm-json "$SPM_TMP" "$PROJECT_ROOT" || { printf '%s\n' "  analyze-modularity 実行失敗" >&2; true; })
 if [[ -n "$MOD_JSON" ]]; then
     printf '%s' "$MOD_JSON" | jq -r '
         "パッケージ数: \(.summary.total_packages)",
