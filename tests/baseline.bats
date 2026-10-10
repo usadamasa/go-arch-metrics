@@ -10,7 +10,7 @@ setup() {
 
     # baseline.sh が require_tool で要求する外部ツール。中身は問わないので
     # 何も出さずに成功するスタブでよい。go と jq は本物を使う。
-    for tool in golangci-lint go-arch-lint gosec govulncheck spm-go \
+    for tool in golangci-lint go-arch-lint gosec govulncheck \
                 analyze-modularity analyze-arch-lint; do
         printf '%s\n' '#!/bin/sh' 'exit 0' > "${STUB_BIN}/${tool}"
         chmod +x "${STUB_BIN}/${tool}"
@@ -18,6 +18,7 @@ setup() {
     PATH="${STUB_BIN}:${PATH}"
     # go-arch-lint は違反なしの JSON を返す (--json 以外のフラグでは何も出さず落ちる)
     stub_go_arch_lint 0 '{"Type":"models.Check","Payload":{"ArchHasWarnings":false,"ArchWarningsDeps":[],"ArchWarningsNotMatched":[],"ArchWarningsDeepScan":[]}}'
+    stub_spm_go '    "packages": [{"name": "fixture", "path": "baseline-fixture"}]'
 
     printf '%s\n' 'module baseline-fixture' 'go 1.26.1' > "${PROJECT}/go.mod"
     # .go-arch-lint.yml が無いと baseline.sh は測定前に exit 1 する
@@ -37,6 +38,21 @@ stub_go_arch_lint() {
         "printf '%s' '${err}' >&2" \
         "exit ${rc}" > "${STUB_BIN}/go-arch-lint"
     chmod +x "${STUB_BIN}/go-arch-lint"
+}
+
+# stub_spm_go <packages 行>
+# 実物と同じく、JSON の前後に進捗メッセージと Time 行を stdout へ出す。
+# 呼ばれたときの GOROOT を ${BATS_TEST_TMPDIR}/spm-goroot に残す。
+stub_spm_go() {
+    local packages="$1"
+    printf '%s\n' '#!/bin/sh' \
+        "printf '%s' \"\${GOROOT-}\" > '${BATS_TEST_TMPDIR}/spm-goroot'" \
+        "echo 'Full analysis started.'" \
+        "echo '{'" \
+        "echo '${packages}'" \
+        "echo '}'" \
+        "echo 'Time: 0.1 seconds'" > "${STUB_BIN}/spm-go"
+    chmod +x "${STUB_BIN}/spm-go"
 }
 
 write_passing_test() {
@@ -120,4 +136,25 @@ write_failing_test() {
 
     [ "$status" -ne 0 ]
     [[ "$output" == *"this package isn't allowed"* ]]
+}
+
+@test "spm-go がパッケージを 1 件も返さなければ止まる" {
+    write_passing_test
+    # spm-go は go list の失敗を捨て、exit 0 のまま packages を null で返す
+    stub_spm_go '    "packages": null'
+
+    run bash "$BASELINE" "$PROJECT"
+
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"spm-go がパッケージを 1 件も返しませんでした"* ]]
+    ! ls "${PROJECT}"/baseline-*.json
+}
+
+@test "spm-go には PATH の go と同じ GOROOT を渡す" {
+    write_passing_test
+
+    run bash "$BASELINE" "$PROJECT"
+
+    [ "$status" -eq 0 ]
+    [ "$(cat "${BATS_TEST_TMPDIR}/spm-goroot")" = "$(go env GOROOT)" ]
 }
