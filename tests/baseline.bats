@@ -147,7 +147,18 @@ write_failing_test() {
 
     [ "$status" -ne 0 ]
     [[ "$output" == *"spm-go がパッケージを 1 件も返しませんでした"* ]]
-    ! ls "${PROJECT}"/baseline-*.json
+    run ls "${PROJECT}"/baseline-*.json
+    [ "$status" -ne 0 ]
+}
+
+@test "spm-go が JSON を出さなければ止まる" {
+    write_passing_test
+    printf '%s\n' '#!/bin/sh' 'exit 0' > "${STUB_BIN}/spm-go"
+
+    run bash "$BASELINE" "$PROJECT"
+
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"spm-go がパッケージを 1 件も返しませんでした"* ]]
 }
 
 @test "spm-go には PATH の go と同じ GOROOT を渡す" {
