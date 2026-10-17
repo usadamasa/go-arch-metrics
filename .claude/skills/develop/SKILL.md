@@ -18,7 +18,7 @@ skill を書くときの決めごと、リリース手順はリポジトリル�
 ## 環境
 
 Go と lint・テストのツール (`bats`、`shellcheck` を含む) は `flake.nix` の devShell が揃え、
-`.envrc` (nix-direnv の `use flake`) が読み込む。direnv を使わないなら `nix develop` でシェルに入る。
+`.envrc` (nix-direnv の `use flake`) が読み込む。
 版は `flake.lock` が固定する nixpkgs で決まり、上げるときは `nix flake update`。
 devShell の go は `go.mod` の `go` 行と同じ系列 (`go_1_26`) にし、`GOTOOLCHAIN=local` でずれを即座に落とす。
 
