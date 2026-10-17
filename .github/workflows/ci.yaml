@@ -13,6 +13,7 @@ concurrency:
 permissions:
   contents: read
 
+# Go と lint・テストのツールは flake.nix の devShell から取る (.github/actions/setup-nix)。
 jobs:
   go-test:
     name: go test
@@ -20,10 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-          cache: false
+      - uses: ./.github/actions/setup-nix
 
       - name: go vet
         run: go vet ./...
@@ -43,14 +41,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-          cache: false
-
-      - uses: aquaproj/aqua-installer@v3.1.2
-        with:
-          aqua_version: v2.53.3
+      - uses: ./.github/actions/setup-nix
 
       - name: Run all linters
         run: task lint
@@ -61,10 +52,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Install shellcheck
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y shellcheck
+      - uses: ./.github/actions/setup-nix
 
       - name: Run shellcheck
         run: shellcheck skills/*/scripts/*.sh
@@ -75,16 +63,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      # baseline.sh のテストは fixture の Go module を go test で回す
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-          cache: false
-
-      - name: Install bats-core
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y bats
+      # baseline.sh のテストは fixture の Go module を go test で回すので、bats と一緒に devShell の go も使う
+      - uses: ./.github/actions/setup-nix
 
       - name: Run bats tests
         run: bats tests/
