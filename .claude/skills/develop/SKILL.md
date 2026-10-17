@@ -17,9 +17,13 @@ skill を書くときの決めごと、リリース手順はリポジトリル�
 
 ## 環境
 
-Go の版は `go.mod`。lint が呼ぶ外部ツールは `aqua.yaml` が固定し、`.envrc` (direnv) が読み込む。
+Go と lint・テストのツール (`bats`、`shellcheck` を含む) は `flake.nix` の devShell が揃え、
+`.envrc` (nix-direnv の `use flake`) が読み込む。direnv を使わないなら `nix develop` でシェルに入る。
+版は `flake.lock` が固定する nixpkgs で決まり、上げるときは `nix flake update`。
+devShell の go は `go.mod` の `go` 行と同じ系列 (`go_1_26`) にし、`GOTOOLCHAIN=local` でずれを即座に落とす。
 
-`bats` は aqua の管理外。`apt-get install bats` または `brew install bats-core`。
+`analyze-modularity` / `analyze-arch-lint` は devShell に入れない。`task lint` が `go run ./cmd/...` で
+このリポジトリのソースから動かす。
 
 ## 検証
 

@@ -13,6 +13,8 @@ concurrency:
 permissions:
   contents: read
 
+# Go と lint・テストのツールは flake.nix の devShell から取る。版の正本は flake.lock。
+# nix-develop が devShell の PATH と env を GITHUB_PATH / GITHUB_ENV に書くので、以後の step は素で動く。
 jobs:
   go-test:
     name: go test
@@ -20,10 +22,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-          cache: false
+      - uses: DeterminateSystems/nix-installer-action@v23
+
+      - uses: nicknovitski/nix-develop@v1.2.1
 
       - name: go vet
         run: go vet ./...
@@ -43,14 +44,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-          cache: false
+      - uses: DeterminateSystems/nix-installer-action@v23
 
-      - uses: aquaproj/aqua-installer@v3.1.2
-        with:
-          aqua_version: v2.53.3
+      - uses: nicknovitski/nix-develop@v1.2.1
 
       - name: Run all linters
         run: task lint
@@ -61,10 +57,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Install shellcheck
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y shellcheck
+      - uses: DeterminateSystems/nix-installer-action@v23
+
+      - uses: nicknovitski/nix-develop@v1.2.1
 
       - name: Run shellcheck
         run: shellcheck skills/*/scripts/*.sh
@@ -75,16 +70,10 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      # baseline.sh のテストは fixture の Go module を go test で回す
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-          cache: false
+      # baseline.sh のテストは fixture の Go module を go test で回すので、bats と一緒に devShell の go も使う
+      - uses: DeterminateSystems/nix-installer-action@v23
 
-      - name: Install bats-core
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y bats
+      - uses: nicknovitski/nix-develop@v1.2.1
 
       - name: Run bats tests
         run: bats tests/

@@ -8,7 +8,7 @@ Go アーキテクチャメトリクスの Claude Code plugin。skill 4 本と C
 .claude-plugin/   plugin.json (version の実体はここ 1 箇所)。marketplace.json は usadamasa/agents-marketplace が持つ
 skills/           setup / measure / evaluate / remediate
 cmd/              analyze-arch-lint, analyze-modularity (どちらも package main)
-aqua/             registry.yaml (spm-go のローカル定義) と policy.yaml
+flake.nix         開発ツールの devShell (版は flake.lock が固定する)。nixpkgs に無い spm-go はここでビルドする
 .claude/skills/   develop (このリポジトリ自身の開発環境と検証)
 ```
 
@@ -16,7 +16,7 @@ aqua/             registry.yaml (spm-go のローカル定義) と policy.yaml
 
 ```sh
 task test                            # go test ./... と bats tests/
-task lint                            # 全静的解析。aqua のツールが要る
+task lint                            # 全静的解析。devShell のツールが要る
 claude plugin validate --strict .    # plugin manifest
 ```
 
