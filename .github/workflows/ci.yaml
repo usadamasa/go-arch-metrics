@@ -75,7 +75,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      # ubuntu-latest は node と npm を同梱するので setup-node は要らない
+      # ubuntu-latest は node と npm を同梱するので setup-node は要らない。
+      # nodejs は devShell に入れず setup-nix も通さない。devShell の npm は global prefix が /nix/store になり npm i -g が落ちる
       - name: Install Claude Code
         run: npm i -g @anthropic-ai/claude-code
 
