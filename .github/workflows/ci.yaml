@@ -19,9 +19,9 @@ jobs:
     name: go test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v6.1.0
 
-      - uses: ./.github/actions/setup-nix
+      - uses: $/.github/actions/setup-nix
 
       - name: go vet
         run: go vet ./...
@@ -30,7 +30,7 @@ jobs:
         run: go test -coverprofile=coverage.out ./...
 
       - name: Upload coverage
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: coverage
           path: coverage.out
@@ -39,9 +39,9 @@ jobs:
     name: go lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v6.1.0
 
-      - uses: ./.github/actions/setup-nix
+      - uses: $/.github/actions/setup-nix
 
       - name: Run all linters
         run: task lint
@@ -50,9 +50,9 @@ jobs:
     name: shellcheck
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v6.1.0
 
-      - uses: ./.github/actions/setup-nix
+      - uses: $/.github/actions/setup-nix
 
       - name: Run shellcheck
         run: shellcheck skills/*/scripts/*.sh
@@ -61,10 +61,10 @@ jobs:
     name: bats
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v6.1.0
 
       # baseline.sh のテストは fixture の Go module を go test で回すので、bats と一緒に devShell の go も使う
-      - uses: ./.github/actions/setup-nix
+      - uses: $/.github/actions/setup-nix
 
       - name: Run bats tests
         run: bats tests/
@@ -73,7 +73,7 @@ jobs:
     name: plugin validate
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v6.1.0
 
       # ubuntu-latest は node と npm を同梱するので setup-node は要らない。
       # nodejs は devShell に入れず setup-nix も通さない。devShell の npm は global prefix が /nix/store になり npm i -g が落ちる
@@ -86,8 +86,25 @@ jobs:
           claude plugin validate --strict .claude-plugin/plugin.json
           claude plugin validate --strict skills
 
+  # action は uses: にタグを書き、commit SHA は .github/workflows/actions.lock が固定する
+  actions-lock:
+    name: actions-lock
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6.1.0
+
+      - name: Install gh-actions-lock
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh extension install github/gh-actions-lock --pin v0.2.0
+
+      - name: Verify actions are locked
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh actions-lock --verify
+
   ci-status-check:
-    needs: [go-test, go-lint, bats, shellcheck, plugin-validate]
+    needs: [go-test, go-lint, bats, shellcheck, plugin-validate, actions-lock]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 10
