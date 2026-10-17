@@ -13,8 +13,7 @@ concurrency:
 permissions:
   contents: read
 
-# Go と lint・テストのツールは flake.nix の devShell から取る。版の正本は flake.lock。
-# nix-develop が devShell の PATH と env を GITHUB_PATH / GITHUB_ENV に書くので、以後の step は素で動く。
+# Go と lint・テストのツールは flake.nix の devShell から取る (.github/actions/setup-nix)。
 jobs:
   go-test:
     name: go test
@@ -22,9 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: DeterminateSystems/nix-installer-action@v23
-
-      - uses: nicknovitski/nix-develop@v1.2.1
+      - uses: ./.github/actions/setup-nix
 
       - name: go vet
         run: go vet ./...
@@ -44,9 +41,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: DeterminateSystems/nix-installer-action@v23
-
-      - uses: nicknovitski/nix-develop@v1.2.1
+      - uses: ./.github/actions/setup-nix
 
       - name: Run all linters
         run: task lint
@@ -57,9 +52,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: DeterminateSystems/nix-installer-action@v23
-
-      - uses: nicknovitski/nix-develop@v1.2.1
+      - uses: ./.github/actions/setup-nix
 
       - name: Run shellcheck
         run: shellcheck skills/*/scripts/*.sh
@@ -71,9 +64,7 @@ jobs:
       - uses: actions/checkout@v6
 
       # baseline.sh のテストは fixture の Go module を go test で回すので、bats と一緒に devShell の go も使う
-      - uses: DeterminateSystems/nix-installer-action@v23
-
-      - uses: nicknovitski/nix-develop@v1.2.1
+      - uses: ./.github/actions/setup-nix
 
       - name: Run bats tests
         run: bats tests/
