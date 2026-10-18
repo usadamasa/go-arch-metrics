@@ -37,6 +37,7 @@ nix を使うプロジェクトは flake input で参照し、devShell に足す
 ```
 
 ビルドとテストは本体のリポジトリの CI が持つ。利用側で `buildGoModule` を書いて自前でビルドしない。
+入れた直後の flake.lock は default branch の HEAD を指すので、下の「版を plugin にそろえる」で tag の commit に合わせる。
 
 3 本とも実行時に PATH のコマンドを呼ぶ。package はこれらを包まないので、利用側の devShell に並べる。
 `go` を包まないのは、対象プロジェクトの `go.mod` に合った版で `go list` を走らせるため。
@@ -53,19 +54,63 @@ go.mod の tool directive に足し、`go tool <name>` で呼ぶ。`baseline.sh`
 tool directive から探すので、PATH に載せなくてよい。
 
 ```bash
-go get -tool github.com/usadamasa/go-arch-metrics/cmd/analyze-modularity@latest
-go get -tool github.com/usadamasa/go-arch-metrics/cmd/analyze-arch-lint@latest
-go get -tool github.com/usadamasa/go-arch-metrics/cmd/vulncheck@latest
+# VERSION は plugin の版 (下の「版を plugin にそろえる」)
+go get -tool github.com/usadamasa/go-arch-metrics/cmd/analyze-modularity@"$VERSION"
+go get -tool github.com/usadamasa/go-arch-metrics/cmd/analyze-arch-lint@"$VERSION"
+go get -tool github.com/usadamasa/go-arch-metrics/cmd/vulncheck@"$VERSION"
 ```
 
-この plugin の tag は Go の semver tag ではない (`v` を付けない CalVer)。`@latest` は default branch の
-pseudo-version に解決され、版は go.mod の require が commit で固定する。
+この plugin の tag は Go の semver tag ではない (`v` を付けない CalVer)。tag 名を指定すると、その tag の commit の
+pseudo-version (`v0.0.0-<日時>-<commit の先頭 12 桁>`) に解決され、go.mod の require が commit で固定する。
 CI のコマンドは `go tool vulncheck ./...` のように `go tool` を前に付けて書く。
 
 - 対象プロジェクトの go.mod の `go` 行は 1.26.1 以上が要る (この plugin のモジュールの要求)。
   `golang.org/x/vuln` などの依存も indirect の require として入る
 - `go-arch-lint` は PATH に置く。`analyze-arch-lint` が PATH から呼ぶので、tool directive に入れると
   `baseline.sh` は動いても `analyze-arch-lint` が見つけられない
+
+### 版を plugin にそろえる
+
+plugin と CLI 3 本は、同じ release の tag の commit にそろえる。tag 名は plugin の版
+(`claude plugin list` の `go-arch-metrics@usadamasa` の `version`) と同じ。初めて入れるときも上げるときも同じ手順を踏む。
+
+`go get ...@latest` や `nix flake update` のように「最新」を問い合わせる取り方はしない。
+どちらも問い合わせの結果がキャッシュされ、release の直後には前の commit に解決されることがある。
+
+- Go の module proxy (proxy.golang.org) は `@latest` の解決を proxy 側で持ち回る。release の直後に `@latest` が
+  前の release の commit (最新の tag より 23 commit 前) に解決された例がある
+- nix は default branch の HEAD を GitHub API で引いた結果を、手元で `tarball-ttl` (既定 3600 秒) の間使い回す
+
+tag 名で問い合わせると、どちらもその tag の commit に解決される。
+
+```bash
+VERSION=2026.1018.3   # plugin の版
+
+# go.mod の tool directive に入れている (3 本は同じモジュールなので 1 回で全部上がる)
+go get github.com/usadamasa/go-arch-metrics@"$VERSION"
+
+# flake input で参照している (flake.nix の url はそのまま。flake.lock の locked だけが動く)
+nix flake lock --override-input go-arch-metrics "github:usadamasa/go-arch-metrics/$VERSION"
+```
+
+取った後、tag の commit と一致するかを確かめる。tag は付け替えられるので、tag 名で取っても古い commit を
+指していることがある。
+
+```bash
+# tag の commit (40 桁)
+git ls-remote --tags https://github.com/usadamasa/go-arch-metrics "$VERSION"
+
+# go.mod: pseudo-version の末尾 12 桁が tag の commit の先頭 12 桁と一致するか
+go list -m github.com/usadamasa/go-arch-metrics
+
+# flake.lock: locked.rev が tag の commit と一致するか
+jq -r '.nodes["go-arch-metrics"].locked.rev' flake.lock
+```
+
+ずれていたら、tag 名の代わりに `git ls-remote` が返した commit で取り直す
+(`go get github.com/usadamasa/go-arch-metrics@<commit>`、
+`nix flake lock --override-input go-arch-metrics github:usadamasa/go-arch-metrics/<commit>`)。
+nix は短縮した commit を受け付けないので 40 桁で渡す。
 
 ---
 
