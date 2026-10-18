@@ -33,11 +33,13 @@ description: >-
 
 ## Step 1: 必要なコマンド
 
-上の表のツールと `jq` が PATH にあること。入れ方はプロジェクトに任せる。
+上の表のツールが、PATH か go.mod の tool directive にあること (`go` と `jq` は PATH に要る)。
+入れ方はプロジェクトに任せる。`baseline.sh` は PATH を先に見て、無ければ tool directive から `go tool` で呼ぶ。
 
 `analyze-modularity`・`analyze-arch-lint`・`vulncheck` の 3 本は、この plugin のリポジトリの flake が
-`packages.<system>.default` として出す。nix を使うプロジェクトは flake input で参照するだけにする
-(書き方は `references/tools.md` の「この plugin の CLI を入れる」)。
+`packages.<system>.default` として出す。nix を使うプロジェクトは flake input で参照するだけにする。
+nix を使わないプロジェクトは go.mod の tool directive に足せる
+(どちらの書き方も `references/tools.md` の「この plugin の CLI を入れる」)。
 
 ### 以前の版で buildGoModule を書いたプロジェクト
 

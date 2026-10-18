@@ -47,6 +47,21 @@ nix を使うプロジェクトは flake input で参照し、devShell に足す
 | `analyze-arch-lint` | `go`、`go-arch-lint` |
 | `vulncheck` | `go` |
 
+### nix を使わないプロジェクト (go.mod の tool directive)
+
+go.mod の tool directive に足し、`go tool <name>` で呼ぶ。`baseline.sh` は PATH に無いツールを
+tool directive から探すので、PATH に載せなくてよい。
+
+```bash
+go get -tool github.com/usadamasa/go-arch-metrics/cmd/analyze-modularity@latest
+go get -tool github.com/usadamasa/go-arch-metrics/cmd/analyze-arch-lint@latest
+go get -tool github.com/usadamasa/go-arch-metrics/cmd/vulncheck@latest
+```
+
+この plugin の tag は Go の semver tag ではない (`v` を付けない CalVer)。`@latest` は default branch の
+pseudo-version に解決され、版は go.mod の require が commit で固定する。
+CI のコマンドは `go tool vulncheck ./...` のように `go tool` を前に付けて書く。
+
 ---
 
 ## golangci-lint
