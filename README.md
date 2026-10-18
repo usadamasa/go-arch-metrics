@@ -2,7 +2,7 @@
 
 Go プロジェクトのモジュール性とテスト可能性を測り、改善するための Claude Code plugin。
 「ソフトウェアアーキテクチャメトリクス (ISBN: 9784814400607)」の観点に基づく。
-4 つの skill と、既存ツールがカバーしない領域を測る CLI 2 本を同梱する。
+4 つの skill と、既存ツールがカバーしない領域を測る CLI 2 本、govulncheck を組み込んだ CLI 1 本を同梱する。
 
 ## インストール
 
@@ -33,6 +33,9 @@ claude plugin install go-arch-metrics@usadamasa
   方向は検出できない。そこを数値にする。指標は `--metrics` が正本
 - **`analyze-modularity`** — パッケージの API surface area (exported/unexported 比率、
   サイズ分布) と、`go list` の import 辺から出す Martin の Ca/Ce/A/I/D と Zone 分類
+- **`vulncheck`** — govulncheck をライブラリとして組み込んだもの。引数と exit code は govulncheck と同じ。
+  違いは証明書の検証だけで、OS の証明書ストアに頼らず埋め込みの roots を使うので、trustd に届かない
+  sandbox (Claude Code など) の中でも vuln.go.dev に届く
 
 フラグと使い方は `go-arch-metrics:setup` の `references/tools.md`。
 

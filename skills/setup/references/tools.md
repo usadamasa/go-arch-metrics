@@ -64,18 +64,26 @@ go-arch-lint graph
 
 ---
 
-## govulncheck
+## vulncheck (govulncheck の組み込み)
 
 ### 概要
 
-Go の既知の脆弱性データベース (vuln.go.dev) に基づき、プロジェクトの依存関係に
-脆弱性がないかスキャンするツール。Go チーム公式。
+Go の既知の脆弱性データベース (vuln.go.dev) に基づき、呼んでいるシンボルに脆弱性がないかスキャンする
+govulncheck (Go チーム公式) を、この plugin がライブラリとして組み込んだ CLI。引数と exit code は
+govulncheck と同じ (0 = 脆弱性なし、3 = 脆弱性あり、それ以外 = 実行できていない)。
+
+違いは TLS の証明書検証だけ。OS の証明書ストアに頼らず、埋め込みの roots (Mozilla の bundle) で検証する。
+macOS の sandbox (Seatbelt) の中では trustd に届かず、素の govulncheck は `x509: OSStatus -26276` で落ちるため。
+社内 CA で TLS を中継する環境では `GODEBUG=x509usefallbackroots=0` を付けると OS の検証に戻る。
 
 ### 実行
 
 ```bash
 # 実行
-govulncheck ./...
+vulncheck ./...
+
+# ローカルの DB を使う (ネットワークが無い環境、テスト)
+vulncheck -db file:///path/to/vulndb ./...
 ```
 
 ---

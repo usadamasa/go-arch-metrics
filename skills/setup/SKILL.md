@@ -26,7 +26,7 @@ description: >-
 | テスト可能性 | 認知的複雑度・循環複雑度・関数長・ネスト深さ | golangci-lint (gocognit, gocyclo, cyclop, funlen, nestif) |
 | 保守性 | 保守性指数 | golangci-lint (maintidx) |
 | 静的解析 | 高度なバグ検出・未使用コード | golangci-lint (staticcheck) |
-| セキュリティ | 既知の脆弱性・セキュリティ問題 | govulncheck, gosec |
+| セキュリティ | 既知の脆弱性・セキュリティ問題 | vulncheck (govulncheck の組み込み), gosec |
 | テスト品質 | テストカバレッジ | go test -cover |
 
 しきい値は `go-arch-metrics:evaluate` が持つ。ここでは何を入れるかだけを決める。
