@@ -15,6 +15,26 @@ func writeGoFile(t *testing.T, dir, filename, content string) {
 	}
 }
 
+func TestPackageResult_Abstractness(t *testing.T) {
+	tests := []struct {
+		name string
+		r    PackageResult
+		want float64
+	}{
+		{name: "型なし → 0", r: PackageResult{}, want: 0},
+		{name: "interface 1 / 型 4 → 0.25", r: PackageResult{InterfaceTypes: 1, ExportedTypes: 2, UnexportedTypes: 2}, want: 0.25},
+		{name: "全部 interface → 1", r: PackageResult{InterfaceTypes: 2, ExportedTypes: 1, UnexportedTypes: 1}, want: 1},
+		{name: "struct だけ → 0 (struct は抽象ではない)", r: PackageResult{ExportedTypes: 3}, want: 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.r.Abstractness(); got != tt.want {
+				t.Errorf("Abstractness() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestAnalyzeDir(t *testing.T) {
 	t.Run("exported と unexported の関数・型をカウントする", func(t *testing.T) {
 		dir := t.TempDir()
@@ -70,8 +90,24 @@ func (p *PublicType) privateMethod() {}
 		if result.UnexportedTypes != 1 {
 			t.Errorf("UnexportedTypes: got %d, want 1", result.UnexportedTypes)
 		}
+		if result.InterfaceTypes != 1 {
+			t.Errorf("InterfaceTypes: got %d, want 1 (PublicInterface)", result.InterfaceTypes)
+		}
 		if result.Files != 1 {
 			t.Errorf("Files: got %d, want 1", result.Files)
+		}
+	})
+
+	t.Run("型の宣言が無ければ Abstractness は 0", func(t *testing.T) {
+		dir := t.TempDir()
+		writeGoFile(t, dir, "funcs.go", "package funcs\n\nfunc F() {}\n")
+
+		result, err := AnalyzeDir(dir)
+		if err != nil {
+			t.Fatalf("AnalyzeDir 失敗: %v", err)
+		}
+		if got := result.Abstractness(); got != 0 {
+			t.Errorf("Abstractness: got %v, want 0", got)
 		}
 	})
 

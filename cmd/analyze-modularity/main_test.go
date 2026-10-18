@@ -53,6 +53,10 @@ type internalType struct{}
 	if err != nil {
 		t.Fatalf("テスト用ファイルの作成に失敗: %v", err)
 	}
+	// Ca/Ce は go list で取るので、go.mod が無いと解析自体が止まる
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module strictfixture\n"), 0644); err != nil {
+		t.Fatalf("go.mod 作成失敗: %v", err)
+	}
 	return dir
 }
 
@@ -161,36 +165,11 @@ func TestInferModuleRoot(t *testing.T) {
 	})
 }
 
-func TestSPMJSONIntegration(t *testing.T) {
-	t.Run("有効な spm-json → enriched 出力", func(t *testing.T) {
-		// モジュールルートとなるディレクトリに go.mod を配置
-		moduleDir := t.TempDir()
-		if err := os.WriteFile(filepath.Join(moduleDir, "go.mod"), []byte("module test-module\n"), 0644); err != nil {
-			t.Fatalf("go.mod 作成失敗: %v", err)
-		}
-		// Go ソースをサブディレクトリに配置
-		pkgDir := filepath.Join(moduleDir, "lowpublic")
-		if err := os.MkdirAll(pkgDir, 0755); err != nil {
-			t.Fatalf("ディレクトリ作成失敗: %v", err)
-		}
-		content := `package lowpublic
+func TestMainSequenceIntegration(t *testing.T) {
+	t.Run("fixture モジュールの Ca/Ce/A/I/D と Zone を JSON に出す", func(t *testing.T) {
+		root := writeFixtureModule(t)
 
-func internalA() {}
-func internalB() {}
-func internalC() {}
-type internalType struct{}
-`
-		if err := os.WriteFile(filepath.Join(pkgDir, "pkg.go"), []byte(content), 0644); err != nil {
-			t.Fatalf("pkg.go 作成失敗: %v", err)
-		}
-
-		spmFile := filepath.Join(t.TempDir(), "spm.json")
-		spmJSON := `{"packages": [{"name": "lowpublic", "path": "test-module/lowpublic", "afferent_coupling": 0, "efferent_coupling": 0, "abstractness": 0.0, "instability": 0.0, "distance": 1.0}]}`
-		if err := os.WriteFile(spmFile, []byte(spmJSON), 0644); err != nil {
-			t.Fatalf("spm.json 作成失敗: %v", err)
-		}
-
-		cmd := exec.Command("go", "run", ".", "--spm-json", spmFile, moduleDir)
+		cmd := exec.Command("go", "run", ".", root)
 		out, err := cmd.Output()
 		if err != nil {
 			t.Fatalf("実行失敗: %v", err)
@@ -201,40 +180,58 @@ type internalType struct{}
 			t.Fatalf("JSON パース失敗: %v", err)
 		}
 
-		if report.Summary.SPM == nil {
-			t.Fatal("SPM サマリが nil")
+		byBase := make(map[string]PackageResult, len(report.Packages))
+		for _, p := range report.Packages {
+			byBase[filepath.Base(p.Path)] = p
+		}
+
+		b := byBase["b"].MainSequence
+		if b == nil {
+			t.Fatal("b の main_sequence が nil")
+		}
+		// b は a と e から import され、c を import する
+		if b.AfferentCoupling != 2 || b.EfferentCoupling != 1 {
+			t.Errorf("b: Ca=%d Ce=%d, want Ca=2 Ce=1", b.AfferentCoupling, b.EfferentCoupling)
+		}
+		if b.Zone != ZoneOfPain {
+			t.Errorf("b.Zone = %q, want %q (A=0, I=1/3)", b.Zone, ZoneOfPain)
+		}
+
+		c := byBase["c"].MainSequence
+		if c == nil {
+			t.Fatal("c の main_sequence が nil")
+		}
+		// c は a, b, d から import され、interface 1 つが型宣言の全部
+		if c.AfferentCoupling != 3 || c.EfferentCoupling != 0 || c.Abstractness != 1 {
+			t.Errorf("c: Ca=%d Ce=%d A=%v, want Ca=3 Ce=0 A=1", c.AfferentCoupling, c.EfferentCoupling, c.Abstractness)
+		}
+		if !c.StructurallyConstrained {
+			t.Error("c は Ce=0, Ca>0 なので structurally_constrained のはず")
+		}
+
+		iso := byBase["iso"].MainSequence
+		if iso == nil || iso.Zone != ZoneExcluded {
+			t.Errorf("iso は孤立なので excluded のはず: %+v", iso)
+		}
+
+		if report.Summary.MainSequence == nil {
+			t.Fatal("summary.main_sequence が nil")
+		}
+		if report.Summary.MainSequence.StructurallyConstrainedCount != 1 {
+			t.Errorf("structurally_constrained_count = %d, want 1 (c)", report.Summary.MainSequence.StructurallyConstrainedCount)
 		}
 	})
 
-	t.Run("不正 JSON → exit code 1", func(t *testing.T) {
-		goDir := strictTestDir(t, false)
-
-		spmFile := filepath.Join(t.TempDir(), "bad.json")
-		if err := os.WriteFile(spmFile, []byte("{invalid"), 0644); err != nil {
-			t.Fatalf("bad.json 作成失敗: %v", err)
+	t.Run("go.mod が無い → exit code 1", func(t *testing.T) {
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, "x.go"), []byte("package x\n"), 0644); err != nil {
+			t.Fatalf("x.go 作成失敗: %v", err)
 		}
 
-		cmd := exec.Command("go", "run", ".", "--spm-json", spmFile, goDir)
+		cmd := exec.Command("go", "run", ".", dir)
 		err := cmd.Run()
 		if err == nil {
-			t.Fatal("不正 JSON では exit code 1 を返すべき")
-		}
-		exitErr, ok := err.(*exec.ExitError)
-		if !ok {
-			t.Fatalf("予期しないエラー: %v", err)
-		}
-		if exitErr.ExitCode() != 1 {
-			t.Errorf("exit code: got %d, want 1", exitErr.ExitCode())
-		}
-	})
-
-	t.Run("存在しないパス → exit code 1", func(t *testing.T) {
-		goDir := strictTestDir(t, false)
-
-		cmd := exec.Command("go", "run", ".", "--spm-json", "/nonexistent/spm.json", goDir)
-		err := cmd.Run()
-		if err == nil {
-			t.Fatal("存在しないパスでは exit code 1 を返すべき")
+			t.Fatal("go.mod が無ければ exit code 1 を返すべき")
 		}
 		exitErr, ok := err.(*exec.ExitError)
 		if !ok {
