@@ -1,5 +1,11 @@
 # Changelog
 
+## [2026.1018.1](https://github.com/usadamasa/go-arch-metrics/compare/2026.1018.0...2026.1018.1) - 2026-10-18
+
+### Other Changes
+- analyze-modularity を go list で列挙し、git が ignore するパッケージを測らない by @usadamasa in https://github.com/usadamasa/go-arch-metrics/pull/30
+- govulncheck を組み込み、sandbox の中でも脆弱性スキャンが通るようにする by @usadamasa in https://github.com/usadamasa/go-arch-metrics/pull/32
+
 ## [2026.1018.0](https://github.com/usadamasa/go-arch-metrics/compare/2026.0927.0...2026.1018.0) - 2026-10-18
 
 ### Other Changes
