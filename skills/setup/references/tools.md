@@ -62,6 +62,11 @@ go get -tool github.com/usadamasa/go-arch-metrics/cmd/vulncheck@latest
 pseudo-version に解決され、版は go.mod の require が commit で固定する。
 CI のコマンドは `go tool vulncheck ./...` のように `go tool` を前に付けて書く。
 
+- 対象プロジェクトの go.mod の `go` 行は 1.26.1 以上が要る (この plugin のモジュールの要求)。
+  `golang.org/x/vuln` などの依存も indirect の require として入る
+- `go-arch-lint` は PATH に置く。`analyze-arch-lint` が PATH から呼ぶので、tool directive に入れると
+  `baseline.sh` は動いても `analyze-arch-lint` が見つけられない
+
 ---
 
 ## golangci-lint
