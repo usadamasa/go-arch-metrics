@@ -1,5 +1,10 @@
 # Changelog
 
+## [2026.1018.5](https://github.com/usadamasa/go-arch-metrics/compare/2026.1018.4...2026.1018.5) - 2026-10-18
+
+### Other Changes
+- fix(analyze-arch-lint): scope-packages を同じディレクトリに並ぶパッケージ数で数える by @usadamasa in https://github.com/usadamasa/go-arch-metrics/pull/48
+
 ## [2026.1018.4](https://github.com/usadamasa/go-arch-metrics/compare/2026.1018.3...2026.1018.4) - 2026-10-18
 
 ### Other Changes
