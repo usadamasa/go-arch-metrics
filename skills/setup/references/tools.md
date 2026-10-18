@@ -17,6 +17,9 @@ nix を使うプロジェクトは flake input で参照し、devShell に足す
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     # tag は付け替えられるので、固定は flake.lock の commit に任せる
     go-arch-metrics.url = "github:usadamasa/go-arch-metrics";
+    # package は nixpkgs の go_latest でビルドされる。vulncheck は自分をビルドした Go より新しい
+    # go 行のモジュールを測れないので、利用側の nixpkgs に揃えて利用側の go に追いつかせる
+    go-arch-metrics.inputs.nixpkgs.follows = "nixpkgs";
   };
 
   outputs = { nixpkgs, go-arch-metrics, ... }:

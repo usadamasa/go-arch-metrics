@@ -13,16 +13,30 @@
       ];
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
 
-      # vulncheck は自分をビルドした Go より新しい go 行のモジュールを測れない
-      # (package requires newer Go version)。nixpkgs の既定の go は一つ前の系列に留まるので go_latest を使う。
-      # 利用側が nixpkgs を follows させれば、利用側の nixpkgs の go_latest でビルドされる
-      goFor = pkgs: pkgs.go_latest;
+      # devShell の go は nixpkgs の Go 製ツール (gosec など) をビルドした系列 (pkgs.go = go_1_26) に揃える。
+      # 新しい系列の go を並べると、gosec が export data を読めず SSA の解析を飛ばして exit 1 になる。
+      # nixos-unstable の go_1_26 は 1.26.8 で、net/http の脆弱性 (GO-2026-6617 ほか、1.26.9 で修正) が
+      # cmd/vulncheck の HTTP クライアントから届くため vulncheck が exit 3 を返す。nixpkgs master には
+      # 1.26.9 が入っている (NixOS/nixpkgs#571801) が channel に降りるまで、go だけソースを差し替える。
+      # channel が追いついたらこの override を消してから nix flake update を打つ (#33)。nix flake update だけでは消えない
+      devGo =
+        pkgs:
+        pkgs.go_1_26.overrideAttrs (old: rec {
+          version = "1.26.9";
+          src = pkgs.fetchurl {
+            url = "https://go.dev/dl/go${version}.src.tar.gz";
+            hash = "sha256-lzXX3Ntls10/pXfwQGRzfAO4nPGitx5uaf4vPG+f1Mo=";
+          };
+        });
     in
     {
       packages = forAllSystems (
         pkgs:
         let
-          buildGoModule = pkgs.buildGoModule.override { go = goFor pkgs; };
+          # vulncheck は自分をビルドした Go より新しい go 行のモジュールを測れない
+          # (package requires newer Go version)。pkgs.go は一つ前の系列に留まるので go_latest でビルドする。
+          # 利用側が nixpkgs を follows させれば、利用側の nixpkgs の go_latest でビルドされる
+          buildGoModule = pkgs.buildGoModule.override { go = pkgs.go_latest; };
         in
         {
           default = buildGoModule {
@@ -57,8 +71,8 @@
           # analyze-* と vulncheck はこのリポジトリ自身のソースを Taskfile が go run するので含めない
           packages =
             [
-              # package と同じ go。go.mod の go 行より古ければ GOTOOLCHAIN=local で即座に失敗させる
-              (goFor pkgs)
+              # go.mod の go 行と同じ系列。ずれたら GOTOOLCHAIN=local で即座に失敗させる
+              (devGo pkgs)
             ]
             ++ (with pkgs; [
               go-task
