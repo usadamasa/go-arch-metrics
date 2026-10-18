@@ -70,38 +70,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	// 測るのは構成管理の対象だけ: go list が列挙するパッケージ (入れ子のモジュールと vendor を含まない)
-	// から git が ignore するものを落とし、一覧も Ca/Ce の辺もその集合で作る
-	moduleRoot := inferModuleRoot(args)
-	listed, err := listModulePackages(moduleRoot)
+	tracked, packages, err := collectPackages(args)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "エラー: %v\n", err)
-		os.Exit(1)
-	}
-	tracked, err := dropIgnored(moduleRoot, listed)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "エラー: %v\n", err)
-		os.Exit(1)
-	}
-	selected, err := selectPackages(tracked, args)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "エラー: %v\n", err)
-		os.Exit(1)
-	}
-
-	var packages []PackageResult
-	for _, s := range selected {
-		result, err := AnalyzeDir(s.Dir, s.GoFiles)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "エラー: %s: %v\n", s.Path, err)
-			os.Exit(1)
-		}
-		result.Path = s.Path
-		packages = append(packages, result)
-	}
-
-	if len(packages) == 0 {
-		fmt.Fprintf(os.Stderr, "エラー: 解析可能な Go パッケージが見つかりません\n")
 		os.Exit(1)
 	}
 
@@ -159,6 +130,39 @@ func main() {
 	if *strict && report.Summary.TotalWarnings > 0 {
 		os.Exit(1)
 	}
+}
+
+// collectPackages は測る対象を決めて読む｡測るのは構成管理の対象だけ: go list が列挙するパッケージ
+// (入れ子のモジュールと vendor を含まない) から git が ignore するものを落とし、args の下にあるものを
+// 解析する｡返す tracked は Ca/Ce の辺を数える集合で、ignore されたものを含まない｡
+func collectPackages(args []string) ([]listedPackage, []PackageResult, error) {
+	moduleRoot := inferModuleRoot(args)
+	listed, err := listModulePackages(moduleRoot)
+	if err != nil {
+		return nil, nil, err
+	}
+	tracked, err := dropIgnored(moduleRoot, listed)
+	if err != nil {
+		return nil, nil, err
+	}
+	selected, err := selectPackages(tracked, args)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var packages []PackageResult
+	for _, s := range selected {
+		result, err := AnalyzeDir(s.Dir, s.GoFiles)
+		if err != nil {
+			return nil, nil, fmt.Errorf("%s: %w", s.Path, err)
+		}
+		result.Path = s.Path
+		packages = append(packages, result)
+	}
+	if len(packages) == 0 {
+		return nil, nil, fmt.Errorf("解析可能な Go パッケージが見つかりません")
+	}
+	return tracked, packages, nil
 }
 
 // enrichMainSequence は listed の import 辺から Ca/Ce を数え、AST の型カウントから A を出して

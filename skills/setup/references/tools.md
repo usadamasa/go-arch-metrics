@@ -116,7 +116,11 @@ gosec ./...
 | Distance (D) | \|A + I - 1\| (Main Sequence からの距離) |
 
 Zone 分類と構造的制約の扱いは `go-arch-metrics:evaluate`。
-Ca/Ce は `go list` に頼るので、対象は `go.mod` のあるモジュールで、`go list ./...` が通ること。
+
+対象は `go list ./...` が列挙するパッケージ (入れ子のモジュールと vendor を含まない) のうち、
+git が ignore していないもの。測るのは構成管理の対象だけで、`tmp/` のような ignore 済みの試し書きは
+一覧にも Ca/Ce の辺にも入らない。前提は `go.mod` のあるモジュールで `go list ./...` が通ること。
+git リポジトリでなければ ignore するものは無いとみなす (stderr に 1 行出る)。
 
 ### 実行
 
