@@ -8,7 +8,7 @@ setup() {
     PROJECT="${BATS_TEST_TMPDIR}/project"
     mkdir -p "$STUB_BIN" "$PROJECT"
 
-    # baseline.sh が require_tool で要求する外部ツール。中身は問わないので
+    # baseline.sh が前提として要求する外部ツール。中身は問わないので
     # 何も出さずに成功するスタブでよい。go と jq は本物を使う。
     for tool in golangci-lint go-arch-lint gosec vulncheck \
                 analyze-modularity analyze-arch-lint; do
@@ -60,6 +60,23 @@ stub_analyze_modularity() {
         "printf '%s' '${err}' >&2" \
         "exit ${rc}" > "${STUB_BIN}/analyze-modularity"
     chmod +x "${STUB_BIN}/analyze-modularity"
+}
+
+# isolate_path_from_host_tools
+# 開発機の PATH に本物の vulncheck などが載っていても拾わないよう、PATH をスタブと go・jq と
+# 標準コマンドだけに絞る。
+isolate_path_from_host_tools() {
+    PATH="${STUB_BIN}:$(dirname "$(command -v go)"):$(dirname "$(command -v jq)"):/usr/bin:/bin"
+}
+
+# add_module_tool <name> <main.go の本体>
+# fixture のモジュールに cmd/<name> を作り、go.mod の tool directive に足す。PATH のスタブは消す。
+add_module_tool() {
+    local name="$1" body="$2"
+    rm "${STUB_BIN}/${name}"
+    mkdir -p "${PROJECT}/cmd/${name}"
+    printf '%s\n' 'package main' '' "${body}" > "${PROJECT}/cmd/${name}/main.go"
+    printf '%s\n' "tool baseline-fixture/cmd/${name}" >> "${PROJECT}/go.mod"
 }
 
 write_passing_test() {
@@ -184,6 +201,37 @@ write_failing_test() {
 
     [ "$status" -ne 0 ]
     [[ "$output" == *"analyze-modularity の実行に失敗しました"* ]]
+}
+
+@test "PATH に無いツールは go.mod の tool directive から go tool で呼ぶ" {
+    write_passing_test
+    isolate_path_from_host_tools
+    add_module_tool vulncheck 'import "fmt"
+
+func main() { fmt.Println("vulncheck via go tool") }'
+    add_module_tool analyze-modularity 'import "fmt"
+
+func main() {
+	fmt.Print(`{"packages":[],"summary":{"mean_loc":0,"stddev_loc":0,"mean_public_ratio":0,"total_packages":7,"total_warnings":0,"actionable_warnings":0,"main_sequence":{"excluded_packages":null,"structurally_constrained_count":0,"non_volatile_zone_of_pain_count":0,"actionable_count":0,"volatility_window_commits":200,"volatile_commit_threshold":5}}}`)
+}'
+    add_module_tool analyze-arch-lint 'func main() {}'
+
+    run bash "$BASELINE" "$PROJECT"
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"govulncheck: 脆弱性なし"* ]]
+    [ "$(jq '.modularity.summary.total_packages' "${PROJECT}"/baseline-*.json)" -eq 7 ]
+}
+
+@test "PATH にも tool directive にも無いツールは両方を挙げて止まる" {
+    write_passing_test
+    isolate_path_from_host_tools
+    rm "${STUB_BIN}/vulncheck"
+
+    run bash "$BASELINE" "$PROJECT"
+
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"vulncheck"*"PATH"*"tool directive"* ]]
 }
 
 @test "analyze-modularity の Main Sequence 集計をサマリに出す" {
