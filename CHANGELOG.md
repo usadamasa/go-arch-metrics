@@ -1,5 +1,11 @@
 # Changelog
 
+## [2026.1018.4](https://github.com/usadamasa/go-arch-metrics/compare/2026.1018.3...2026.1018.4) - 2026-10-18
+
+### Other Changes
+- setup: CLI を plugin の版の tag で取り、tag の commit と照合する by @usadamasa in https://github.com/usadamasa/go-arch-metrics/pull/44
+- flake: package を go_latest でビルドし、go 1.27 の利用側で vulncheck を測れるようにする by @usadamasa in https://github.com/usadamasa/go-arch-metrics/pull/45
+
 ## [2026.1018.3](https://github.com/usadamasa/go-arch-metrics/compare/2026.1018.2...2026.1018.3) - 2026-10-18
 
 ### Other Changes
