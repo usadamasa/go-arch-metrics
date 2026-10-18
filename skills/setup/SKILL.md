@@ -100,6 +100,22 @@ CI で回すコマンドは `references/ci-integration.md`。
 初期導入時はしきい値を既存コードの実測最大値の直上に置き、CI を緑にしてから
 段階的に絞る。最初から全違反を 0 にしようとするのは逆効果。
 
+## バージョンを上げる
+
+plugin (skill と `baseline.sh`) と CLI 3 本は同じリポジトリから出ていて、JSON のキーや警告の判定は
+両方がそろっている前提で書いてある。片方だけ上げない。
+
+1. GitHub Release (または CHANGELOG.md) で、上げる範囲の変更を読む。JSON のキー、しきい値、
+   `--strict` の判定が変わっていれば、以前の測定結果とはそのまま比べられない
+2. plugin を上げる: `claude plugin update go-arch-metrics@usadamasa` (反映には Claude Code の再起動が要る)
+3. CLI を同じ版に上げる。marketplace の登録は ref を指定しておらず、plugin は default branch から入るので、
+   CLI も default branch の最新にそろえる
+   - flake input で参照している: `nix flake update go-arch-metrics` で flake.lock を進める
+   - go.mod の tool directive に入れている: `go get github.com/usadamasa/go-arch-metrics@latest`
+     (3 本は同じモジュールなので 1 回で全部上がる)
+4. CI を回し、`go-arch-metrics:measure` で測り直す。前回から変わった数値は、手順 1 の変更による差か、
+   コードの変化による差かを分けて読む
+
 ## リファレンス
 
 | ファイル | 内容 |
