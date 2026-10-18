@@ -284,7 +284,7 @@ func TestStrictFlag(t *testing.T) {
 			args = append(args, dir)
 
 			cmd := exec.Command("go", args...)
-	
+
 			err := cmd.Run()
 
 			var gotExitCode int

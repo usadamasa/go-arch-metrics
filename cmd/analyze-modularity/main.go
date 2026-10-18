@@ -16,8 +16,8 @@ type Report struct {
 	Warnings []Warning       `json:"warnings,omitempty"`
 }
 
-// SPMSummary は spm-go 統合時のサマリ｡--spm-json 未指定時は nil｡
-type SPMSummary struct {
+// MainSequenceSummary は Ca/Ce/A/I/D の全パッケージ集計｡
+type MainSequenceSummary struct {
 	ExcludedPackages             []string `json:"excluded_packages"`
 	StructurallyConstrainedCount int      `json:"structurally_constrained_count"`
 	ActionableCount              int      `json:"actionable_count"`
@@ -27,13 +27,13 @@ type SPMSummary struct {
 
 // Summary は全パッケージのサマリ統計｡
 type Summary struct {
-	MeanLOC           float64  `json:"mean_loc"`
-	StddevLOC         float64  `json:"stddev_loc"`
-	MeanPublicRatio   float64  `json:"mean_public_ratio"`
-	OutlierPackages   []string `json:"outlier_packages,omitempty"`
-	TotalPackages     int      `json:"total_packages"`
-	TotalWarnings     int      `json:"total_warnings"`
-	SPM               *SPMSummary `json:"spm,omitempty"`
+	MeanLOC         float64              `json:"mean_loc"`
+	StddevLOC       float64              `json:"stddev_loc"`
+	MeanPublicRatio float64              `json:"mean_public_ratio"`
+	OutlierPackages []string             `json:"outlier_packages,omitempty"`
+	TotalPackages   int                  `json:"total_packages"`
+	TotalWarnings   int                  `json:"total_warnings"`
+	MainSequence    *MainSequenceSummary `json:"main_sequence"`
 }
 
 // inferModuleRoot は引数ディレクトリから親方向に go.mod を探索してモジュールルートを返す｡
@@ -62,7 +62,6 @@ func main() {
 	sigma := flag.Float64("sigma", 2.0, "LOC 外れ値検出の σ 倍数")
 	minSymbols := flag.Int("min-symbols", defaultMinSymbols, "public ratio チェックの最小シンボル数")
 	strict := flag.Bool("strict", false, "警告がある場合に exit code 1 を返す")
-	spmJSON := flag.String("spm-json", "", "spm-go JSON ファイルのパス (省略可能)")
 	flag.Parse()
 
 	args := flag.Args()
@@ -96,8 +95,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	// SPM enrichment (--spm-json 指定時)
-	spmIndex := enrichSPM(*spmJSON, args, packages)
+	if err := enrichMainSequence(inferModuleRoot(args), packages); err != nil {
+		fmt.Fprintf(os.Stderr, "エラー: %v\n", err)
+		os.Exit(1)
+	}
 
 	// 統計計算
 	locs := make([]float64, len(packages))
@@ -115,10 +116,10 @@ func main() {
 	var allWarnings []Warning
 	for _, p := range packages {
 		astWarnings := GenerateWarnings(p, *maxPublicRatio, *sigma, locStats, *minSymbols)
-		spmWarnings := GenerateSPMWarnings(p)
+		mainSequenceWarnings := GenerateMainSequenceWarnings(p)
 		crossWarnings := GenerateCrossWarnings(p, astWarnings)
 		allWarnings = append(allWarnings, astWarnings...)
-		allWarnings = append(allWarnings, spmWarnings...)
+		allWarnings = append(allWarnings, mainSequenceWarnings...)
 		allWarnings = append(allWarnings, crossWarnings...)
 	}
 
@@ -129,12 +130,7 @@ func main() {
 		OutlierPackages: outliers,
 		TotalPackages:   len(packages),
 		TotalWarnings:   len(allWarnings),
-	}
-
-	// SPM サマリ (--spm-json 指定時)
-	if spmIndex != nil {
-		spmSummary := buildSPMSummary(packages)
-		summary.SPM = spmSummary
+		MainSequence:    buildMainSequenceSummary(packages),
 	}
 
 	report := Report{
@@ -155,79 +151,83 @@ func main() {
 	}
 }
 
-// enrichSPM は --spm-json 指定時に SPM データでパッケージを拡張する｡
-func enrichSPM(spmJSONPath string, args []string, packages []PackageResult) map[string]SPMPackage {
-	if spmJSONPath == "" {
-		return nil
-	}
-	report, err := loadSPMReport(spmJSONPath)
+// enrichMainSequence は go list の import 辺から Ca/Ce を数え、AST の型カウントから A を出して
+// 各パッケージの MainSequence を埋める｡go list に含まれないパッケージは nil のまま残し、stderr に知らせる｡
+func enrichMainSequence(moduleRoot string, packages []PackageResult) error {
+	listed, err := listModulePackages(moduleRoot)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "エラー: %v\n", err)
-		os.Exit(1)
+		return err
 	}
-	spmIndex := buildSPMIndex(report)
 
-	moduleRoot := inferModuleRoot(args)
-
-	// go.mod からモジュール名を取得
-	moduleName, err := readModuleName(filepath.Join(moduleRoot, "go.mod"))
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "エラー: %v\n", err)
-		os.Exit(1)
+	// go list の Dir は絶対パスで、走査したディレクトリは引数のまま (相対もある)。symlink の解決度も
+	// 違いうるので、両方を実体の絶対パスにそろえてから突き合わせる
+	byDir := make(map[string]PackageMetrics, len(listed))
+	for dir, m := range computeCoupling(listed) {
+		canonical, err := canonicalDir(dir)
+		if err != nil {
+			return fmt.Errorf("go list が返したディレクトリを解決できません: %w", err)
+		}
+		byDir[canonical] = m
 	}
 
 	for i := range packages {
-		pkgPath, err := filepath.Abs(packages[i].Path)
+		dir, err := canonicalDir(packages[i].Path)
 		if err != nil {
+			return fmt.Errorf("パッケージのディレクトリを解決できません: %w", err)
+		}
+		m, ok := byDir[dir]
+		if !ok {
+			fmt.Fprintf(os.Stderr, "警告: go list に含まれないため Ca/Ce を算出できません: %s\n", packages[i].Path)
 			continue
 		}
-		relPath, err := filepath.Rel(moduleRoot, pkgPath)
-		if err != nil {
-			continue
-		}
-		// フルインポートパスを構築してルックアップ
-		importPath := moduleName
-		if relPath != "." {
-			importPath += "/" + relPath
-		}
-		if spmPkg, ok := spmIndex[importPath]; ok {
-			packages[i].SPM = &SPMData{
-				Zone:                    classifyZone(spmPkg),
-				Distance:                spmPkg.Distance,
-				StructurallyConstrained: isStructurallyConstrained(spmPkg),
-				Abstractness:            spmPkg.Abstractness,
-				Instability:             spmPkg.Instability,
-				AfferentCoupling:        spmPkg.AfferentCoupling,
-				EfferentCoupling:        spmPkg.EfferentCoupling,
-			}
+		m.Abstractness = packages[i].Abstractness()
+		m.Instability = instability(m.AfferentCoupling, m.EfferentCoupling)
+		m.Distance = distance(m.Abstractness, m.Instability)
+		packages[i].MainSequence = &MainSequenceData{
+			Zone:                    classifyZone(m),
+			Distance:                m.Distance,
+			StructurallyConstrained: isStructurallyConstrained(m),
+			Abstractness:            m.Abstractness,
+			Instability:             m.Instability,
+			AfferentCoupling:        m.AfferentCoupling,
+			EfferentCoupling:        m.EfferentCoupling,
 		}
 	}
-	return spmIndex
+	return nil
 }
 
-// buildSPMSummary はパッケージの SPM データからサマリを生成する｡
-func buildSPMSummary(packages []PackageResult) *SPMSummary {
-	summary := &SPMSummary{}
+// canonicalDir は symlink を解決した絶対パスを返す｡
+func canonicalDir(path string) (string, error) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	return filepath.EvalSymlinks(abs)
+}
+
+// buildMainSequenceSummary はパッケージの Ca/Ce/A/I/D からサマリを生成する｡
+func buildMainSequenceSummary(packages []PackageResult) *MainSequenceSummary {
+	summary := &MainSequenceSummary{}
 	var maxDist, sumDist float64
 	firstActionable := true
 
 	for _, p := range packages {
-		if p.SPM == nil {
+		if p.MainSequence == nil {
 			continue
 		}
-		if p.SPM.Zone == SPMZoneExcluded {
+		if p.MainSequence.Zone == ZoneExcluded {
 			summary.ExcludedPackages = append(summary.ExcludedPackages, p.Path)
 			continue
 		}
-		if p.SPM.StructurallyConstrained {
+		if p.MainSequence.StructurallyConstrained {
 			summary.StructurallyConstrainedCount++
 			continue
 		}
-		if p.SPM.Distance > mainSequenceDistanceThreshold {
+		if p.MainSequence.Distance > mainSequenceDistanceThreshold {
 			summary.ActionableCount++
-			sumDist += p.SPM.Distance
-			if firstActionable || p.SPM.Distance > maxDist {
-				maxDist = p.SPM.Distance
+			sumDist += p.MainSequence.Distance
+			if firstActionable || p.MainSequence.Distance > maxDist {
+				maxDist = p.MainSequence.Distance
 				firstActionable = false
 			}
 		}

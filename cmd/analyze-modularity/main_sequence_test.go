@@ -193,6 +193,28 @@ func Test_computeCoupling(t *testing.T) {
 	}
 }
 
+func Test_enrichMainSequence(t *testing.T) {
+	t.Run("相対パスで渡したパッケージにも go list の結果を突き合わせる", func(t *testing.T) {
+		root := writeFixtureModule(t)
+		t.Chdir(root)
+		packages := []PackageResult{
+			{Path: "b", ExportedTypes: 0},
+			{Path: filepath.Join(".", "c"), ExportedTypes: 1, InterfaceTypes: 1},
+		}
+
+		if err := enrichMainSequence(".", packages); err != nil {
+			t.Fatalf("enrichMainSequence 失敗: %v", err)
+		}
+
+		if packages[0].MainSequence == nil || packages[0].MainSequence.AfferentCoupling != 2 {
+			t.Errorf("b: %+v, want Ca=2", packages[0].MainSequence)
+		}
+		if packages[1].MainSequence == nil || packages[1].MainSequence.Abstractness != 1 {
+			t.Errorf("c: %+v, want A=1", packages[1].MainSequence)
+		}
+	})
+}
+
 func Test_listModulePackages(t *testing.T) {
 	t.Run("fixture モジュールの import 辺を返す", func(t *testing.T) {
 		root := writeFixtureModule(t)
