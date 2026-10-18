@@ -7,7 +7,10 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 )
 
 // PackageMetrics は Robert C. Martin の Package Metrics (Ca/Ce/A/I/D) の 1 パッケージ分｡
@@ -79,13 +82,14 @@ type listedPackage struct {
 	ImportPath string
 	Name       string
 	Dir        string
+	GoFiles    []string
 	Imports    []string
 }
 
 // listModulePackages は moduleRoot で go list -json ./... を実行し、モジュール内の全パッケージを返す｡
-// Imports はテストファイルの import を含まない (それは TestImports)｡
+// 入れ子のモジュールと vendor は go list が除く｡GoFiles と Imports はテストファイルの分を含まない｡
 func listModulePackages(moduleRoot string) ([]listedPackage, error) {
-	cmd := exec.Command("go", "list", "-json=ImportPath,Name,Dir,Imports", "./...")
+	cmd := exec.Command("go", "list", "-json=ImportPath,Name,Dir,GoFiles,Imports", "./...")
 	cmd.Dir = moduleRoot
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -107,6 +111,129 @@ func listModulePackages(moduleRoot string) ([]listedPackage, error) {
 		pkgs = append(pkgs, p)
 	}
 	return pkgs, nil
+}
+
+// gitIgnoredDirs は dirs のうち git が ignore するものを、実体の絶対パスの集合で返す｡
+// moduleRoot が git リポジトリでなければ ignore するものは無いとみなし、stderr にその旨を出す｡
+func gitIgnoredDirs(moduleRoot string, dirs []string) (map[string]bool, error) {
+	ignored := make(map[string]bool)
+	if len(dirs) == 0 {
+		return ignored, nil
+	}
+
+	probe := exec.Command("git", "rev-parse", "--show-toplevel")
+	probe.Dir = moduleRoot
+	if err := probe.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "注意: %s は git リポジトリではないので .gitignore は見ません\n", moduleRoot)
+		return ignored, nil
+	}
+
+	var input bytes.Buffer
+	for _, dir := range dirs {
+		rel, err := filepath.Rel(moduleRoot, dir)
+		if err != nil {
+			return nil, fmt.Errorf("%s をモジュールルートからの相対パスにできません: %w", dir, err)
+		}
+		input.WriteString(rel)
+		input.WriteByte(0)
+	}
+
+	cmd := exec.Command("git", "check-ignore", "-z", "--stdin")
+	cmd.Dir = moduleRoot
+	cmd.Stdin = &input
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		// exit 1 は「どれも ignore されない」
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
+			return ignored, nil
+		}
+		return nil, fmt.Errorf("git check-ignore の実行に失敗: %w\n%s", err, bytes.TrimSpace(stderr.Bytes()))
+	}
+
+	for rel := range bytes.SplitSeq(out, []byte{0}) {
+		if len(rel) == 0 {
+			continue
+		}
+		dir, err := canonicalDir(filepath.Join(moduleRoot, string(rel)))
+		if err != nil {
+			return nil, fmt.Errorf("git check-ignore が返したパスを解決できません: %w", err)
+		}
+		ignored[dir] = true
+	}
+	return ignored, nil
+}
+
+// dropIgnored は listed から git が ignore するパッケージを除いて返す｡
+// 構成管理の外にあるパッケージは、一覧にも Ca/Ce の辺にも入れない｡
+func dropIgnored(moduleRoot string, listed []listedPackage) ([]listedPackage, error) {
+	dirs := make([]string, 0, len(listed))
+	for _, p := range listed {
+		dirs = append(dirs, p.Dir)
+	}
+	ignored, err := gitIgnoredDirs(moduleRoot, dirs)
+	if err != nil {
+		return nil, err
+	}
+	tracked := make([]listedPackage, 0, len(listed))
+	for _, p := range listed {
+		dir, err := canonicalDir(p.Dir)
+		if err != nil {
+			return nil, fmt.Errorf("go list が返したディレクトリを解決できません: %w", err)
+		}
+		if !ignored[dir] {
+			tracked = append(tracked, p)
+		}
+	}
+	return tracked, nil
+}
+
+// selectedPackage は報告の対象に選ばれたパッケージ｡Path は「引数 + 引数からの相対パス」で、
+// 引数に . を渡せば cmd/analyze-modularity のような形になる｡
+type selectedPackage struct {
+	Path    string
+	Dir     string
+	GoFiles []string
+}
+
+// selectPackages は listed のうち args のどれかの下にあり、解析する Go ファイルを持つパッケージを選ぶ｡
+func selectPackages(listed []listedPackage, args []string) ([]selectedPackage, error) {
+	var selected []selectedPackage
+	for _, arg := range args {
+		root, err := canonicalDir(arg)
+		if err != nil {
+			return nil, fmt.Errorf("パスが存在しません: %s", arg)
+		}
+		for _, p := range listed {
+			dir, err := canonicalDir(p.Dir)
+			if err != nil {
+				return nil, fmt.Errorf("go list が返したディレクトリを解決できません: %w", err)
+			}
+			if dir != root && !strings.HasPrefix(dir, root+string(filepath.Separator)) {
+				continue
+			}
+			if len(p.GoFiles) == 0 {
+				continue
+			}
+			rel, err := filepath.Rel(root, dir)
+			if err != nil {
+				return nil, err
+			}
+			selected = append(selected, selectedPackage{Path: filepath.Join(arg, rel), Dir: p.Dir, GoFiles: p.GoFiles})
+		}
+	}
+	return selected, nil
+}
+
+// canonicalDir は symlink を解決した絶対パスを返す｡
+func canonicalDir(path string) (string, error) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	return filepath.EvalSymlinks(abs)
 }
 
 // computeCoupling はモジュール内の import 辺から Ca/Ce を数え、パッケージのディレクトリをキーに返す｡

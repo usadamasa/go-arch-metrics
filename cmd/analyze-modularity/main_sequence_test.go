@@ -204,7 +204,11 @@ func Test_enrichMainSequence(t *testing.T) {
 			{Path: filepath.Join(".", "c"), ExportedTypes: 1, InterfaceTypes: 1},
 		}
 
-		if err := enrichMainSequence(".", packages); err != nil {
+		listed, err := listModulePackages(".")
+		if err != nil {
+			t.Fatalf("listModulePackages 失敗: %v", err)
+		}
+		if err := enrichMainSequence(listed, packages); err != nil {
 			t.Fatalf("enrichMainSequence 失敗: %v", err)
 		}
 
@@ -286,16 +290,42 @@ func Test_gitIgnoredDirs(t *testing.T) {
 	})
 }
 
+func Test_dropIgnored(t *testing.T) {
+	root := writeFixtureModule(t)
+	initGitRepo(t, root, "c/\n")
+	listed, err := listModulePackages(root)
+	if err != nil {
+		t.Fatalf("listModulePackages 失敗: %v", err)
+	}
+
+	tracked, err := dropIgnored(root, listed)
+	if err != nil {
+		t.Fatalf("dropIgnored 失敗: %v", err)
+	}
+
+	if len(tracked) != 5 {
+		t.Fatalf("tracked = %d 件, want 5 (c を除く)", len(tracked))
+	}
+	for _, p := range tracked {
+		if p.Name == "c" {
+			t.Errorf("ignore された c が残っている")
+		}
+	}
+	// 辺の数え上げも tracked だけで行うので、b の Ce は c 向けの辺が落ちて 0 になる
+	if ce := computeCoupling(tracked)[tracked[1].Dir].EfferentCoupling; ce != 0 {
+		t.Errorf("b.Ce = %d, want 0 (ignore された c への辺は数えない)", ce)
+	}
+}
+
 func Test_selectPackages(t *testing.T) {
 	root := writeFixtureModule(t)
 	listed, err := listModulePackages(root)
 	if err != nil {
 		t.Fatalf("listModulePackages 失敗: %v", err)
 	}
-	cDir, _ := canonicalDir(filepath.Join(root, "c"))
 
-	t.Run("引数の下にあるパッケージだけを、ignore を除いて返す", func(t *testing.T) {
-		selected, err := selectPackages(listed, []string{root}, map[string]bool{cDir: true})
+	t.Run("引数の下にあるパッケージを引数基準の Path で返す", func(t *testing.T) {
+		selected, err := selectPackages(listed, []string{root})
 		if err != nil {
 			t.Fatalf("selectPackages 失敗: %v", err)
 		}
@@ -304,8 +334,8 @@ func Test_selectPackages(t *testing.T) {
 			paths = append(paths, s.Path)
 		}
 		want := []string{
-			filepath.Join(root, "a"), filepath.Join(root, "b"), filepath.Join(root, "d"),
-			filepath.Join(root, "e"), filepath.Join(root, "iso"),
+			filepath.Join(root, "a"), filepath.Join(root, "b"), filepath.Join(root, "c"),
+			filepath.Join(root, "d"), filepath.Join(root, "e"), filepath.Join(root, "iso"),
 		}
 		if strings.Join(paths, ",") != strings.Join(want, ",") {
 			t.Errorf("paths = %v, want %v", paths, want)
@@ -316,7 +346,7 @@ func Test_selectPackages(t *testing.T) {
 	})
 
 	t.Run("サブディレクトリを渡せばその下だけ", func(t *testing.T) {
-		selected, err := selectPackages(listed, []string{filepath.Join(root, "b")}, nil)
+		selected, err := selectPackages(listed, []string{filepath.Join(root, "b")})
 		if err != nil {
 			t.Fatalf("selectPackages 失敗: %v", err)
 		}
@@ -327,7 +357,7 @@ func Test_selectPackages(t *testing.T) {
 
 	t.Run("相対パスの引数なら Path も相対", func(t *testing.T) {
 		t.Chdir(root)
-		selected, err := selectPackages(listed, []string{"."}, nil)
+		selected, err := selectPackages(listed, []string{"."})
 		if err != nil {
 			t.Fatalf("selectPackages 失敗: %v", err)
 		}

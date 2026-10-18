@@ -161,8 +161,8 @@ func TestMainSequenceIntegration(t *testing.T) {
 		root := writeFixtureModule(t)
 		initGitRepo(t, root, "tmp/\n")
 		extra := map[string]string{
-			// .gitignore に当たる (go list には含まれる)
-			"tmp/x/x.go": "package x\n\nfunc X() {}\n",
+			// .gitignore に当たる (go list には含まれる)。c を import するが、構成管理の外なので c の Ca には数えない
+			"tmp/x/x.go": "package x\n\nimport \"example.com/fx/c\"\n\nfunc X() int { return c.C() }\n",
 			// 入れ子のモジュール (go list ./... に含まれない)
 			"tmp/probe/go.mod":  "module example.com/probe\n\ngo 1.26\n",
 			"tmp/probe/main.go": "package main\n\nfunc main() {}\n",
@@ -191,8 +191,12 @@ func TestMainSequenceIntegration(t *testing.T) {
 			t.Errorf("total_packages = %d, want 6 (a b c d e iso)", report.Summary.TotalPackages)
 		}
 		for _, p := range report.Packages {
-			if strings.Contains(p.Path, "tmp") {
+			rel, _ := filepath.Rel(root, p.Path)
+			if strings.HasPrefix(rel, "tmp") {
 				t.Errorf("tmp 配下が報告に混ざっている: %s", p.Path)
+			}
+			if filepath.Base(p.Path) == "c" && p.MainSequence.AfferentCoupling != 3 {
+				t.Errorf("c.Ca = %d, want 3 (a, b, d。gitignore 済みの tmp/x は数えない)", p.MainSequence.AfferentCoupling)
 			}
 		}
 	})
