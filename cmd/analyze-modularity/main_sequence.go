@@ -121,9 +121,13 @@ func gitIgnoredDirs(moduleRoot string, dirs []string) (map[string]bool, error) {
 		return ignored, nil
 	}
 
+	// git が無いのは前提の欠如なので止める。git リポジトリでないのは正常な状態として続ける
 	probe := exec.Command("git", "rev-parse", "--show-toplevel")
 	probe.Dir = moduleRoot
 	if err := probe.Run(); err != nil {
+		if errors.Is(err, exec.ErrNotFound) {
+			return nil, fmt.Errorf("git が PATH に見つかりません: %w", err)
+		}
 		fmt.Fprintf(os.Stderr, "注意: %s は git リポジトリではないので .gitignore は見ません\n", moduleRoot)
 		return ignored, nil
 	}

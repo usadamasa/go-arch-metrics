@@ -274,6 +274,22 @@ func Test_gitIgnoredDirs(t *testing.T) {
 		}
 	})
 
+	t.Run("git が PATH に無ければエラー (リポジトリでないのとは区別する)", func(t *testing.T) {
+		root := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(root, "a"), 0755); err != nil {
+			t.Fatalf("mkdir 失敗: %v", err)
+		}
+		t.Setenv("PATH", t.TempDir())
+
+		_, err := gitIgnoredDirs(root, []string{filepath.Join(root, "a")})
+		if err == nil {
+			t.Fatal("git が無ければエラーを返すべき")
+		}
+		if !strings.Contains(err.Error(), "git が PATH に見つかりません") {
+			t.Errorf("エラー文: %v", err)
+		}
+	})
+
 	t.Run("git リポジトリでなければ空", func(t *testing.T) {
 		root := t.TempDir()
 		if err := os.MkdirAll(filepath.Join(root, "tmp", "x"), 0755); err != nil {
