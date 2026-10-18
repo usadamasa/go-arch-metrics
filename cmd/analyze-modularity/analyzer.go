@@ -20,6 +20,9 @@ type MainSequenceData struct {
 	Instability             float64 `json:"instability"`
 	AfferentCoupling        int     `json:"afferent_coupling"`
 	EfferentCoupling        int     `json:"efferent_coupling"`
+	// RecentCommitCount は揮発性の窓の中でこのパッケージを触った commit 数｡測れなければ出さない
+	RecentCommitCount *int       `json:"recent_commit_count,omitempty"`
+	Volatility        Volatility `json:"volatility"`
 }
 
 // PackageResult はパッケージごとの解析結果を保持する｡
@@ -271,6 +274,9 @@ func GenerateMainSequenceWarnings(pkg PackageResult) []Warning {
 	switch ms.Zone {
 	case ZoneOfPain:
 		message := fmt.Sprintf("Zone of Pain: 具象的 (A=%.2f) で安定 (I=%.2f)", ms.Abstractness, ms.Instability)
+		if !ms.StructurallyConstrained && !actionable && ms.RecentCommitCount != nil {
+			message += fmt.Sprintf(" (非揮発: 直近の窓で %d commit)", *ms.RecentCommitCount)
+		}
 		if !actionable {
 			message += nonActionableSuffix
 		}
@@ -323,10 +329,15 @@ func GenerateMainSequenceWarnings(pkg PackageResult) []Warning {
 const nonActionableSuffix = " (情報のみ。--strict の失敗には数えない)"
 
 // isMainSequenceActionable は Zone と Distance の警告を、コードを直して消せるものとして扱うかを返す｡
-// 構造制約 (Ce=0, Ca>0) の I=0 はトポロジーで決まり、A を上げる以外に動かす手が無いので除く｡
-// summary.main_sequence.actionable_* の集計と同じ基準｡
+// summary.main_sequence.actionable_* の集計と同じ基準｡次の 2 つを除く:
+//   - 構造制約 (Ce=0, Ca>0): I=0 はトポロジーで決まり、A を上げる以外に動かす手が無い
+//   - 非揮発の Zone of Pain: Martin (Agile PPP ch.28) は、変更されない具象安定パッケージは
+//     Zone of Pain でも harmless だとする｡未測定は揮発として扱い、gate を緩めない
 func isMainSequenceActionable(ms *MainSequenceData) bool {
-	return !ms.StructurallyConstrained
+	if ms.StructurallyConstrained {
+		return false
+	}
+	return ms.Zone != ZoneOfPain || ms.Volatility != VolatilityNonVolatile
 }
 
 // GenerateCrossWarnings は AST 警告と Ca/Ce を照合して複合警告を生成する｡

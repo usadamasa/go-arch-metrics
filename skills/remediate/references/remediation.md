@@ -366,6 +366,7 @@ baseline.sh の出力 JSON で各パッケージの `zone` と `structurally_con
 D > 0.5 のパッケージ
   ├─ zone == "excluded" → 対処不要 (main/孤立パッケージ)
   ├─ structurally_constrained == true → 長期的評価へ (下記参照)
+  ├─ zone == "zone_of_pain" かつ volatility == "non_volatile" → 対処不要 (変更されない具象安定パッケージ)
   └─ それ以外 → アクション可能: Zone 別対処へ
 ```
 
@@ -373,11 +374,24 @@ D > 0.5 のパッケージ
 
 | パターン | Zone | 構造制約 | 解釈 | 対処 |
 |---------|------|---------|------|------|
-| アクション要 | zone_of_pain | false | 具象的で安定だが Ce>0。依存を持つのに抽象度が低い | インタフェースを導入して A を上げる |
+| アクション要 | zone_of_pain (揮発) | false | 具象的で安定 (Ca が大きい) なのに頻繁に変わる。変更のたびに依存元へ波及する | 関心ごとでパッケージを分割し、それぞれの Ca を下げる (下記) |
+| 非揮発 | zone_of_pain (非揮発) | false | 具象的で安定だが、ほとんど変わらない | 対処不要 (Martin: harmless) |
 | 構造制約 | zone_of_pain | true | Ce=0 の葉パッケージ。D=1.0 は構造的必然 | 通常は harmless。長期的評価基準で判断 |
 | アクション要 | zone_of_uselessness | false | 抽象的で不安定。使われていない抽象が多い | 不要な抽象を削除するか、具象実装を追加 |
 | 正常 | main_sequence | - | A + I ≈ 1 でバランス良好 | 対処不要 |
 | 除外 | excluded | - | main パッケージまたは孤立パッケージ | D 集計対象外。対処不要 |
+
+#### Zone of Pain (揮発) の直し方: Ca を下げる
+
+数字合わせで A を上げない。実装が 1 つしかない producer 側に interface を足すと A は上がるが、
+変更の波及は減らず、読む場所が増えるだけになる。Go では interface は使う側 (consumer) が、
+自分の必要なメソッドだけで切る。
+
+1. 依存元 (Ca に数えられているパッケージ) がそれぞれ何を使っているかを `go list` や grep で洗い出す
+2. 使われ方が分かれていれば、関心ごとごとにパッケージを分ける。変わる部分と変わらない部分を分けると、
+   変わる側の Ca が下がる
+3. ある依存元が実装の差し替え (テストの fake など) を必要としているときだけ、その依存元の側に
+   interface を置く
 
 #### 3. 構造制約パッケージの長期的評価基準
 
@@ -385,9 +399,11 @@ D > 0.5 のパッケージ
 
 | 評価軸 | 要注意サイン | 対処 |
 |--------|------------|------|
-| 変更頻度 (churn) | `git log --oneline <pkg-dir> \| wc -l` が高い | 揮発性が高いなら Zone of Pain のリスクあり。インタフェース抽出を検討 |
-| 依存数 (Ca) | Ca が非常に大きい (例: >5) | 多くのパッケージから依存されている安定コア。変更時の影響が大きいため、インタフェース layer の追加を検討 |
+| 変更頻度 (churn) | `main_sequence.volatility` が `volatile` (直近の窓で `recent_commit_count` がしきい値以上) | 変わる部分と変わらない部分を分割し、変わる側の Ca を下げる |
+| 依存数 (Ca) | Ca が非常に大きい (例: >5) | 多くのパッケージから依存されている安定コア。依存元ごとの使われ方を見て、関心ごとで分割する |
 | 責務の範囲 | LOC が外れ値、または public ratio が高い | パッケージ分割を検討 |
+
+窓としきい値は `go-arch-metrics:evaluate` の `references/thresholds.md` の「非揮発」。
 
 Zone の定義と構造的制約の根拠は `go-arch-metrics:evaluate` の
 `references/thresholds.md`。

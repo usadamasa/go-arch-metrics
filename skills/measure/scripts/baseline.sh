@@ -157,6 +157,10 @@ printf '%s' "$MOD_JSON" | jq -r '
     "Main Sequence:",
     "  アクション可能 Distance > 0.5: \(.summary.main_sequence.actionable_count) 件",
     "  構造制約パッケージ数: \(.summary.main_sequence.structurally_constrained_count)",
+    "  非揮発パッケージ数 (直近 \(.summary.main_sequence.volatility_window_commits) commit で \(.summary.main_sequence.volatile_commit_threshold) 回未満): \(.summary.main_sequence.non_volatile_count)",
+    if .summary.main_sequence.volatility_unmeasured_reason
+    then "  揮発性は未測定: \(.summary.main_sequence.volatility_unmeasured_reason)"
+    else empty end,
     "  最大 Distance (アクション可能): \(.summary.main_sequence.actionable_max_distance // "N/A")",
     "  平均 Distance (アクション可能): \(.summary.main_sequence.actionable_mean_distance // "N/A")"
 '

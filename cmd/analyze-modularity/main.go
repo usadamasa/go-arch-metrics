@@ -16,12 +16,17 @@ type Report struct {
 }
 
 // MainSequenceSummary は Ca/Ce/A/I/D の全パッケージ集計｡
+// actionable_* は構造制約と非揮発の Zone of Pain を除いて数える (isMainSequenceActionable と同じ基準)｡
 type MainSequenceSummary struct {
 	ExcludedPackages             []string `json:"excluded_packages"`
 	StructurallyConstrainedCount int      `json:"structurally_constrained_count"`
+	NonVolatileCount             int      `json:"non_volatile_count"`
 	ActionableCount              int      `json:"actionable_count"`
 	ActionableMaxDistance        *float64 `json:"actionable_max_distance,omitempty"`
 	ActionableMeanDistance       *float64 `json:"actionable_mean_distance,omitempty"`
+	VolatilityWindowCommits      int      `json:"volatility_window_commits"`
+	VolatileCommitThreshold      int      `json:"volatile_commit_threshold"`
+	VolatilityUnmeasuredReason   string   `json:"volatility_unmeasured_reason,omitempty"`
 }
 
 // Summary は全パッケージのサマリ統計｡
@@ -63,6 +68,8 @@ func main() {
 	sigma := flag.Float64("sigma", 2.0, "LOC 外れ値検出の σ 倍数")
 	minSymbols := flag.Int("min-symbols", defaultMinSymbols, "public ratio チェックの最小シンボル数")
 	strict := flag.Bool("strict", false, "actionable な警告 (コードを直して消せるもの) がある場合に exit code 1 を返す")
+	volatilityWindow := flag.Int("volatility-window", defaultVolatilityWindow, "揮発性を数える直近の commit 数 (merge を除く)")
+	volatileCommits := flag.Int("volatile-commits", defaultVolatileCommits, "窓の中でこの数以上の commit に触られたパッケージを揮発とみなす")
 	flag.Parse()
 
 	args := flag.Args()
@@ -78,7 +85,17 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := enrichMainSequence(tracked, packages); err != nil {
+	history, err := recentCommitCounts(inferModuleRoot(args), *volatilityWindow)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "エラー: %v\n", err)
+		os.Exit(1)
+	}
+	if history.unmeasuredReason != "" {
+		fmt.Fprintf(os.Stderr, "注意: %s ので揮発性を測りません｡Zone of Pain はすべて揮発として扱います"+
+			" (CI では actions/checkout に fetch-depth: 0 を付ける)\n", history.unmeasuredReason)
+	}
+
+	if err := enrichMainSequence(tracked, packages, history, *volatileCommits); err != nil {
 		fmt.Fprintf(os.Stderr, "エラー: %v\n", err)
 		os.Exit(1)
 	}
@@ -113,6 +130,11 @@ func main() {
 		}
 	}
 
+	mainSequenceSummary := buildMainSequenceSummary(packages)
+	mainSequenceSummary.VolatilityWindowCommits = *volatilityWindow
+	mainSequenceSummary.VolatileCommitThreshold = *volatileCommits
+	mainSequenceSummary.VolatilityUnmeasuredReason = history.unmeasuredReason
+
 	summary := Summary{
 		MeanLOC:            locStats.Mean,
 		StddevLOC:          locStats.Stddev,
@@ -121,7 +143,7 @@ func main() {
 		TotalPackages:      len(packages),
 		TotalWarnings:      len(allWarnings),
 		ActionableWarnings: actionableWarnings,
-		MainSequence:       buildMainSequenceSummary(packages),
+		MainSequence:       mainSequenceSummary,
 	}
 
 	report := Report{
@@ -176,8 +198,8 @@ func collectPackages(args []string) ([]listedPackage, []PackageResult, error) {
 }
 
 // enrichMainSequence は listed の import 辺から Ca/Ce を数え、AST の型カウントから A を出して
-// 各パッケージの MainSequence を埋める｡
-func enrichMainSequence(listed []listedPackage, packages []PackageResult) error {
+// 各パッケージの MainSequence を埋める｡揮発性は history を volatileCommits で切って決める｡
+func enrichMainSequence(listed []listedPackage, packages []PackageResult, history commitHistory, volatileCommits int) error {
 	// go list の Dir は絶対パスで、報告側の Path は引数のまま (相対もある)。symlink の解決度も
 	// 違いうるので、両方を実体の絶対パスにそろえてから突き合わせる
 	byDir := make(map[string]PackageMetrics, len(listed))
@@ -201,6 +223,7 @@ func enrichMainSequence(listed []listedPackage, packages []PackageResult) error 
 		m.Abstractness = packages[i].Abstractness()
 		m.Instability = instability(m.AfferentCoupling, m.EfferentCoupling)
 		m.Distance = distance(m.Abstractness, m.Instability)
+		volatility, recentCommits := history.volatilityOf(dir, volatileCommits)
 		packages[i].MainSequence = &MainSequenceData{
 			Zone:                    classifyZone(m),
 			Distance:                m.Distance,
@@ -209,6 +232,8 @@ func enrichMainSequence(listed []listedPackage, packages []PackageResult) error 
 			Instability:             m.Instability,
 			AfferentCoupling:        m.AfferentCoupling,
 			EfferentCoupling:        m.EfferentCoupling,
+			RecentCommitCount:       recentCommits,
+			Volatility:              volatility,
 		}
 	}
 	return nil
@@ -230,6 +255,10 @@ func buildMainSequenceSummary(packages []PackageResult) *MainSequenceSummary {
 		}
 		if p.MainSequence.StructurallyConstrained {
 			summary.StructurallyConstrainedCount++
+			continue
+		}
+		if !isMainSequenceActionable(p.MainSequence) {
+			summary.NonVolatileCount++
 			continue
 		}
 		if p.MainSequence.Distance > mainSequenceDistanceThreshold {

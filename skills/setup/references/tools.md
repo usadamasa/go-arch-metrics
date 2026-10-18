@@ -145,7 +145,13 @@ analyze-modularity . | jq '.warnings'
 
 # CI ゲート (actionable な警告があれば exit 1)
 analyze-modularity --strict .
+
+# 揮発性の窓としきい値 (既定は直近 200 commit で 5 回以上触られたら揮発)
+analyze-modularity --volatility-window 200 --volatile-commits 5 .
 ```
+
+揮発性は git の履歴から測る。shallow clone では測らず、Zone of Pain をすべて揮発として扱う
+(stderr に 1 行出る)。窓としきい値の根拠は `go-arch-metrics:evaluate`。
 
 ---
 

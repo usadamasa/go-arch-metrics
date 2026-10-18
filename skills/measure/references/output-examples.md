@@ -63,7 +63,8 @@ Summary:
       "main_sequence": {
         "zone": "zone_of_pain", "distance": 0.53, "structurally_constrained": false,
         "abstractness": 0.14, "instability": 0.33,
-        "afferent_coupling": 2, "efferent_coupling": 1
+        "afferent_coupling": 2, "efferent_coupling": 1,
+        "recent_commit_count": 12, "volatility": "volatile"
       }
     }
   ],
@@ -75,8 +76,10 @@ Summary:
     "main_sequence": {
       "excluded_packages": ["cmd/app"],
       "structurally_constrained_count": 3,
+      "non_volatile_count": 2,
       "actionable_count": 1,
-      "actionable_max_distance": 0.53, "actionable_mean_distance": 0.53
+      "actionable_max_distance": 0.53, "actionable_mean_distance": 0.53,
+      "volatility_window_commits": 200, "volatile_commit_threshold": 5
     }
   },
   "warnings": [
@@ -104,7 +107,12 @@ Summary:
 
 `structurally_constrained: true` (Ce=0 の葉パッケージ) の D=1.0 は構造的制約で、設計上の問題とは限らない。
 このパッケージに付く `zone_of_pain` と `structurally_constrained` の警告は `actionable: false` で、
-`summary.actionable_warnings` と `--strict` の判定に入らない。判定は `go-arch-metrics:evaluate` の
+`summary.actionable_warnings` と `--strict` の判定に入らない。
+
+`volatility` は直近の窓 (`volatility_window_commits`) でパッケージを触った commit 数 (`recent_commit_count`) から決まる
+(`volatile` / `non_volatile` / `unmeasured`)。非揮発の Zone of Pain の `zone_of_pain` も `actionable: false` で、
+`high_distance` は出ない。shallow clone などで測れなければ `volatility` は `unmeasured`、`recent_commit_count` は出ず、
+`summary.main_sequence.volatility_unmeasured_reason` に理由が入る。判定は `go-arch-metrics:evaluate` の
 `references/thresholds.md`。
 
 ## analyze-arch-lint

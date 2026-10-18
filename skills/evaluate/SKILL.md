@@ -43,13 +43,15 @@ D = |A + I - 1| > 0.5 のパッケージは、そのまま違反として数え�
 D > 0.5 のパッケージ
   ├─ zone == "excluded" → 対処不要 (main / 孤立パッケージ)
   ├─ structurally_constrained == true → 長期的評価へ (remediate skill)
+  ├─ zone == "zone_of_pain" かつ volatility == "non_volatile" → 対処不要 (変更されない具象安定パッケージ)
   └─ それ以外 → アクション可能: Zone 別対処へ (remediate skill)
 ```
 
 `analyze-modularity` の警告もこの分け方にそろえてある。直す対象は `actionable: true` の警告で、
 `analyze-modularity --strict` は `summary.actionable_warnings` が 1 以上のときだけ exit 1 にする。
-構造制約のパッケージに付く `zone_of_pain` と `structurally_constrained` は `actionable: false` で、
-JSON には残るが失敗には数えない。
+構造制約のパッケージに付く `zone_of_pain` と `structurally_constrained`、非揮発の Zone of Pain に付く
+`zone_of_pain` は `actionable: false` で、JSON には残るが失敗には数えない。
+揮発性の測り方 (窓・しきい値・測れないときの扱い) は `references/thresholds.md` の「非揮発」。
 
 Zone の定義と構造的制約の根拠は `references/thresholds.md`。
 
