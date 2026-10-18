@@ -41,7 +41,7 @@ printf '%s\n' "測定日時: $(date '+%Y-%m-%d %H:%M:%S')"
 printf '%s\n' ""
 
 # 前提ツールが PATH にあるか確かめる。入れ方は利用者に任せるので案内しない
-for tool in go jq golangci-lint go-arch-lint gosec govulncheck analyze-modularity analyze-arch-lint; do
+for tool in go jq golangci-lint go-arch-lint gosec vulncheck analyze-modularity analyze-arch-lint; do
     if ! command -v "$tool" &>/dev/null; then
         printf '%s\n' "エラー: $tool が PATH に見つかりません" >&2
         exit 1
@@ -105,13 +105,12 @@ else
 fi
 printf '%s\n' ""
 
-# govulncheck の実行
+# govulncheck の実行 (vulncheck はこの plugin が govulncheck を組み込んだ CLI)
 printf '%s\n' "--- govulncheck (脆弱性スキャン) ---"
-# exit 0 は脆弱性なし、3 は脆弱性あり、それ以外は実行できていない (脆弱性 DB を取れなかった等)。
-# Claude Code の sandbox の中では vuln.go.dev への TLS 検証が通らず、脆弱性の有無と無関係に落ちる。
+# exit 0 は脆弱性なし、3 は脆弱性あり、それ以外は実行できていない (脆弱性 DB に届かなかった等)。
 # 未測定を「なし」に見せないよう、3 つを分けて出力と JSON に残す。
 VULN_RC=0
-VULN_OUT=$(govulncheck ./... 2>&1) || VULN_RC=$?
+VULN_OUT=$(vulncheck ./... 2>&1) || VULN_RC=$?
 case "$VULN_RC" in
     0)
         VULN_STATUS=ok
@@ -124,8 +123,7 @@ case "$VULN_RC" in
         ;;
     *)
         VULN_STATUS=unmeasured
-        printf '%s\n' "govulncheck: 未測定 (exit ${VULN_RC})。実行に失敗しているので脆弱性の有無は分からない" >&2
-        printf '%s\n' "  sandbox の中で回しているなら、単独で govulncheck ./... を打ち直すこと。理由:" >&2
+        printf '%s\n' "govulncheck: 未測定 (exit ${VULN_RC})。実行に失敗しているので脆弱性の有無は分からない。理由:" >&2
         printf '%s\n' "$VULN_OUT" | tail -5 >&2
         ;;
 esac

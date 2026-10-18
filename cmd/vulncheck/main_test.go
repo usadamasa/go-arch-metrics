@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -36,10 +37,28 @@ func fixtureDB(t *testing.T) string {
 	return "file://" + abs
 }
 
-// run は go run . に引数を渡し、exit code と stdout+stderr を返す｡
+// binary は TestMain がビルドした vulncheck のパス｡go run は子の exit code を 1 に潰すので、直接叩く｡
+var binary string
+
+func TestMain(m *testing.M) {
+	dir, err := os.MkdirTemp("", "vulncheck-test")
+	if err != nil {
+		panic(err)
+	}
+	binary = filepath.Join(dir, "vulncheck")
+	build := exec.Command("go", "build", "-o", binary, ".")
+	if out, err := build.CombinedOutput(); err != nil {
+		panic(fmt.Sprintf("go build 失敗: %v\n%s", err, out))
+	}
+	code := m.Run()
+	_ = os.RemoveAll(dir)
+	os.Exit(code)
+}
+
+// run はビルド済みの vulncheck に引数を渡し、exit code と stdout+stderr を返す｡
 func run(t *testing.T, args ...string) (int, string) {
 	t.Helper()
-	cmd := exec.Command("go", append([]string{"run", "."}, args...)...)
+	cmd := exec.Command(binary, args...)
 	out, err := cmd.CombinedOutput()
 	if err == nil {
 		return 0, string(out)

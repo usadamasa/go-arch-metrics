@@ -3,7 +3,7 @@ version: 3
 workdir: .
 
 # この設定自体の健全性は `go run ./cmd/analyze-arch-lint --metrics` と `--strict .` で見る｡
-# cmd/ 配下の 2 つの main パッケージだけの構成なので component は役割 1 つで足りる｡
+# cmd/ 配下の 3 つの main パッケージだけの構成なので component は役割 1 つで足りる｡
 # internal パッケージを足したら cmd_internal / shared_internal を切ること
 # (skills/remediate/references/arch-lint-remediation.md)｡
 components:
@@ -13,8 +13,15 @@ components:
 vendors:
   yaml:
     in: gopkg.in/yaml.v3
+  # cmd/vulncheck が govulncheck を組み込むための 2 つ
+  vuln:
+    in: golang.org/x/vuln/scan
+  x509roots:
+    in: golang.org/x/crypto/x509roots/fallback
 
 deps:
   cmd_main:
     canUse:
       - yaml
+      - vuln
+      - x509roots

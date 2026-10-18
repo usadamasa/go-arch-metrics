@@ -16,7 +16,7 @@
     {
       devShells = forAllSystems (pkgs: {
         default = pkgs.mkShellNoCC {
-          # analyze-* はこのリポジトリ自身のソースを Taskfile が go run するので含めない
+          # analyze-* と vulncheck はこのリポジトリ自身のソースを Taskfile が go run するので含めない
           packages = with pkgs; [
             # go.mod の go 行と同じ版。ずれたら GOTOOLCHAIN=local で即座に失敗させる
             go_1_26
@@ -24,7 +24,6 @@
             golangci-lint
             go-arch-lint
             gosec
-            govulncheck
             bats
             shellcheck
           ];
