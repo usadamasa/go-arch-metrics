@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -424,6 +425,24 @@ func TestGenerateWarnings(t *testing.T) {
 			t.Error("LOC 外れ値の警告が生成されていない (1500 > max(100 + 2*50, minLOCLimit) = 1000)")
 		}
 	})
+
+	t.Run("AST 系の警告は actionable=true", func(t *testing.T) {
+		pkg := PackageResult{
+			Path:          "pkg/big-api",
+			LOC:           1500,
+			ExportedFuncs: 10,
+		}
+
+		warnings := GenerateWarnings(pkg, 0.6, 2.0, Stats{Mean: 100, Stddev: 50}, defaultMinSymbols)
+		if len(warnings) != 2 {
+			t.Fatalf("警告数: got %d, want 2 (high_public_ratio, loc_outlier)", len(warnings))
+		}
+		for _, w := range warnings {
+			if !w.Actionable {
+				t.Errorf("%s: actionable=false, want true", w.Type)
+			}
+		}
+	})
 }
 
 func TestGenerateMainSequenceWarnings(t *testing.T) {
@@ -513,6 +532,48 @@ func TestGenerateMainSequenceWarnings(t *testing.T) {
 		}
 	})
 
+	t.Run("構造制約の zone_of_pain と structurally_constrained は actionable=false", func(t *testing.T) {
+		pkg := PackageResult{
+			Path: "pkg/leaf",
+			MainSequence: &MainSequenceData{
+				Zone:                    ZoneOfPain,
+				Distance:                1.0,
+				StructurallyConstrained: true,
+				AfferentCoupling:        5,
+			},
+		}
+		warnings := GenerateMainSequenceWarnings(pkg)
+		if len(warnings) != 2 {
+			t.Fatalf("警告数: got %d, want 2 (zone_of_pain, structurally_constrained)", len(warnings))
+		}
+		for _, w := range warnings {
+			if w.Actionable {
+				t.Errorf("%s: actionable=true, want false (トポロジー由来で直す手が無い)", w.Type)
+			}
+			if !strings.Contains(w.Message, "--strict") {
+				t.Errorf("%s: Message に --strict で数えない旨が無い: %q", w.Type, w.Message)
+			}
+		}
+	})
+
+	t.Run("直せる Main Sequence の警告は actionable=true", func(t *testing.T) {
+		pkgs := []PackageResult{
+			{Path: "pkg/pain", MainSequence: &MainSequenceData{Zone: ZoneOfPain, Distance: 0.8, Abstractness: 0.1, Instability: 0.1}},
+			{Path: "pkg/useless", MainSequence: &MainSequenceData{Zone: ZoneOfUselessness, Distance: 0.6, Abstractness: 0.8, Instability: 0.8}},
+		}
+		for _, pkg := range pkgs {
+			warnings := GenerateMainSequenceWarnings(pkg)
+			if len(warnings) == 0 {
+				t.Fatalf("%s: 警告が生成されていない", pkg.Path)
+			}
+			for _, w := range warnings {
+				if !w.Actionable {
+					t.Errorf("%s %s: actionable=false, want true", pkg.Path, w.Type)
+				}
+			}
+		}
+	})
+
 	t.Run("high_distance (非構造制約, D > 0.5) → 警告", func(t *testing.T) {
 		pkg := PackageResult{
 			Path: "pkg/far",
@@ -569,6 +630,10 @@ func TestGenerateCrossWarnings(t *testing.T) {
 		}
 		if warnings[0].Type != "constrained_loc_outlier" {
 			t.Errorf("Type: got %q, want %q", warnings[0].Type, "constrained_loc_outlier")
+		}
+		// 肥大化した葉は分割で直せる
+		if !warnings[0].Actionable {
+			t.Error("constrained_loc_outlier: actionable=false, want true")
 		}
 	})
 

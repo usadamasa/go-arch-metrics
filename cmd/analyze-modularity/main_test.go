@@ -280,4 +280,41 @@ func TestStrictFlag(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("--strict あり、構造制約の警告だけ → exit code 0", func(t *testing.T) {
+		// a → c の 2 パッケージ。c は Ce=0, Ca=1, A=0 の葉で zone_of_pain と structurally_constrained を出す。
+		// a は I=1, A=0 で D=0 なので警告を出さない
+		dir := t.TempDir()
+		files := map[string]string{
+			"go.mod": "module strictleaf\n",
+			"a/a.go": "package a\n\nimport \"strictleaf/c\"\n\nfunc A() int { return c.C() }\n",
+			"c/c.go": "package c\n\nfunc C() int { return 1 }\n",
+		}
+		for name, content := range files {
+			path := filepath.Join(dir, name)
+			if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+				t.Fatalf("ディレクトリ作成失敗: %v", err)
+			}
+			if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+				t.Fatalf("ファイル作成失敗: %v", err)
+			}
+		}
+
+		cmd := exec.Command("go", "run", ".", "--strict", dir)
+		out, err := cmd.Output()
+		if err != nil {
+			t.Fatalf("構造制約の警告だけなら --strict でも exit 0 のはず: %v\n%s", err, out)
+		}
+
+		var report Report
+		if err := json.Unmarshal(out, &report); err != nil {
+			t.Fatalf("JSON パース失敗: %v", err)
+		}
+		if report.Summary.TotalWarnings != 2 {
+			t.Errorf("total_warnings = %d, want 2 (警告は JSON に残す)", report.Summary.TotalWarnings)
+		}
+		if report.Summary.ActionableWarnings != 0 {
+			t.Errorf("actionable_warnings = %d, want 0", report.Summary.ActionableWarnings)
+		}
+	})
 }
