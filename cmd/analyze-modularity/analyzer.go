@@ -299,7 +299,8 @@ func GenerateMainSequenceWarnings(pkg PackageResult) []Warning {
 			Type:    WarningTypeStructurallyConstrained,
 			Package: pkg.Path,
 			Value:   ms.Distance,
-			Message: fmt.Sprintf("構造制約: Ce=0, Ca=%d のため D=%.2f はトポロジー由来", ms.AfferentCoupling, ms.Distance) + nonActionableSuffix,
+			Message:    fmt.Sprintf("構造制約: Ce=0, Ca=%d のため D=%.2f はトポロジー由来", ms.AfferentCoupling, ms.Distance) + nonActionableSuffix,
+			Actionable: false,
 		})
 	}
 
