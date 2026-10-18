@@ -96,45 +96,12 @@ gosec ./...
 
 ---
 
-## spm-go
-
-### 概要
-
-Robert C. Martin の Package Metrics (Ca/Ce/A/I/D) を Go パッケージに適用するツール。
-パッケージの安定性・抽象度・Main Sequence からの距離を定量評価する。
-
-| メトリクス | 説明 |
-|-----------|------|
-| Afferent Coupling (Ca) | このパッケージに依存するパッケージ数 |
-| Efferent Coupling (Ce) | このパッケージが依存するパッケージ数 |
-| Abstractness (A) | 抽象型 / (抽象型 + 具象型) |
-| Instability (I) | Ce / (Ca + Ce) |
-| Distance (D) | \|A + I - 1\| (Main Sequence からの距離) |
-
-Zone 分類と構造的制約の扱いは `go-arch-metrics:evaluate`。
-
-### 実行
-
-```bash
-# 全メトリクスを表示
-spm-go all
-
-# 個別サブコマンド
-spm-go instability
-spm-go abstractness
-spm-go distance
-spm-go packages
-spm-go dependencies
-```
-
----
-
 ## analyze-modularity
 
 ### 概要
 
-`go/ast` ベースでパッケージの API surface area を測定するカスタム CLI。
-spm-go がカバーしない exported/unexported 比率とパッケージサイズ分布を算出する。
+パッケージの API surface area と、Robert C. Martin の Package Metrics (Ca/Ce/A/I/D) を測るカスタム CLI。
+前者は `go/ast` で宣言を数え、後者は `go list -json ./...` の import 辺から出す。
 
 | メトリクス | 説明 |
 |-----------|------|
@@ -142,6 +109,14 @@ spm-go がカバーしない exported/unexported 比率とパッケージサイ�
 | LOC 外れ値 | パッケージ LOC > mean + 2σ |
 | Exported funcs/methods | 公開関数・メソッド数 |
 | Exported types | 公開型 (struct/interface) 数 |
+| Afferent Coupling (Ca) | このパッケージに依存するモジュール内パッケージ数 |
+| Efferent Coupling (Ce) | このパッケージが依存するモジュール内パッケージ数 (標準ライブラリ・外部モジュール・テストファイルの import は数えない) |
+| Abstractness (A) | interface 型宣言 / 全型宣言 |
+| Instability (I) | Ce / (Ca + Ce)。孤立パッケージ (Ca = Ce = 0) は 1 |
+| Distance (D) | \|A + I - 1\| (Main Sequence からの距離) |
+
+Zone 分類と構造的制約の扱いは `go-arch-metrics:evaluate`。
+Ca/Ce は `go list` に頼るので、対象は `go.mod` のあるモジュールで、`go list ./...` が通ること。
 
 ### 実行
 

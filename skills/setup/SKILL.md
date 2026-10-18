@@ -21,7 +21,7 @@ description: >-
 | モジュール性 | パッケージ依存方向 | go-arch-lint |
 | モジュール性 | 依存ルール設定自体の健全性 | analyze-arch-lint |
 | モジュール性 | import 禁止リスト | golangci-lint/depguard |
-| モジュール性 | Afferent/Efferent Coupling・抽象度・不安定度・距離 | spm-go |
+| モジュール性 | Afferent/Efferent Coupling・抽象度・不安定度・距離 | analyze-modularity |
 | モジュール性 | Public/Private 関数比率・パッケージサイズ均一性 | analyze-modularity |
 | テスト可能性 | 認知的複雑度・循環複雑度・関数長・ネスト深さ | golangci-lint (gocognit, gocyclo, cyclop, funlen, nestif) |
 | 保守性 | 保守性指数 | golangci-lint (maintidx) |
@@ -34,6 +34,17 @@ description: >-
 ## Step 1: 必要なコマンド
 
 上の表のツールと `jq` が PATH にあること。入れ方はプロジェクトに任せる。
+
+### 以前の版で入れた spm-go を外す
+
+以前の版は Afferent/Efferent Coupling・抽象度・不安定度・距離を fdaines/spm-go で測っていた。
+今は `analyze-modularity` が `go list` から算出するので spm-go は要らない。
+以前の手順で導入したプロジェクトでは、次の 2 箇所から spm-go を消す:
+
+- ツール一覧 (aqua.yaml、flake.nix、`go install` の手順など)
+- CI のコマンド (`spm-go all`)
+
+残っていてもエラーにはならないが、使われないツールが残り続ける。
 
 ## Step 2: 設定ファイルを配置する
 

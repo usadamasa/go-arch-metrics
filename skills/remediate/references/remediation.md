@@ -354,7 +354,7 @@ func NewConfig(host string, port int) *Config {
 2. **ファイル分割**: 同一パッケージ内でも機能ごとにファイルを分ける
 3. **共通ロジックの抽出**: `internal/` パッケージに共通部分を移動
 
-### Distance from Main Sequence が高い場合 (spm-go)
+### Distance from Main Sequence が高い場合 (analyze-modularity)
 
 **問題**: D = |A + I - 1| > 0.5 はパッケージが Main Sequence から遠い
 

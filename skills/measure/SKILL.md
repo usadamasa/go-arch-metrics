@@ -18,8 +18,8 @@ Go プロジェクトの現状のメトリクスを取る。数値の解釈と�
 > baseline.sh のエラー出力にある足りないコマンド名をユーザーに伝え、
 > 用意できてから再実行すること。
 >
-> 禁止: wc -l で LOC 判定、spm-go なしで Distance 推定、
-> analyze-modularity なしで public ratio 集計、ツールエラーの無視
+> 禁止: wc -l で LOC 判定、analyze-modularity なしで Distance や public ratio の推定、
+> ツールエラーの無視
 
 必要なコマンドの一覧は `go-arch-metrics:setup`。
 
@@ -56,8 +56,8 @@ JSON は `go-arch-metrics:evaluate` がそのまま読む。測定日時が入�
 | セキュリティ | 既知の脆弱性 | govulncheck | 違反 = 0 |
 | セキュリティ | セキュリティ問題 | gosec | 違反 = 0 (CI ゲート) |
 | テスト品質 | テストカバレッジ | go test -cover | ≥ 60% (段階的に引き上げ) |
-| モジュール性 | Afferent/Efferent Coupling | spm-go | 参考値 (しきい値なし) |
-| モジュール性 | 抽象度・不安定度・距離 | spm-go | アクション可能 Distance ≤ 0.5 |
+| モジュール性 | Afferent/Efferent Coupling | analyze-modularity | 参考値 (しきい値なし) |
+| モジュール性 | 抽象度・不安定度・距離 | analyze-modularity | アクション可能 Distance ≤ 0.5 |
 | モジュール性 | Public/Private 関数比率 | analyze-modularity | public ratio ≤ 0.6 |
 | モジュール性 | パッケージサイズ均一性 | analyze-modularity | LOC ≤ mean + 2σ |
 

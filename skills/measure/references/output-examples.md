@@ -42,20 +42,6 @@ Summary:
   Issues: 0
 ```
 
-## spm-go
-
-```
-+----+-----------+-------+----------+----------+--------------+-----------------+-------------+--------------+----------+
-|  # | PACKAGE   | FILES | AFFERENT | EFFERENT | ABSTRACTIONS | IMPLEMENTATIONS | INSTABILITY | ABSTRACTNESS | DISTANCE |
-+----+-----------+-------+----------+----------+--------------+-----------------+-------------+--------------+----------+
-|  1 | main      |     5 |        0 |        4 |           18 |              20 |           1 |         0.47 |     0.47 |
-|  2 | pathutil  |     1 |        1 |        0 |            0 |               3 |           0 |            0 |        1 |
-+----+-----------+-------+----------+----------+--------------+-----------------+-------------+--------------+----------+
-```
-
-`pathutil` の D=1.0 は Ce=0 の葉パッケージによる構造的制約で、設計上の問題とは限らない。
-判定は `go-arch-metrics:evaluate` の `references/thresholds.md`。
-
 ## analyze-modularity (JSON)
 
 ```json
@@ -64,19 +50,33 @@ Summary:
     {
       "path": "analyze-permissions",
       "exported_funcs": 9, "unexported_funcs": 11,
-      "exported_types": 11, "unexported_types": 3,
-      "public_ratio": 0.59, "loc": 974, "files": 5
+      "exported_types": 11, "unexported_types": 3, "interface_types": 2,
+      "public_ratio": 0.59, "loc": 974, "files": 5,
+      "main_sequence": {
+        "zone": "zone_of_pain", "distance": 0.53, "structurally_constrained": false,
+        "abstractness": 0.14, "instability": 0.33,
+        "afferent_coupling": 2, "efferent_coupling": 1
+      }
     }
   ],
   "summary": {
     "mean_loc": 308, "stddev_loc": 287,
     "mean_public_ratio": 0.62,
     "outlier_packages": ["analyze-permissions"],
-    "total_packages": 11, "total_warnings": 7
+    "total_packages": 11, "total_warnings": 7,
+    "main_sequence": {
+      "excluded_packages": ["cmd/app"],
+      "structurally_constrained_count": 3,
+      "actionable_count": 1,
+      "actionable_max_distance": 0.53, "actionable_mean_distance": 0.53
+    }
   },
   "warnings": []
 }
 ```
+
+`structurally_constrained: true` (Ce=0 の葉パッケージ) の D=1.0 は構造的制約で、設計上の問題とは限らない。
+判定は `go-arch-metrics:evaluate` の `references/thresholds.md`。
 
 ## analyze-arch-lint
 
