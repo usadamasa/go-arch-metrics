@@ -21,7 +21,7 @@
           # cmd/vulncheck の HTTP クライアントから届くため vulncheck が exit 3 を返す。nixpkgs master には
           # 1.26.9 が入っている (NixOS/nixpkgs#571801) が channel に降りるまで、go だけソースを差し替える。
           # 他の Go 製ツールは nixpkgs の go でビルドされたキャッシュのまま。channel が追いついたら
-          # この override を消して nix flake update に戻す
+          # この override を消してから nix flake update を打つ (#33)。nix flake update だけでは消えない
           go = pkgs.go_1_26.overrideAttrs (old: rec {
             version = "1.26.9";
             src = pkgs.fetchurl {
