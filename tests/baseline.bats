@@ -18,7 +18,8 @@ setup() {
     PATH="${STUB_BIN}:${PATH}"
     # go-arch-lint は違反なしの JSON を返す (--json 以外のフラグでは何も出さず落ちる)
     stub_go_arch_lint 0 '{"Type":"models.Check","Payload":{"ArchHasWarnings":false,"ArchWarningsDeps":[],"ArchWarningsNotMatched":[],"ArchWarningsDeepScan":[]}}'
-    stub_spm_go '    "packages": [{"name": "fixture", "path": "baseline-fixture"}]'
+    # analyze-modularity は警告なしのレポートを返す。summary が無いと baseline.sh は実行失敗とみなす
+    stub_analyze_modularity 0 '{"packages":[],"summary":{"mean_loc":0,"stddev_loc":0,"mean_public_ratio":0,"total_packages":0,"total_warnings":0,"main_sequence":{"excluded_packages":null,"structurally_constrained_count":0,"actionable_count":0}}}'
 
     printf '%s\n' 'module baseline-fixture' 'go 1.26.1' > "${PROJECT}/go.mod"
     # .go-arch-lint.yml が無いと baseline.sh は測定前に exit 1 する
@@ -40,19 +41,15 @@ stub_go_arch_lint() {
     chmod +x "${STUB_BIN}/go-arch-lint"
 }
 
-# stub_spm_go <packages 行>
-# 実物と同じく、JSON の前後に進捗メッセージと Time 行を stdout へ出す。
-# 呼ばれたときの GOROOT を ${BATS_TEST_TMPDIR}/spm-goroot に残す。
-stub_spm_go() {
-    local packages="$1"
+# stub_analyze_modularity <exit-code> <stdout> [stderr]
+# 実物は失敗の理由を stderr に出し、stdout には JSON だけを出す。
+stub_analyze_modularity() {
+    local rc="$1" out="$2" err="${3:-}"
     printf '%s\n' '#!/bin/sh' \
-        "printf '%s' \"\${GOROOT-}\" > '${BATS_TEST_TMPDIR}/spm-goroot'" \
-        "echo 'Full analysis started.'" \
-        "echo '{'" \
-        "echo '${packages}'" \
-        "echo '}'" \
-        "echo 'Time: 0.1 seconds'" > "${STUB_BIN}/spm-go"
-    chmod +x "${STUB_BIN}/spm-go"
+        "printf '%s' '${out}'" \
+        "printf '%s' '${err}' >&2" \
+        "exit ${rc}" > "${STUB_BIN}/analyze-modularity"
+    chmod +x "${STUB_BIN}/analyze-modularity"
 }
 
 write_passing_test() {
@@ -126,46 +123,37 @@ write_failing_test() {
     [[ "$output" != *"依存方向違反なし"* ]]
 }
 
-@test "spm-go が実行に失敗したら理由を出して止まる" {
+@test "analyze-modularity が実行に失敗したら理由を出して止まる" {
     write_passing_test
-    # PATH にはあるので存在チェックは通るが、実行すると失敗する
-    printf '%s\n' '#!/bin/sh' "echo \"this package isn't allowed\" >&2" 'exit 1' \
-        > "${STUB_BIN}/spm-go"
+    # Ca/Ce の算出は go list に頼るので、go list が落ちると stdout は空で理由は stderr に出る
+    stub_analyze_modularity 1 '' 'エラー: go list の実行に失敗 (exit status 1)'
 
     run bash "$BASELINE" "$PROJECT"
 
     [ "$status" -ne 0 ]
-    [[ "$output" == *"this package isn't allowed"* ]]
-}
-
-@test "spm-go がパッケージを 1 件も返さなければ止まる" {
-    write_passing_test
-    # spm-go は go list の失敗を捨て、exit 0 のまま packages を null で返す
-    stub_spm_go '    "packages": null'
-
-    run bash "$BASELINE" "$PROJECT"
-
-    [ "$status" -ne 0 ]
-    [[ "$output" == *"spm-go がパッケージを 1 件も返しませんでした"* ]]
+    [[ "$output" == *"go list の実行に失敗"* ]]
     run ls "${PROJECT}"/baseline-*.json
     [ "$status" -ne 0 ]
 }
 
-@test "spm-go が JSON を出さなければ止まる" {
+@test "analyze-modularity が JSON を出さなければ止まる" {
     write_passing_test
-    printf '%s\n' '#!/bin/sh' 'exit 0' > "${STUB_BIN}/spm-go"
+    stub_analyze_modularity 0 ''
 
     run bash "$BASELINE" "$PROJECT"
 
     [ "$status" -ne 0 ]
-    [[ "$output" == *"spm-go がパッケージを 1 件も返しませんでした"* ]]
+    [[ "$output" == *"analyze-modularity の実行に失敗しました"* ]]
 }
 
-@test "spm-go には PATH の go と同じ GOROOT を渡す" {
+@test "analyze-modularity の Main Sequence 集計をサマリに出す" {
     write_passing_test
+    stub_analyze_modularity 0 '{"packages":[],"summary":{"mean_loc":0,"stddev_loc":0,"mean_public_ratio":0,"total_packages":3,"total_warnings":1,"main_sequence":{"excluded_packages":["cmd/app"],"structurally_constrained_count":1,"actionable_count":1,"actionable_max_distance":0.7,"actionable_mean_distance":0.7}}}'
 
     run bash "$BASELINE" "$PROJECT"
 
     [ "$status" -eq 0 ]
-    [ "$(cat "${BATS_TEST_TMPDIR}/spm-goroot")" = "$(go env GOROOT)" ]
+    [[ "$output" == *"アクション可能 Distance > 0.5: 1 件"* ]]
+    [[ "$output" == *"構造制約パッケージ数: 1"* ]]
+    [ "$(jq '.modularity.summary.main_sequence.actionable_count' "${PROJECT}"/baseline-*.json)" -eq 1 ]
 }

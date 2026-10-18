@@ -15,6 +15,26 @@ func writeGoFile(t *testing.T, dir, filename, content string) {
 	}
 }
 
+func TestPackageResult_Abstractness(t *testing.T) {
+	tests := []struct {
+		name string
+		r    PackageResult
+		want float64
+	}{
+		{name: "型なし → 0", r: PackageResult{}, want: 0},
+		{name: "interface 1 / 型 4 → 0.25", r: PackageResult{InterfaceTypes: 1, ExportedTypes: 2, UnexportedTypes: 2}, want: 0.25},
+		{name: "全部 interface → 1", r: PackageResult{InterfaceTypes: 2, ExportedTypes: 1, UnexportedTypes: 1}, want: 1},
+		{name: "struct だけ → 0 (struct は抽象ではない)", r: PackageResult{ExportedTypes: 3}, want: 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.r.Abstractness(); got != tt.want {
+				t.Errorf("Abstractness() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestAnalyzeDir(t *testing.T) {
 	t.Run("exported と unexported の関数・型をカウントする", func(t *testing.T) {
 		dir := t.TempDir()
@@ -70,8 +90,24 @@ func (p *PublicType) privateMethod() {}
 		if result.UnexportedTypes != 1 {
 			t.Errorf("UnexportedTypes: got %d, want 1", result.UnexportedTypes)
 		}
+		if result.InterfaceTypes != 1 {
+			t.Errorf("InterfaceTypes: got %d, want 1 (PublicInterface)", result.InterfaceTypes)
+		}
 		if result.Files != 1 {
 			t.Errorf("Files: got %d, want 1", result.Files)
+		}
+	})
+
+	t.Run("型の宣言が無ければ Abstractness は 0", func(t *testing.T) {
+		dir := t.TempDir()
+		writeGoFile(t, dir, "funcs.go", "package funcs\n\nfunc F() {}\n")
+
+		result, err := AnalyzeDir(dir)
+		if err != nil {
+			t.Fatalf("AnalyzeDir 失敗: %v", err)
+		}
+		if got := result.Abstractness(); got != 0 {
+			t.Errorf("Abstractness: got %v, want 0", got)
 		}
 	})
 
@@ -394,26 +430,26 @@ func TestGenerateWarnings(t *testing.T) {
 	})
 }
 
-func TestGenerateSPMWarnings(t *testing.T) {
-	t.Run("SPM=nil → 空", func(t *testing.T) {
-		pkg := PackageResult{Path: "pkg/nospm"}
-		warnings := GenerateSPMWarnings(pkg)
+func TestGenerateMainSequenceWarnings(t *testing.T) {
+	t.Run("MainSequence=nil → 空", func(t *testing.T) {
+		pkg := PackageResult{Path: "pkg/none"}
+		warnings := GenerateMainSequenceWarnings(pkg)
 		if len(warnings) != 0 {
-			t.Errorf("SPM nil で警告数: got %d, want 0", len(warnings))
+			t.Errorf("MainSequence nil で警告数: got %d, want 0", len(warnings))
 		}
 	})
 
 	t.Run("zone_of_pain → 警告", func(t *testing.T) {
 		pkg := PackageResult{
 			Path: "pkg/pain",
-			SPM: &SPMData{
-				Zone:         SPMZoneOfPain,
+			MainSequence: &MainSequenceData{
+				Zone:         ZoneOfPain,
 				Distance:     0.8,
 				Abstractness: 0.1,
 				Instability:  0.1,
 			},
 		}
-		warnings := GenerateSPMWarnings(pkg)
+		warnings := GenerateMainSequenceWarnings(pkg)
 		found := false
 		for _, w := range warnings {
 			if w.Type == "zone_of_pain" {
@@ -428,14 +464,14 @@ func TestGenerateSPMWarnings(t *testing.T) {
 	t.Run("zone_of_uselessness → 警告", func(t *testing.T) {
 		pkg := PackageResult{
 			Path: "pkg/useless",
-			SPM: &SPMData{
-				Zone:         SPMZoneOfUselessness,
+			MainSequence: &MainSequenceData{
+				Zone:         ZoneOfUselessness,
 				Distance:     0.6,
 				Abstractness: 0.8,
 				Instability:  0.8,
 			},
 		}
-		warnings := GenerateSPMWarnings(pkg)
+		warnings := GenerateMainSequenceWarnings(pkg)
 		found := false
 		for _, w := range warnings {
 			if w.Type == "zone_of_uselessness" {
@@ -449,10 +485,10 @@ func TestGenerateSPMWarnings(t *testing.T) {
 
 	t.Run("excluded → 空", func(t *testing.T) {
 		pkg := PackageResult{
-			Path: "main",
-			SPM:  &SPMData{Zone: SPMZoneExcluded},
+			Path:         "main",
+			MainSequence: &MainSequenceData{Zone: ZoneExcluded},
 		}
-		warnings := GenerateSPMWarnings(pkg)
+		warnings := GenerateMainSequenceWarnings(pkg)
 		if len(warnings) != 0 {
 			t.Errorf("excluded で警告数: got %d, want 0", len(warnings))
 		}
@@ -461,15 +497,15 @@ func TestGenerateSPMWarnings(t *testing.T) {
 	t.Run("構造制約 → 情報警告", func(t *testing.T) {
 		pkg := PackageResult{
 			Path: "pkg/leaf",
-			SPM: &SPMData{
-				Zone:                    SPMZoneOfPain,
+			MainSequence: &MainSequenceData{
+				Zone:                    ZoneOfPain,
 				Distance:                1.0,
 				StructurallyConstrained: true,
 				AfferentCoupling:        5,
 				EfferentCoupling:        0,
 			},
 		}
-		warnings := GenerateSPMWarnings(pkg)
+		warnings := GenerateMainSequenceWarnings(pkg)
 		found := false
 		for _, w := range warnings {
 			if w.Type == "structurally_constrained" {
@@ -484,13 +520,13 @@ func TestGenerateSPMWarnings(t *testing.T) {
 	t.Run("high_distance (非構造制約, D > 0.5) → 警告", func(t *testing.T) {
 		pkg := PackageResult{
 			Path: "pkg/far",
-			SPM: &SPMData{
-				Zone:                    SPMZoneMainSequence,
+			MainSequence: &MainSequenceData{
+				Zone:                    ZoneMainSequence,
 				Distance:                0.7,
 				StructurallyConstrained: false,
 			},
 		}
-		warnings := GenerateSPMWarnings(pkg)
+		warnings := GenerateMainSequenceWarnings(pkg)
 		found := false
 		for _, w := range warnings {
 			if w.Type == "high_distance" {
@@ -505,12 +541,12 @@ func TestGenerateSPMWarnings(t *testing.T) {
 	t.Run("main_sequence, D <= 0.5 → high_distance なし", func(t *testing.T) {
 		pkg := PackageResult{
 			Path: "pkg/close",
-			SPM: &SPMData{
-				Zone:     SPMZoneMainSequence,
+			MainSequence: &MainSequenceData{
+				Zone:     ZoneMainSequence,
 				Distance: 0.3,
 			},
 		}
-		warnings := GenerateSPMWarnings(pkg)
+		warnings := GenerateMainSequenceWarnings(pkg)
 		for _, w := range warnings {
 			if w.Type == "high_distance" {
 				t.Error("D <= 0.5 では high_distance 警告を生成すべきでない")
@@ -523,8 +559,8 @@ func TestGenerateCrossWarnings(t *testing.T) {
 	t.Run("構造制約 + loc_outlier → constrained_loc_outlier", func(t *testing.T) {
 		pkg := PackageResult{
 			Path: "pkg/big-leaf",
-			SPM: &SPMData{
-				Zone:                    SPMZoneOfPain,
+			MainSequence: &MainSequenceData{
+				Zone:                    ZoneOfPain,
 				StructurallyConstrained: true,
 			},
 		}
@@ -543,8 +579,8 @@ func TestGenerateCrossWarnings(t *testing.T) {
 	t.Run("構造制約のみ (loc_outlier なし) → 空", func(t *testing.T) {
 		pkg := PackageResult{
 			Path: "pkg/small-leaf",
-			SPM: &SPMData{
-				Zone:                    SPMZoneOfPain,
+			MainSequence: &MainSequenceData{
+				Zone:                    ZoneOfPain,
 				StructurallyConstrained: true,
 			},
 		}
@@ -557,8 +593,8 @@ func TestGenerateCrossWarnings(t *testing.T) {
 	t.Run("loc_outlier のみ (構造制約なし) → 空", func(t *testing.T) {
 		pkg := PackageResult{
 			Path: "pkg/big-normal",
-			SPM: &SPMData{
-				Zone:                    SPMZoneMainSequence,
+			MainSequence: &MainSequenceData{
+				Zone:                    ZoneMainSequence,
 				StructurallyConstrained: false,
 			},
 		}
@@ -571,10 +607,10 @@ func TestGenerateCrossWarnings(t *testing.T) {
 		}
 	})
 
-	t.Run("SPM=nil → 空", func(t *testing.T) {
-		pkg := PackageResult{Path: "pkg/nospm"}
+	t.Run("MainSequence=nil → 空", func(t *testing.T) {
+		pkg := PackageResult{Path: "pkg/none"}
 		astWarnings := []Warning{
-			{Type: "loc_outlier", Package: "pkg/nospm", Value: 500, Limit: 200},
+			{Type: "loc_outlier", Package: "pkg/none", Value: 500, Limit: 200},
 		}
 		warnings := GenerateCrossWarnings(pkg, astWarnings)
 		if len(warnings) != 0 {

@@ -31,8 +31,8 @@ claude plugin install go-arch-metrics@usadamasa
 - **`analyze-arch-lint`** — `.go-arch-lint.yml` 自体の健全性。`go-arch-lint check` は
   コードが設定に違反していないかしか見ず、設定がパッケージツリーの転記へ劣化していく
   方向は検出できない。そこを数値にする。指標は `--metrics` が正本
-- **`analyze-modularity`** — `go/ast` によるパッケージの API surface area。spm-go が
-  カバーしない exported/unexported 比率とパッケージサイズ分布
+- **`analyze-modularity`** — パッケージの API surface area (exported/unexported 比率、
+  サイズ分布) と、`go list` の import 辺から出す Martin の Ca/Ce/A/I/D と Zone 分類
 
 フラグと使い方は `go-arch-metrics:setup` の `references/tools.md`。
 

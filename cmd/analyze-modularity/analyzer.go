@@ -11,10 +11,10 @@ import (
 	"strings"
 )
 
-// SPMData は spm-go のメトリクスと Zone 分類結果を保持する｡
-// analyze-modularity に --spm-json が渡された場合のみ設定される｡
-type SPMData struct {
-	Zone                    SPMZone `json:"zone"`
+// MainSequenceData は Martin の Package Metrics (Ca/Ce/A/I/D) と Zone 分類結果を保持する｡
+// go list に含まれないパッケージ (build constraint で外れるものなど) では nil になる｡
+type MainSequenceData struct {
+	Zone                    Zone    `json:"zone"`
 	Distance                float64 `json:"distance"`
 	StructurallyConstrained bool    `json:"structurally_constrained"`
 	Abstractness            float64 `json:"abstractness"`
@@ -32,12 +32,22 @@ type PackageResult struct {
 	UnexportedMethods int     `json:"unexported_methods"`
 	ExportedTypes     int     `json:"exported_types"`
 	UnexportedTypes   int     `json:"unexported_types"`
+	InterfaceTypes    int     `json:"interface_types"`
 	PublicRatioValue  float64 `json:"public_ratio"`
 	LOC               int     `json:"loc"`
 	Files             int     `json:"files"`
 
-	// SPM (--spm-json 指定時のみ)
-	SPM *SPMData `json:"spm,omitempty"`
+	MainSequence *MainSequenceData `json:"main_sequence,omitempty"`
+}
+
+// Abstractness は A = interface 型宣言 / 全型宣言 を返す (Martin の Na / Nc)｡
+// 型宣言が無ければ 0 (完全に具象) とする｡
+func (r PackageResult) Abstractness() float64 {
+	total := r.ExportedTypes + r.UnexportedTypes
+	if total == 0 {
+		return 0
+	}
+	return float64(r.InterfaceTypes) / float64(total)
 }
 
 // PublicRatio は exported/(exported+unexported) の比率を返す｡
@@ -192,6 +202,10 @@ func countTypeDecl(decl *ast.GenDecl, result *PackageResult) {
 		} else {
 			result.UnexportedTypes++
 		}
+		// alias (type X = io.Reader) は右辺が InterfaceType ではないので具象側に数える
+		if _, isInterface := ts.Type.(*ast.InterfaceType); isInterface {
+			result.InterfaceTypes++
+		}
 	}
 }
 
@@ -266,61 +280,61 @@ func (r PackageResult) TotalSymbols() int {
 //     (Martin & Martin, Agile Principles, Patterns, and Practices in C#, Chapter 28)
 const defaultMinSymbols = 10
 
-// GenerateSPMWarnings は SPM データに基づく警告を生成する｡
-// SPM データがない場合は空を返す｡
-func GenerateSPMWarnings(pkg PackageResult) []Warning {
-	if pkg.SPM == nil {
+// GenerateMainSequenceWarnings は Ca/Ce/A/I/D と Zone に基づく警告を生成する｡
+// データがない場合は空を返す｡
+func GenerateMainSequenceWarnings(pkg PackageResult) []Warning {
+	if pkg.MainSequence == nil {
 		return nil
 	}
-	spm := pkg.SPM
+	ms := pkg.MainSequence
 	var warnings []Warning
 
-	switch spm.Zone {
-	case SPMZoneOfPain:
+	switch ms.Zone {
+	case ZoneOfPain:
 		warnings = append(warnings, Warning{
 			Type:    WarningTypeZoneOfPain,
 			Package: pkg.Path,
-			Value:   spm.Distance,
-			Message: fmt.Sprintf("Zone of Pain: 具象的 (A=%.2f) で安定 (I=%.2f)", spm.Abstractness, spm.Instability),
+			Value:   ms.Distance,
+			Message: fmt.Sprintf("Zone of Pain: 具象的 (A=%.2f) で安定 (I=%.2f)", ms.Abstractness, ms.Instability),
 		})
-	case SPMZoneOfUselessness:
+	case ZoneOfUselessness:
 		warnings = append(warnings, Warning{
 			Type:    WarningTypeZoneOfUselessness,
 			Package: pkg.Path,
-			Value:   spm.Distance,
-			Message: fmt.Sprintf("Zone of Uselessness: 抽象的 (A=%.2f) で不安定 (I=%.2f)", spm.Abstractness, spm.Instability),
+			Value:   ms.Distance,
+			Message: fmt.Sprintf("Zone of Uselessness: 抽象的 (A=%.2f) で不安定 (I=%.2f)", ms.Abstractness, ms.Instability),
 		})
-	case SPMZoneExcluded:
+	case ZoneExcluded:
 		return nil
 	}
 
-	if spm.StructurallyConstrained {
+	if ms.StructurallyConstrained {
 		warnings = append(warnings, Warning{
 			Type:    WarningTypeStructurallyConstrained,
 			Package: pkg.Path,
-			Value:   spm.Distance,
-			Message: fmt.Sprintf("構造制約: Ce=0, Ca=%d のため D=%.2f はトポロジー由来", spm.AfferentCoupling, spm.Distance),
+			Value:   ms.Distance,
+			Message: fmt.Sprintf("構造制約: Ce=0, Ca=%d のため D=%.2f はトポロジー由来", ms.AfferentCoupling, ms.Distance),
 		})
 	}
 
 	// Excluded は上の switch で早期リターン済みなので Zone チェック不要
-	if !spm.StructurallyConstrained && spm.Distance > mainSequenceDistanceThreshold {
+	if !ms.StructurallyConstrained && ms.Distance > mainSequenceDistanceThreshold {
 		warnings = append(warnings, Warning{
 			Type:    WarningTypeHighDistance,
 			Package: pkg.Path,
-			Value:   spm.Distance,
+			Value:   ms.Distance,
 			Limit:   mainSequenceDistanceThreshold,
-			Message: fmt.Sprintf("Main Sequence から大きく外れています (D=%.2f > %.1f)", spm.Distance, mainSequenceDistanceThreshold),
+			Message: fmt.Sprintf("Main Sequence から大きく外れています (D=%.2f > %.1f)", ms.Distance, mainSequenceDistanceThreshold),
 		})
 	}
 
 	return warnings
 }
 
-// GenerateCrossWarnings は AST 警告と SPM データを照合して複合警告を生成する｡
+// GenerateCrossWarnings は AST 警告と Ca/Ce を照合して複合警告を生成する｡
 // 構造制約パッケージが LOC 外れ値でもある場合、constrained_loc_outlier 警告を追加する｡
 func GenerateCrossWarnings(pkg PackageResult, astWarnings []Warning) []Warning {
-	if pkg.SPM == nil || !pkg.SPM.StructurallyConstrained {
+	if pkg.MainSequence == nil || !pkg.MainSequence.StructurallyConstrained {
 		return nil
 	}
 

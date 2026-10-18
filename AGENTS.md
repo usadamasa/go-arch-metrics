@@ -8,7 +8,7 @@ Go アーキテクチャメトリクスの Claude Code plugin。skill 4 本と C
 .claude-plugin/   plugin.json (version の実体はここ 1 箇所)。marketplace.json は usadamasa/agents-marketplace が持つ
 skills/           setup / measure / evaluate / remediate
 cmd/              analyze-arch-lint, analyze-modularity (どちらも package main)
-flake.nix         開発ツールの devShell (版は flake.lock が固定する)。nixpkgs に無い spm-go はここでビルドする
+flake.nix         開発ツールの devShell (版は flake.lock が固定する)
 .claude/skills/   develop (このリポジトリ自身の開発環境と検証)
 ```
 

@@ -41,7 +41,7 @@ printf '%s\n' "測定日時: $(date '+%Y-%m-%d %H:%M:%S')"
 printf '%s\n' ""
 
 # 前提ツールが PATH にあるか確かめる。入れ方は利用者に任せるので案内しない
-for tool in go jq golangci-lint go-arch-lint gosec govulncheck spm-go analyze-modularity analyze-arch-lint; do
+for tool in go jq golangci-lint go-arch-lint gosec govulncheck analyze-modularity analyze-arch-lint; do
     if ! command -v "$tool" &>/dev/null; then
         printf '%s\n' "エラー: $tool が PATH に見つかりません" >&2
         exit 1
@@ -117,58 +117,31 @@ printf '%s\n' "--- gosec (セキュリティ解析) ---"
 gosec ./... 2>&1 || true
 printf '%s\n' ""
 
-# spm-go → 一時ファイルに保存 (analyze-modularity に --spm-json で渡す)
-SPM_TMP=$(mktemp "${TMPDIR:-/tmp}/spm.XXXXXX")
-readonly SPM_TMP
-trap 'rm -f "$SPM_TMP"' EXIT
+# analyze-modularity の実行 (API surface と Ca/Ce/A/I/D)
+printf '%s\n' "--- analyze-modularity (モジュール性) ---"
 
-printf '%s\n' "--- spm-go + analyze-modularity (統合メトリクス) ---"
-
-# spm-go は go/build 経由で $GOROOT/bin/go list を呼ぶ。GOROOT が無いと spm-go をビルドした Go を使い、
-# 対象の go.mod がそれより新しい go を要求すると toolchain の切り替えで失敗する。他のツールと同じ go に揃える。
-if ! SPM_GOROOT=$(go env GOROOT); then
-    printf '%s\n' "エラー: go env GOROOT の実行に失敗しました" >&2
+# Ca/Ce の算出は go list に頼る。失敗すると stdout は空で理由が stderr に出るので、summary の有無で見分ける
+MOD_RC=0
+MOD_JSON=$(analyze-modularity "$PROJECT_ROOT") || MOD_RC=$?
+if ! printf '%s' "$MOD_JSON" | jq -e '.summary' >/dev/null 2>&1; then
+    printf '%s\n' "エラー: analyze-modularity の実行に失敗しました (exit ${MOD_RC})。理由は上の出力を参照" >&2
     exit 1
 fi
-
-# spm-go は -f json でも進捗メッセージ (先頭) と Time 行 (末尾) を stdout に出すため、JSON 部分のみ抽出。
-# awk は途中で exit させない。先に閉じると spm-go が SIGPIPE で落ち、pipefail で失敗に見える。
-if ! GOROOT="$SPM_GOROOT" spm-go all -f json | awk '/^\{$/{found=1} found{print} /^\}$/{found=0}' > "$SPM_TMP"; then
-    printf '%s\n' "エラー: spm-go の実行に失敗しました。理由は上の出力を参照" >&2
-    exit 1
-fi
-
-# spm-go は読めなかったパッケージを黙って捨て、exit 0 のまま packages を null で返す
-if ! jq -e '(.packages // []) | length > 0' "$SPM_TMP" >/dev/null; then
-    printf '%s\n' "エラー: spm-go がパッケージを 1 件も返しませんでした。go list ./... が通るか確認してください" >&2
-    exit 1
-fi
-
-# analyze-modularity の実行 (spm-go 統合)
-MODULARITY_RESULT='null'
-
-MOD_JSON=$(analyze-modularity --spm-json "$SPM_TMP" "$PROJECT_ROOT" || { printf '%s\n' "  analyze-modularity 実行失敗" >&2; true; })
-if [[ -n "$MOD_JSON" ]]; then
-    printf '%s' "$MOD_JSON" | jq -r '
-        "パッケージ数: \(.summary.total_packages)",
-        "平均 LOC: \(.summary.mean_loc | floor)",
-        "平均 public ratio: \(.summary.mean_public_ratio | . * 100 | floor)%",
-        "警告数: \(.summary.total_warnings)",
-        if (.summary.outlier_packages | length) > 0
-        then "外れ値パッケージ: \(.summary.outlier_packages | join(", "))"
-        else empty end,
-        if .summary.spm then
-            "SPM 統合:",
-            "  アクション可能 Distance > 0.5: \(.summary.spm.actionable_count) 件",
-            "  構造制約パッケージ数: \(.summary.spm.structurally_constrained_count)",
-            "  最大 Distance (アクション可能): \(.summary.spm.actionable_max_distance // "N/A")",
-            "  平均 Distance (アクション可能): \(.summary.spm.actionable_mean_distance // "N/A")"
-        else empty end
-    ' 2>/dev/null || printf '%s\n' "  集計スキップ (jq が必要)"
-    MODULARITY_RESULT="$MOD_JSON"
-else
-    printf '%s\n' "  実行エラー"
-fi
+printf '%s' "$MOD_JSON" | jq -r '
+    "パッケージ数: \(.summary.total_packages)",
+    "平均 LOC: \(.summary.mean_loc | floor)",
+    "平均 public ratio: \(.summary.mean_public_ratio | . * 100 | floor)%",
+    "警告数: \(.summary.total_warnings)",
+    if (.summary.outlier_packages | length) > 0
+    then "外れ値パッケージ: \(.summary.outlier_packages | join(", "))"
+    else empty end,
+    "Main Sequence:",
+    "  アクション可能 Distance > 0.5: \(.summary.main_sequence.actionable_count) 件",
+    "  構造制約パッケージ数: \(.summary.main_sequence.structurally_constrained_count)",
+    "  最大 Distance (アクション可能): \(.summary.main_sequence.actionable_max_distance // "N/A")",
+    "  平均 Distance (アクション可能): \(.summary.main_sequence.actionable_mean_distance // "N/A")"
+'
+MODULARITY_RESULT="$MOD_JSON"
 printf '%s\n' ""
 
 # パッケージ統計とテストカバレッジは参考値なので、失敗しても測定全体は止めない。
