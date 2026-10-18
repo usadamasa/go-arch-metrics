@@ -1,6 +1,7 @@
 # CI への組み込み
 
-CI で回すコマンド。ツールを PATH に用意する方法はプロジェクトに任せる。
+CI で回すコマンド。ツールを用意する方法はプロジェクトに任せる。go.mod の tool directive で入れたツールは
+`go tool analyze-modularity --strict .` のように `go tool` を前に付けて呼ぶ。
 golangci-lint は v2 系を使う (v1 と設定非互換)。
 
 ```sh

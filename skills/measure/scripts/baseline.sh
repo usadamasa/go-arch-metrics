@@ -40,13 +40,67 @@ printf '%s\n' "プロジェクト: $PROJECT_ROOT"
 printf '%s\n' "測定日時: $(date '+%Y-%m-%d %H:%M:%S')"
 printf '%s\n' ""
 
-# 前提ツールが PATH にあるか確かめる。入れ方は利用者に任せるので案内しない
-for tool in go jq golangci-lint go-arch-lint gosec vulncheck analyze-modularity analyze-arch-lint; do
+# 前提ツールを解決する。入れ方は利用者に任せるので案内しない。
+# go と jq は PATH に要る。ほかは PATH を先に見て、無ければ go.mod の tool directive から go tool で呼ぶ
+for tool in go jq; do
     if ! command -v "$tool" &>/dev/null; then
         printf '%s\n' "エラー: $tool が PATH に見つかりません" >&2
         exit 1
     fi
 done
+
+# go.mod の tool directive に載るパッケージパス (1 行に 1 つ)
+MODULE_TOOLS=$(go mod edit -json "${PROJECT_ROOT}/go.mod" | jq -r '.Tool // [] | .[].Path')
+readonly MODULE_TOOLS
+
+# tool_package <name>
+# tool directive のうち、go tool での名前が name のパッケージパスを出す。無ければ 1 を返す。
+# 名前はパスの末尾の要素で、末尾が v2 のようなメジャーバージョンなら 1 つ前の要素 (go tool の規則)
+tool_package() {
+    local name="$1" path base
+    for path in $MODULE_TOOLS; do
+        base=${path##*/}
+        if [[ "$base" =~ ^v[0-9]+$ ]]; then
+            base=${path%/*}
+            base=${base##*/}
+        fi
+        if [[ "$base" == "$name" ]]; then
+            printf '%s\n' "$path"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# resolve_tool <name>
+# 呼び出し方を配列 RESOLVED に入れる。どちらにも無ければ止まる
+resolve_tool() {
+    local name="$1" pkg
+    if command -v "$name" &>/dev/null; then
+        RESOLVED=("$name")
+        return 0
+    fi
+    if pkg=$(tool_package "$name"); then
+        RESOLVED=(go tool "$pkg")
+        return 0
+    fi
+    printf '%s\n' "エラー: $name が PATH にも go.mod の tool directive にも見つかりません" >&2
+    exit 1
+}
+
+resolve_tool golangci-lint
+GOLANGCI_LINT=("${RESOLVED[@]}")
+resolve_tool go-arch-lint
+GO_ARCH_LINT=("${RESOLVED[@]}")
+resolve_tool gosec
+GOSEC=("${RESOLVED[@]}")
+resolve_tool vulncheck
+VULNCHECK=("${RESOLVED[@]}")
+resolve_tool analyze-modularity
+ANALYZE_MODULARITY=("${RESOLVED[@]}")
+# analyze-arch-lint はここでは呼ばないが、CI に組み込むツールとして揃っていることを確かめる
+resolve_tool analyze-arch-lint
+readonly GOLANGCI_LINT GO_ARCH_LINT GOSEC VULNCHECK ANALYZE_MODULARITY
 
 # 全ツールが PROJECT_ROOT で実行されるため、一度だけ cd する
 cd "$PROJECT_ROOT"
@@ -57,7 +111,7 @@ printf '%s\n' "--- golangci-lint (テスト可能性・保守性) ---"
 
 # JSON 形式で実行 (違反検出時の非ゼロ終了は許容)
 # v2 では --out-format json は廃止。--output.json.path stdout を使う
-GOLANGCI_JSON=$(golangci-lint run --output.json.path stdout --timeout 5m ./... 2>/dev/null | head -1 || true)
+GOLANGCI_JSON=$("${GOLANGCI_LINT[@]}" run --output.json.path stdout --timeout 5m ./... 2>/dev/null | head -1 || true)
 
 if [[ -n "$GOLANGCI_JSON" ]]; then
     GOLANGCI_SUMMARY=$(printf '%s' "$GOLANGCI_JSON" | jq -r '
@@ -86,7 +140,7 @@ else
     # go-arch-lint は違反があっても実行エラーでも exit 1 するので、終了コードでは見分けられない。
     # 違反なら stdout に check の JSON が出て、実行エラーなら stdout は空で理由が stderr に出る。
     ARCH_RC=0
-    ARCH_JSON=$(go-arch-lint check --json) || ARCH_RC=$?
+    ARCH_JSON=$("${GO_ARCH_LINT[@]}" check --json) || ARCH_RC=$?
     if ! printf '%s' "$ARCH_JSON" | jq -e '.Type == "models.Check"' >/dev/null 2>&1; then
         printf '%s\n' "エラー: go-arch-lint の実行に失敗しました (exit ${ARCH_RC})。理由は上の出力を参照" >&2
         exit 1
@@ -110,7 +164,7 @@ printf '%s\n' "--- govulncheck (脆弱性スキャン) ---"
 # exit 0 は脆弱性なし、3 は脆弱性あり、それ以外は実行できていない (脆弱性 DB に届かなかった等)。
 # 未測定を「なし」に見せないよう、3 つを分けて出力と JSON に残す。
 VULN_RC=0
-VULN_OUT=$(vulncheck ./... 2>&1) || VULN_RC=$?
+VULN_OUT=$("${VULNCHECK[@]}" ./... 2>&1) || VULN_RC=$?
 case "$VULN_RC" in
     0)
         VULN_STATUS=ok
@@ -133,7 +187,7 @@ printf '%s\n' ""
 # gosec の実行
 printf '%s\n' "--- gosec (セキュリティ解析) ---"
 # セキュリティ警告検出時の非ゼロ終了は許容
-gosec ./... 2>&1 || true
+"${GOSEC[@]}" ./... 2>&1 || true
 printf '%s\n' ""
 
 # analyze-modularity の実行 (API surface と Ca/Ce/A/I/D)
@@ -141,7 +195,7 @@ printf '%s\n' "--- analyze-modularity (モジュール性) ---"
 
 # Ca/Ce の算出は go list に頼る。失敗すると stdout は空で理由が stderr に出るので、summary の有無で見分ける
 MOD_RC=0
-MOD_JSON=$(analyze-modularity "$PROJECT_ROOT") || MOD_RC=$?
+MOD_JSON=$("${ANALYZE_MODULARITY[@]}" "$PROJECT_ROOT") || MOD_RC=$?
 if ! printf '%s' "$MOD_JSON" | jq -e '.summary' >/dev/null 2>&1; then
     printf '%s\n' "エラー: analyze-modularity の実行に失敗しました (exit ${MOD_RC})。理由は上の出力を参照" >&2
     exit 1
