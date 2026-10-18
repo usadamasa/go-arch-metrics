@@ -1,5 +1,10 @@
 # Changelog
 
+## [2026.1018.3](https://github.com/usadamasa/go-arch-metrics/compare/2026.1018.2...2026.1018.3) - 2026-10-18
+
+### Other Changes
+- fix(measure): baseline.sh は PATH に無いツールを go.mod の tool directive から呼ぶ by @usadamasa in https://github.com/usadamasa/go-arch-metrics/pull/41
+
 ## [2026.1018.2](https://github.com/usadamasa/go-arch-metrics/compare/2026.1018.1...2026.1018.2) - 2026-10-18
 
 ### Other Changes
