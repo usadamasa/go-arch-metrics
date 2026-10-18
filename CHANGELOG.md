@@ -1,5 +1,13 @@
 # Changelog
 
+## [2026.1018.2](https://github.com/usadamasa/go-arch-metrics/compare/2026.1018.1...2026.1018.2) - 2026-10-18
+
+### Other Changes
+- build(nix): CLI 3 本を flake の packages.default として出す by @usadamasa in https://github.com/usadamasa/go-arch-metrics/pull/38
+- fix(analyze-modularity): --strict は actionable な警告だけを失敗に数える by @usadamasa in https://github.com/usadamasa/go-arch-metrics/pull/37
+- feat(analyze-modularity): 非揮発の Zone of Pain を actionable から外す by @usadamasa in https://github.com/usadamasa/go-arch-metrics/pull/39
+- docs(plugin): description から spm-go の名前を外す by @usadamasa in https://github.com/usadamasa/go-arch-metrics/pull/34
+
 ## [2026.1018.1](https://github.com/usadamasa/go-arch-metrics/compare/2026.1018.0...2026.1018.1) - 2026-10-18
 
 ### Other Changes
