@@ -222,6 +222,98 @@ func TestMainSequenceIntegration(t *testing.T) {
 	})
 }
 
+func Test_buildMainSequenceSummary_非揮発のパッケージはactionableから除く(t *testing.T) {
+	packages := []PackageResult{
+		{Path: "cold", MainSequence: &MainSequenceData{Zone: ZoneOfPain, Distance: 0.75, Volatility: VolatilityNonVolatile}},
+		{Path: "hot", MainSequence: &MainSequenceData{Zone: ZoneOfPain, Distance: 0.86, Volatility: VolatilityVolatile}},
+		{Path: "unknown", MainSequence: &MainSequenceData{Zone: ZoneOfPain, Distance: 0.6, Volatility: VolatilityUnmeasured}},
+		{Path: "abstract", MainSequence: &MainSequenceData{Zone: ZoneOfUselessness, Distance: 0.7, Volatility: VolatilityNonVolatile}},
+	}
+
+	summary := buildMainSequenceSummary(packages, commitHistory{}, defaultVolatilityWindow, defaultVolatileCommits)
+
+	if summary.NonVolatileZoneOfPainCount != 1 {
+		t.Errorf("non_volatile_zone_of_pain_count = %d, want 1 (cold。zone_of_uselessness は数えない)", summary.NonVolatileZoneOfPainCount)
+	}
+	if summary.ActionableCount != 3 {
+		t.Errorf("actionable_count = %d, want 3 (hot, unknown, abstract)", summary.ActionableCount)
+	}
+	if summary.ActionableMaxDistance == nil || *summary.ActionableMaxDistance != 0.86 {
+		t.Errorf("actionable_max_distance = %v, want 0.86", summary.ActionableMaxDistance)
+	}
+}
+
+// runStrict は analyze-modularity --strict を dir に対して走らせ、exit code と stderr を返す｡
+func runStrict(t *testing.T, dir string) (int, string) {
+	t.Helper()
+	cmd := exec.Command("go", "run", ".", "--strict", dir)
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	if err == nil {
+		return 0, stderr.String()
+	}
+	exitErr, ok := err.(*exec.ExitError)
+	if !ok {
+		t.Fatalf("予期しないエラー: %v", err)
+	}
+	return exitErr.ExitCode(), stderr.String()
+}
+
+func TestStrictFlag_揮発性(t *testing.T) {
+	// writeFixtureModule で直せる警告を出すのは b だけ (構造制約でない zone_of_pain、D≈0.67)
+	t.Run("b が非揮発なら exit 0", func(t *testing.T) {
+		root := committedFixtureModule(t)
+
+		code, stderr := runStrict(t, root)
+		if code != 0 {
+			t.Errorf("exit code = %d, want 0\n%s", code, stderr)
+		}
+	})
+
+	t.Run("b が揮発なら exit 1", func(t *testing.T) {
+		root := committedFixtureModule(t)
+		touchCommits(t, root, "b/b.go", defaultVolatileCommits)
+
+		code, stderr := runStrict(t, root)
+		if code != 1 {
+			t.Errorf("exit code = %d, want 1\n%s", code, stderr)
+		}
+	})
+
+	t.Run("窓やしきい値が 1 未満なら測る前に止める", func(t *testing.T) {
+		// 窓 0 だとすべてのパッケージが 0 commit になり、Zone of Pain がすべて非揮発に倒れて gate が緩む
+		root := committedFixtureModule(t)
+		for _, flagArg := range []string{"--volatility-window=0", "--volatile-commits=0"} {
+			cmd := exec.Command("go", "run", ".", "--strict", flagArg, root)
+			var stderr strings.Builder
+			cmd.Stderr = &stderr
+			err := cmd.Run()
+			exitErr, ok := err.(*exec.ExitError)
+			if !ok || exitErr.ExitCode() != 1 {
+				t.Errorf("%s: err = %v, want exit 1", flagArg, err)
+			}
+			if !strings.Contains(stderr.String(), "1 以上") {
+				t.Errorf("%s: stderr に理由が無い:\n%s", flagArg, stderr.String())
+			}
+		}
+	})
+
+	t.Run("shallow clone では揮発性を測らず、b を揮発として扱って exit 1", func(t *testing.T) {
+		root := committedFixtureModule(t)
+		clone := filepath.Join(t.TempDir(), "clone")
+		runGit(t, root, "clone", "-q", "--depth", "1", "file://"+root, clone)
+
+		code, stderr := runStrict(t, clone)
+		if code != 1 {
+			t.Errorf("exit code = %d, want 1\n%s", code, stderr)
+		}
+		if !strings.Contains(stderr, "shallow") || !strings.Contains(stderr, "fetch-depth") {
+			t.Errorf("stderr に shallow と fetch-depth の案内が無い:\n%s", stderr)
+		}
+	})
+}
+
 func TestStrictFlag(t *testing.T) {
 	// サブプロセステストには cmd/ ディレクトリから go run を使用する｡
 	// os.Exit を含む main() は直接呼び出せないため、サブプロセスで実行する｡

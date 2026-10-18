@@ -556,6 +556,64 @@ func TestGenerateMainSequenceWarnings(t *testing.T) {
 		}
 	})
 
+	t.Run("非揮発の zone_of_pain は actionable=false で、high_distance は出さない", func(t *testing.T) {
+		count := 1
+		pkg := PackageResult{
+			Path: "pkg/cold",
+			MainSequence: &MainSequenceData{
+				Zone: ZoneOfPain, Distance: 0.75, Abstractness: 0, Instability: 0.25,
+				AfferentCoupling: 3, EfferentCoupling: 1,
+				Volatility: VolatilityNonVolatile, RecentCommitCount: &count,
+			},
+		}
+		warnings := GenerateMainSequenceWarnings(pkg)
+		if len(warnings) != 1 || warnings[0].Type != WarningTypeZoneOfPain {
+			t.Fatalf("警告: %+v, want zone_of_pain だけ", warnings)
+		}
+		if warnings[0].Actionable {
+			t.Error("非揮発の zone_of_pain: actionable=true, want false")
+		}
+		if !strings.Contains(warnings[0].Message, "非揮発") || !strings.Contains(warnings[0].Message, "--strict") {
+			t.Errorf("Message に非揮発と --strict で数えない旨が無い: %q", warnings[0].Message)
+		}
+	})
+
+	t.Run("揮発または未測定の zone_of_pain は actionable=true", func(t *testing.T) {
+		for _, v := range []Volatility{VolatilityVolatile, VolatilityUnmeasured} {
+			pkg := PackageResult{
+				Path: "pkg/hot",
+				MainSequence: &MainSequenceData{
+					Zone: ZoneOfPain, Distance: 0.75, Abstractness: 0, Instability: 0.25,
+					AfferentCoupling: 3, EfferentCoupling: 1, Volatility: v,
+				},
+			}
+			warnings := GenerateMainSequenceWarnings(pkg)
+			if len(warnings) != 2 {
+				t.Fatalf("%s: 警告数 %d, want 2 (zone_of_pain, high_distance)", v, len(warnings))
+			}
+			for _, w := range warnings {
+				if !w.Actionable {
+					t.Errorf("%s %s: actionable=false, want true", v, w.Type)
+				}
+			}
+		}
+	})
+
+	t.Run("非揮発でも zone_of_uselessness は actionable=true", func(t *testing.T) {
+		pkg := PackageResult{
+			Path: "pkg/abstract",
+			MainSequence: &MainSequenceData{
+				Zone: ZoneOfUselessness, Distance: 0.6, Abstractness: 0.8, Instability: 0.8,
+				Volatility: VolatilityNonVolatile,
+			},
+		}
+		for _, w := range GenerateMainSequenceWarnings(pkg) {
+			if !w.Actionable {
+				t.Errorf("%s: actionable=false, want true (使われていない抽象は変更頻度と関係ない)", w.Type)
+			}
+		}
+	})
+
 	t.Run("直せる Main Sequence の警告は actionable=true", func(t *testing.T) {
 		pkgs := []PackageResult{
 			{Path: "pkg/pain", MainSequence: &MainSequenceData{Zone: ZoneOfPain, Distance: 0.8, Abstractness: 0.1, Instability: 0.1}},
