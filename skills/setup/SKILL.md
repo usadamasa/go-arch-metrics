@@ -35,6 +35,16 @@ description: >-
 
 上の表のツールと `jq` が PATH にあること。入れ方はプロジェクトに任せる。
 
+`analyze-modularity`・`analyze-arch-lint`・`vulncheck` の 3 本は、この plugin のリポジトリの flake が
+`packages.<system>.default` として出す。nix を使うプロジェクトは flake input で参照するだけにする
+(書き方は `references/tools.md` の「この plugin の CLI を入れる」)。
+
+### 以前の版で buildGoModule を書いたプロジェクト
+
+以前は利用側の `flake.nix` で、この plugin の CLI を `buildGoModule` でソースからビルドしていた。
+この形では `vendorHash`・`subPackages`・テスト用の設定を利用側が持つことになり、本体の変更のたびに利用側が壊れる。
+`buildGoModule` の定義を消し、flake input の `packages.<system>.default` に置き換える。
+
 ### 以前の版で入れた spm-go を外す
 
 以前の版は Afferent/Efferent Coupling・抽象度・不安定度・距離を fdaines/spm-go で測っていた。

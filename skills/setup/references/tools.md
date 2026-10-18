@@ -5,6 +5,50 @@
 
 ---
 
+## この plugin の CLI を入れる
+
+`analyze-modularity`・`analyze-arch-lint`・`vulncheck` は、この plugin のリポジトリの flake が
+`packages.<system>.default` として出す (x86_64-linux、aarch64-linux、aarch64-darwin)。
+nix を使うプロジェクトは flake input で参照し、devShell に足す。
+
+```nix
+{
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    # tag は付け替えられるので、固定は flake.lock の commit に任せる
+    go-arch-metrics.url = "github:usadamasa/go-arch-metrics";
+  };
+
+  outputs = { nixpkgs, go-arch-metrics, ... }:
+    let
+      system = "x86_64-linux";
+      pkgs = nixpkgs.legacyPackages.${system};
+    in {
+      devShells.${system}.default = pkgs.mkShellNoCC {
+        packages = [
+          pkgs.go
+          pkgs.git
+          pkgs.go-arch-lint
+          go-arch-metrics.packages.${system}.default
+        ];
+      };
+    };
+}
+```
+
+ビルドとテストは本体のリポジトリの CI が持つ。利用側で `buildGoModule` を書いて自前でビルドしない。
+
+3 本とも実行時に PATH のコマンドを呼ぶ。package はこれらを包まないので、利用側の devShell に並べる。
+`go` を包まないのは、対象プロジェクトの `go.mod` に合った版で `go list` を走らせるため。
+
+| CLI | 実行時に要るコマンド |
+|-----|------------------|
+| `analyze-modularity` | `go`、`git` |
+| `analyze-arch-lint` | `go`、`go-arch-lint` |
+| `vulncheck` | `go` |
+
+---
+
 ## golangci-lint
 
 ### 概要

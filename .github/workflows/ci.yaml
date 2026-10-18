@@ -55,7 +55,23 @@ jobs:
       - uses: $/.github/actions/setup-nix
 
       - name: Run shellcheck
-        run: shellcheck skills/*/scripts/*.sh
+        run: shellcheck skills/*/scripts/*.sh .github/scripts/*.sh
+
+  # 利用側が flake input で参照する packages.default を Linux でビルドし、CLI を実際に動かす
+  nix-package:
+    name: nix package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6.1.0
+
+      # smoke は go と go-arch-lint を PATH に要るので devShell も入れる
+      - uses: $/.github/actions/setup-nix
+
+      - name: Build packages.default
+        run: nix build .#default --out-link result -L
+
+      - name: Smoke test
+        run: .github/scripts/nix-package-smoke.sh "$PWD/result/bin"
 
   bats:
     name: bats
@@ -104,7 +120,7 @@ jobs:
         run: gh actions-lock --verify
 
   ci-status-check:
-    needs: [go-test, go-lint, bats, shellcheck, plugin-validate, actions-lock]
+    needs: [go-test, go-lint, bats, shellcheck, nix-package, plugin-validate, actions-lock]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 10
