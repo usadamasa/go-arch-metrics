@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -58,72 +59,6 @@ type internalType struct{}
 		t.Fatalf("go.mod 作成失敗: %v", err)
 	}
 	return dir
-}
-
-func TestFindGoPackageDirs(t *testing.T) {
-	t.Run("Walk 中の権限エラーはスキップして続行する", func(t *testing.T) {
-		dir := t.TempDir()
-
-		// 正常なサブディレクトリ (Go ファイルあり)
-		goodDir := filepath.Join(dir, "good")
-		if err := os.MkdirAll(goodDir, 0755); err != nil {
-			t.Fatalf("ディレクトリ作成に失敗: %v", err)
-		}
-		if err := os.WriteFile(filepath.Join(goodDir, "main.go"), []byte("package main\n"), 0644); err != nil {
-			t.Fatalf("ファイル作成に失敗: %v", err)
-		}
-
-		// 権限エラーのサブディレクトリ
-		badDir := filepath.Join(dir, "bad")
-		if err := os.MkdirAll(badDir, 0755); err != nil {
-			t.Fatalf("ディレクトリ作成に失敗: %v", err)
-		}
-		if err := os.Chmod(badDir, 0000); err != nil {
-			t.Skipf("chmod 0000 に失敗 (root ユーザーの可能性): %v", err)
-		}
-		t.Cleanup(func() { os.Chmod(badDir, 0755) })
-
-		dirs, err := findGoPackageDirs(dir)
-		if err != nil {
-			t.Fatalf("findGoPackageDirs がエラーを返した: %v", err)
-		}
-
-		if len(dirs) != 1 {
-			t.Errorf("ディレクトリ数: got %d, want 1", len(dirs))
-		}
-	})
-
-	t.Run("ReadDir の権限エラーはスキップして続行する", func(t *testing.T) {
-		dir := t.TempDir()
-
-		// 正常なサブディレクトリ (Go ファイルあり)
-		goodDir := filepath.Join(dir, "good")
-		if err := os.MkdirAll(goodDir, 0755); err != nil {
-			t.Fatalf("ディレクトリ作成に失敗: %v", err)
-		}
-		if err := os.WriteFile(filepath.Join(goodDir, "main.go"), []byte("package main\n"), 0644); err != nil {
-			t.Fatalf("ファイル作成に失敗: %v", err)
-		}
-
-		// Walk では入れるが ReadDir で失敗するディレクトリ (実行権限のみ)
-		noReadDir := filepath.Join(dir, "noread")
-		if err := os.MkdirAll(noReadDir, 0755); err != nil {
-			t.Fatalf("ディレクトリ作成に失敗: %v", err)
-		}
-		if err := os.Chmod(noReadDir, 0111); err != nil {
-			t.Skipf("chmod 0111 に失敗: %v", err)
-		}
-		t.Cleanup(func() { os.Chmod(noReadDir, 0755) })
-
-		dirs, err := findGoPackageDirs(dir)
-		if err != nil {
-			t.Fatalf("findGoPackageDirs がエラーを返した: %v", err)
-		}
-
-		if len(dirs) != 1 {
-			t.Errorf("ディレクトリ数: got %d, want 1", len(dirs))
-		}
-	})
 }
 
 func TestInferModuleRoot(t *testing.T) {
@@ -219,6 +154,46 @@ func TestMainSequenceIntegration(t *testing.T) {
 		}
 		if report.Summary.MainSequence.StructurallyConstrainedCount != 1 {
 			t.Errorf("structurally_constrained_count = %d, want 1 (c)", report.Summary.MainSequence.StructurallyConstrainedCount)
+		}
+	})
+
+	t.Run("gitignore 済みのパッケージと入れ子のモジュールは報告に出ない", func(t *testing.T) {
+		root := writeFixtureModule(t)
+		initGitRepo(t, root, "tmp/\n")
+		extra := map[string]string{
+			// .gitignore に当たる (go list には含まれる)
+			"tmp/x/x.go": "package x\n\nfunc X() {}\n",
+			// 入れ子のモジュール (go list ./... に含まれない)
+			"tmp/probe/go.mod":  "module example.com/probe\n\ngo 1.26\n",
+			"tmp/probe/main.go": "package main\n\nfunc main() {}\n",
+		}
+		for name, content := range extra {
+			path := filepath.Join(root, name)
+			if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+				t.Fatalf("ディレクトリ作成失敗: %v", err)
+			}
+			if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+				t.Fatalf("ファイル作成失敗: %v", err)
+			}
+		}
+
+		cmd := exec.Command("go", "run", ".", root)
+		out, err := cmd.Output()
+		if err != nil {
+			t.Fatalf("実行失敗: %v", err)
+		}
+		var report Report
+		if err := json.Unmarshal(out, &report); err != nil {
+			t.Fatalf("JSON パース失敗: %v", err)
+		}
+
+		if report.Summary.TotalPackages != 6 {
+			t.Errorf("total_packages = %d, want 6 (a b c d e iso)", report.Summary.TotalPackages)
+		}
+		for _, p := range report.Packages {
+			if strings.Contains(p.Path, "tmp") {
+				t.Errorf("tmp 配下が報告に混ざっている: %s", p.Path)
+			}
 		}
 	})
 
