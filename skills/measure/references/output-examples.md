@@ -19,13 +19,21 @@ internal/usecase/order.go:89:5: nestif: nesting depth 6 > 5 (nestif)
   which violates rule: infrastructure -> domain is not allowed
 ```
 
-## govulncheck
+## vulncheck (govulncheck の組み込み)
 
 ```
-Scanning your code and 42 packages across 3 dependent modules for known vulnerabilities...
+=== Symbol Results ===
 
 No vulnerabilities found.
+
+Your code is affected by 0 vulnerabilities.
+This scan also found 1 vulnerability in packages you import and 12
+vulnerabilities in modules you require, but your code doesn't appear to call
+these vulnerabilities.
 ```
+
+exit code が 0 なら脆弱性なし、3 なら呼んでいるシンボルに脆弱性あり、それ以外は DB に届かず未測定。
+baseline.sh はこれを `govulncheck.status` (`ok` / `vulnerable` / `unmeasured`) として JSON に残す。
 
 ## gosec
 

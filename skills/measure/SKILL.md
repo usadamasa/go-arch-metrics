@@ -40,10 +40,9 @@ bash "${CLAUDE_PLUGIN_ROOT}/skills/measure/scripts/baseline.sh" ./
 JSON は `go-arch-metrics:evaluate` がそのまま読む。測定日時が入るので、
 改善の前後を比べるときは消さずに残す。
 
-govulncheck が「未測定」になったら、脆弱性 DB (vuln.go.dev) を取れずに落ちている。
-Claude Code の sandbox の中で baseline.sh を回すと TLS 検証が通らないので、
-`govulncheck ./...` を単独で打ち直して、その結果を評価に使う。JSON の `govulncheck.status` も
-`unmeasured` のままなので、「脆弱性なし」と読まない。
+govulncheck は plugin が組み込んだ `vulncheck` で回す。埋め込みの roots で TLS を検証するので、
+Claude Code の sandbox の中でも vuln.go.dev に届く。それでも「未測定」になったら DB に届いていない
+(ネットワークが無い等) ので、JSON の `govulncheck.status` が `unmeasured` のものを「脆弱性なし」と読まない。
 
 ## 対象メトリクス早見表
 
@@ -58,7 +57,7 @@ Claude Code の sandbox の中で baseline.sh を回すと TLS 検証が通ら�
 | テスト可能性 | ネストの深さ | nestif | ≤ 8 (導入時推奨) → 目標 ≤ 5 |
 | 保守性 | 保守性指数 | maintidx | ≥ 20 |
 | 静的解析 | 高度なバグ検出・未使用コード | staticcheck | デフォルト有効 (U1000 系で未使用コードをカバー) |
-| セキュリティ | 既知の脆弱性 | govulncheck | 違反 = 0 |
+| セキュリティ | 既知の脆弱性 | vulncheck (govulncheck の組み込み) | 違反 = 0 |
 | セキュリティ | セキュリティ問題 | gosec | 違反 = 0 (CI ゲート) |
 | テスト品質 | テストカバレッジ | go test -cover | ≥ 60% (段階的に引き上げ) |
 | モジュール性 | Afferent/Efferent Coupling | analyze-modularity | 参考値 (しきい値なし) |
