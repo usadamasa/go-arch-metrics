@@ -107,12 +107,11 @@ plugin (skill と `baseline.sh`) と CLI 3 本は同じリポジトリから出�
 
 1. GitHub Release (または CHANGELOG.md) で、上げる範囲の変更を読む。JSON のキー、しきい値、
    `--strict` の判定が変わっていれば、以前の測定結果とはそのまま比べられない
-2. plugin を上げる: `claude plugin update go-arch-metrics@usadamasa` (反映には Claude Code の再起動が要る)
-3. CLI を同じ版に上げる。marketplace の登録は ref を指定しておらず、plugin は default branch から入るので、
-   CLI も default branch の最新にそろえる
-   - flake input で参照している: `nix flake update go-arch-metrics` で flake.lock を進める
-   - go.mod の tool directive に入れている: `go get github.com/usadamasa/go-arch-metrics@latest`
-     (3 本は同じモジュールなので 1 回で全部上がる)
+2. plugin を上げる: `claude plugin update go-arch-metrics@usadamasa` (反映には Claude Code の再起動が要る)。
+   上がった版は `claude plugin list` の `version` で見る
+3. CLI を手順 2 で見た plugin の版の tag にそろえ、取った commit が tag の commit と一致するかを確かめる。
+   `@latest` や `nix flake update` では前の commit に解決されることがあるので使わない。
+   手順と理由は `references/tools.md` の「版を plugin にそろえる」
 4. CI を回し、`go-arch-metrics:measure` で測り直す。前回から変わった数値は、手順 1 の変更による差か、
    コードの変化による差かを分けて読む
 
