@@ -55,9 +55,9 @@ var metrics = []metric{
 	},
 	{
 		key:     "scope-packages",
-		label:   "1 つの internal スコープが抱えるパッケージ数",
-		meaning: "component を役割単位へ畳むと、1 つのツールの internal がいくら増えても設定は変わらなくなる｡その肥大化はこの指標でしか見えない｡",
-		remedy:  "薄いパッケージを隣へ畳むか、共有 internal (cmd/internal) へ引き上げるか、ツール自体を分ける｡数えるのは木の中の全パッケージなので、分割は逆に増やす｡",
+		label:   "internal の 1 つのディレクトリの直下に並ぶパッケージ数",
+		meaning: "component を役割単位へ畳むと、1 つのツールの internal がいくら増えても設定は変わらなくなる｡その肥大化はこの指標でしか見えない｡数えるのは同じディレクトリに並ぶ兄弟のパッケージで、入れ子の下は親ディレクトリごとに別に数える｡",
+		remedy:  "薄いパッケージを隣へ畳むか、責務ごとにサブディレクトリへまとめるか、共有 internal (cmd/internal) へ引き上げるか、ツール自体を分ける｡",
 		gating:  true,
 	},
 	{

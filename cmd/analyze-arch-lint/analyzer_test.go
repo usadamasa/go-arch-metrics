@@ -105,8 +105,8 @@ func TestAnalyzeCounts(t *testing.T) {
 			compilerScoped: 3,
 			maxFanOutName:  "app",
 			maxFanOutCount: 3,
-			// app/ 配下の internal は foo と bar の 2 つ
-			maxScopeRoot:  "app",
+			// app/internal の直下に foo と bar の 2 つ
+			maxScopeRoot:  "app/internal",
 			maxScopeCount: 2,
 		},
 		{
@@ -121,8 +121,8 @@ func TestAnalyzeCounts(t *testing.T) {
 			compilerScoped: 0,
 			maxFanOutName:  "cmd_internal", // 同数のときは名前順で安定させる
 			maxFanOutCount: 2,
-			// app/ が 2、other/ が 1
-			maxScopeRoot:  "app",
+			// app/internal が 2、other/internal が 1
+			maxScopeRoot:  "app/internal",
 			maxScopeCount: 2,
 		},
 	}
@@ -201,6 +201,69 @@ func TestAnalyzeUnusedVendor(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("未使用 vendor の finding が無い: %+v", got.Findings)
+	}
+}
+
+// guardBashPkgs は agents-config の cmd/guard-bash/internal を写した 11 パッケージ｡
+// internal の直下に 5 個、rules の下に 6 個が並ぶ｡
+var guardBashPkgs = []string{
+	"cmd/guard-bash",
+	"cmd/guard-bash/internal/argrule",
+	"cmd/guard-bash/internal/bashguard",
+	"cmd/guard-bash/internal/envwalk",
+	"cmd/guard-bash/internal/ghauthor",
+	"cmd/guard-bash/internal/rules",
+	"cmd/guard-bash/internal/rules/envbypass",
+	"cmd/guard-bash/internal/rules/gh",
+	"cmd/guard-bash/internal/rules/git",
+	"cmd/guard-bash/internal/rules/golang",
+	"cmd/guard-bash/internal/rules/nix",
+	"cmd/guard-bash/internal/rules/sandboxexcluded",
+}
+
+func TestLargestInternalScope(t *testing.T) {
+	tests := []struct {
+		name string
+		pkgs []string
+		want scopeSize
+	}{
+		{
+			name: "入れ子は親ディレクトリごとに数える",
+			pkgs: guardBashPkgs,
+			want: scopeSize{Root: "cmd/guard-bash/internal/rules", Count: 6},
+		},
+		{
+			name: "平たく並べると直下の数がそのまま出る",
+			pkgs: []string{
+				"app/internal/a", "app/internal/b", "app/internal/c",
+				"app/internal/d", "app/internal/e", "app/internal/f",
+				"app/internal/g", "app/internal/h", "app/internal/i",
+				"app/internal/j", "app/internal/k",
+			},
+			want: scopeSize{Root: "app/internal", Count: 11},
+		},
+		{
+			name: "同数のときは名前順",
+			pkgs: []string{"b/internal/x", "a/internal/x/y", "a/internal/x/z", "b/internal/w"},
+			want: scopeSize{Root: "a/internal/x", Count: 2},
+		},
+		{
+			name: "internal ディレクトリ自体のパッケージは木の外に並ぶので数えない",
+			pkgs: []string{"cmd/foo/internal", "cmd/foo/internal/a"},
+			want: scopeSize{Root: "cmd/foo/internal", Count: 1},
+		},
+		{
+			name: "モジュール直下の共有 internal は数えない",
+			pkgs: []string{"internal/pathutil", "internal/settings", "app"},
+			want: scopeSize{},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := largestInternalScope(tt.pkgs); got != tt.want {
+				t.Errorf("largestInternalScope() = %+v, want %+v", got, tt.want)
+			}
+		})
 	}
 }
 

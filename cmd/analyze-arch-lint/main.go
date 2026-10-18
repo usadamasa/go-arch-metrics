@@ -27,7 +27,7 @@ func main() {
 	flag.Float64Var(&th.singletonRatio, "max-singleton-ratio", 0.5, "1 パッケージしか含まない component の割合の上限")
 	flag.Float64Var(&th.compilerScopedRatio, "max-compiler-scoped-ratio", 0.3, "Go の internal 規則が既にスコープしている辺の割合の上限")
 	flag.IntVar(&th.maxUnusedEdges, "max-unused-edges", 0, "未使用の mayDependOn の数の上限")
-	flag.IntVar(&th.maxScopePackages, "max-scope-packages", 10, "1 つの internal スコープが抱えるパッケージ数の上限")
+	flag.IntVar(&th.maxScopePackages, "max-scope-packages", 10, "internal の 1 つのディレクトリの直下に並ぶパッケージ数の上限")
 	flag.Parse()
 
 	if *showMetrics {
