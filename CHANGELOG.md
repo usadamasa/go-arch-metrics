@@ -1,5 +1,15 @@
 # Changelog
 
+## [2026.1018.0](https://github.com/usadamasa/go-arch-metrics/compare/2026.0927.0...2026.1018.0) - 2026-10-18
+
+### Other Changes
+- fix(measure): spm-go を PATH の go と同じ GOROOT で呼び、0 件を失敗にする by @usadamasa in https://github.com/usadamasa/go-arch-metrics/pull/18
+- chore(aqua): golangci-lint を v2.14.0 に上げる by @usadamasa in https://github.com/usadamasa/go-arch-metrics/pull/21
+- ci: ci-status-check を always() 形に直す by @usadamasa in https://github.com/usadamasa/go-arch-metrics/pull/22
+- chore: 開発ツールの管理を aqua から nix の devShell へ移す by @usadamasa in https://github.com/usadamasa/go-arch-metrics/pull/23
+- chore: nix 移行の後始末と gh-actions-lock の導入 by @usadamasa in https://github.com/usadamasa/go-arch-metrics/pull/24
+- spm-go への依存をやめ、Ca/Ce/A/I/D を analyze-modularity で算出する by @usadamasa in https://github.com/usadamasa/go-arch-metrics/pull/28
+
 ## [2026.0927.0](https://github.com/usadamasa/go-arch-metrics/compare/2026.0919.3...2026.0927.0) - 2026-09-27
 
 ### Other Changes
