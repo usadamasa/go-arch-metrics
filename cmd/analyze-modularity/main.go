@@ -20,7 +20,7 @@ type Report struct {
 type MainSequenceSummary struct {
 	ExcludedPackages             []string `json:"excluded_packages"`
 	StructurallyConstrainedCount int      `json:"structurally_constrained_count"`
-	NonVolatileCount             int      `json:"non_volatile_count"`
+	NonVolatileZoneOfPainCount   int      `json:"non_volatile_zone_of_pain_count"`
 	ActionableCount              int      `json:"actionable_count"`
 	ActionableMaxDistance        *float64 `json:"actionable_max_distance,omitempty"`
 	ActionableMeanDistance       *float64 `json:"actionable_mean_distance,omitempty"`
@@ -78,6 +78,11 @@ func main() {
 		fmt.Fprintf(os.Stderr, "  各ディレクトリ内の Go パッケージを解析します｡\n")
 		os.Exit(1)
 	}
+	// 窓 0 だと全パッケージが 0 commit になり、Zone of Pain がすべて非揮発に倒れて --strict が緩む
+	if *volatilityWindow < 1 || *volatileCommits < 1 {
+		fmt.Fprintf(os.Stderr, "エラー: --volatility-window と --volatile-commits は 1 以上を指定する\n")
+		os.Exit(1)
+	}
 
 	tracked, packages, err := collectPackages(args)
 	if err != nil {
@@ -91,8 +96,7 @@ func main() {
 		os.Exit(1)
 	}
 	if history.unmeasuredReason != "" {
-		fmt.Fprintf(os.Stderr, "注意: %s ので揮発性を測りません｡Zone of Pain はすべて揮発として扱います"+
-			" (CI では actions/checkout に fetch-depth: 0 を付ける)\n", history.unmeasuredReason)
+		fmt.Fprintf(os.Stderr, "注意: 揮発性を測りません (%s)｡Zone of Pain はすべて揮発として扱います\n", history.unmeasuredReason)
 	}
 
 	if err := enrichMainSequence(tracked, packages, history, *volatileCommits); err != nil {
@@ -130,11 +134,6 @@ func main() {
 		}
 	}
 
-	mainSequenceSummary := buildMainSequenceSummary(packages)
-	mainSequenceSummary.VolatilityWindowCommits = *volatilityWindow
-	mainSequenceSummary.VolatileCommitThreshold = *volatileCommits
-	mainSequenceSummary.VolatilityUnmeasuredReason = history.unmeasuredReason
-
 	summary := Summary{
 		MeanLOC:            locStats.Mean,
 		StddevLOC:          locStats.Stddev,
@@ -143,7 +142,7 @@ func main() {
 		TotalPackages:      len(packages),
 		TotalWarnings:      len(allWarnings),
 		ActionableWarnings: actionableWarnings,
-		MainSequence:       mainSequenceSummary,
+		MainSequence:       buildMainSequenceSummary(packages, history, *volatilityWindow, *volatileCommits),
 	}
 
 	report := Report{
@@ -240,8 +239,13 @@ func enrichMainSequence(listed []listedPackage, packages []PackageResult, histor
 }
 
 // buildMainSequenceSummary はパッケージの Ca/Ce/A/I/D からサマリを生成する｡
-func buildMainSequenceSummary(packages []PackageResult) *MainSequenceSummary {
-	summary := &MainSequenceSummary{}
+// 揮発性を決めた窓・しきい値・測れなかった理由も、actionable_* の前提として一緒に載せる｡
+func buildMainSequenceSummary(packages []PackageResult, history commitHistory, volatilityWindow, volatileCommits int) *MainSequenceSummary {
+	summary := &MainSequenceSummary{
+		VolatilityWindowCommits:    volatilityWindow,
+		VolatileCommitThreshold:    volatileCommits,
+		VolatilityUnmeasuredReason: history.unmeasuredReason,
+	}
 	var maxDist, sumDist float64
 	firstActionable := true
 
@@ -258,7 +262,7 @@ func buildMainSequenceSummary(packages []PackageResult) *MainSequenceSummary {
 			continue
 		}
 		if !isMainSequenceActionable(p.MainSequence) {
-			summary.NonVolatileCount++
+			summary.NonVolatileZoneOfPainCount++
 			continue
 		}
 		if p.MainSequence.Distance > mainSequenceDistanceThreshold {

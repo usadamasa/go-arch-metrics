@@ -69,7 +69,7 @@ func recentCommitCounts(moduleRoot string, window int) (commitHistory, error) {
 		return commitHistory{}, err
 	}
 	if shallow == "true" {
-		return commitHistory{unmeasuredReason: "shallow clone で履歴が欠けている"}, nil
+		return commitHistory{unmeasuredReason: "shallow clone で履歴が欠けている。CI では actions/checkout に fetch-depth: 0 を付ける"}, nil
 	}
 
 	if _, err := gitOutput(moduleRoot, "rev-parse", "--verify", "--quiet", "HEAD"); err != nil {

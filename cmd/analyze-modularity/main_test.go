@@ -230,10 +230,10 @@ func Test_buildMainSequenceSummary_非揮発のパッケージはactionableか�
 		{Path: "abstract", MainSequence: &MainSequenceData{Zone: ZoneOfUselessness, Distance: 0.7, Volatility: VolatilityNonVolatile}},
 	}
 
-	summary := buildMainSequenceSummary(packages)
+	summary := buildMainSequenceSummary(packages, commitHistory{}, defaultVolatilityWindow, defaultVolatileCommits)
 
-	if summary.NonVolatileCount != 1 {
-		t.Errorf("non_volatile_count = %d, want 1 (cold。zone_of_uselessness は数えない)", summary.NonVolatileCount)
+	if summary.NonVolatileZoneOfPainCount != 1 {
+		t.Errorf("non_volatile_zone_of_pain_count = %d, want 1 (cold。zone_of_uselessness は数えない)", summary.NonVolatileZoneOfPainCount)
 	}
 	if summary.ActionableCount != 3 {
 		t.Errorf("actionable_count = %d, want 3 (hot, unknown, abstract)", summary.ActionableCount)
@@ -278,6 +278,24 @@ func TestStrictFlag_揮発性(t *testing.T) {
 		code, stderr := runStrict(t, root)
 		if code != 1 {
 			t.Errorf("exit code = %d, want 1\n%s", code, stderr)
+		}
+	})
+
+	t.Run("窓やしきい値が 1 未満なら測る前に止める", func(t *testing.T) {
+		// 窓 0 だとすべてのパッケージが 0 commit になり、Zone of Pain がすべて非揮発に倒れて gate が緩む
+		root := committedFixtureModule(t)
+		for _, flagArg := range []string{"--volatility-window=0", "--volatile-commits=0"} {
+			cmd := exec.Command("go", "run", ".", "--strict", flagArg, root)
+			var stderr strings.Builder
+			cmd.Stderr = &stderr
+			err := cmd.Run()
+			exitErr, ok := err.(*exec.ExitError)
+			if !ok || exitErr.ExitCode() != 1 {
+				t.Errorf("%s: err = %v, want exit 1", flagArg, err)
+			}
+			if !strings.Contains(stderr.String(), "1 以上") {
+				t.Errorf("%s: stderr に理由が無い:\n%s", flagArg, stderr.String())
+			}
 		}
 	})
 

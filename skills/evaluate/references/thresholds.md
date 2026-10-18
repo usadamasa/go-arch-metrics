@@ -68,7 +68,7 @@ Martin は数値を示していないので、200 と 5 は目安。agents-daemo
 何度も触ると揮発に変わり、その PR の `--strict` が落ちうる。
 
 非揮発の Zone of Pain に付く `zone_of_pain` は `actionable: false` になり、`high_distance` は出さない
-(D は `zone_of_pain` の `value` が持つ)。`summary.main_sequence.non_volatile_count` に数え、`actionable_*` からは除く。
+(D は `zone_of_pain` の `value` が持つ)。`summary.main_sequence.non_volatile_zone_of_pain_count` に数え、`actionable_*` からは除く。
 このため、この扱いが入る前と比べて `actionable_count` の値が下がることがある。
 Zone of Uselessness は使われていない抽象で、変更頻度と関係ないので外さない。
 

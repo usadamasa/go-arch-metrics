@@ -76,7 +76,7 @@ Summary:
     "main_sequence": {
       "excluded_packages": ["cmd/app"],
       "structurally_constrained_count": 3,
-      "non_volatile_count": 2,
+      "non_volatile_zone_of_pain_count": 2,
       "actionable_count": 1,
       "actionable_max_distance": 0.53, "actionable_mean_distance": 0.53,
       "volatility_window_commits": 200, "volatile_commit_threshold": 5

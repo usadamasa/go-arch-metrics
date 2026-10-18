@@ -19,7 +19,7 @@ setup() {
     # go-arch-lint は違反なしの JSON を返す (--json 以外のフラグでは何も出さず落ちる)
     stub_go_arch_lint 0 '{"Type":"models.Check","Payload":{"ArchHasWarnings":false,"ArchWarningsDeps":[],"ArchWarningsNotMatched":[],"ArchWarningsDeepScan":[]}}'
     # analyze-modularity は警告なしのレポートを返す。summary が無いと baseline.sh は実行失敗とみなす
-    stub_analyze_modularity 0 '{"packages":[],"summary":{"mean_loc":0,"stddev_loc":0,"mean_public_ratio":0,"total_packages":0,"total_warnings":0,"actionable_warnings":0,"main_sequence":{"excluded_packages":null,"structurally_constrained_count":0,"actionable_count":0}}}'
+    stub_analyze_modularity 0 '{"packages":[],"summary":{"mean_loc":0,"stddev_loc":0,"mean_public_ratio":0,"total_packages":0,"total_warnings":0,"actionable_warnings":0,"main_sequence":{"excluded_packages":null,"structurally_constrained_count":0,"non_volatile_zone_of_pain_count":0,"actionable_count":0,"volatility_window_commits":200,"volatile_commit_threshold":5}}}'
 
     printf '%s\n' 'module baseline-fixture' 'go 1.26.1' > "${PROJECT}/go.mod"
     # .go-arch-lint.yml が無いと baseline.sh は測定前に exit 1 する
@@ -188,14 +188,14 @@ write_failing_test() {
 
 @test "analyze-modularity の Main Sequence 集計をサマリに出す" {
     write_passing_test
-    stub_analyze_modularity 0 '{"packages":[],"summary":{"mean_loc":0,"stddev_loc":0,"mean_public_ratio":0,"total_packages":3,"total_warnings":3,"actionable_warnings":1,"main_sequence":{"excluded_packages":["cmd/app"],"structurally_constrained_count":1,"non_volatile_count":2,"actionable_count":1,"actionable_max_distance":0.7,"actionable_mean_distance":0.7,"volatility_window_commits":200,"volatile_commit_threshold":5}}}'
+    stub_analyze_modularity 0 '{"packages":[],"summary":{"mean_loc":0,"stddev_loc":0,"mean_public_ratio":0,"total_packages":3,"total_warnings":3,"actionable_warnings":1,"main_sequence":{"excluded_packages":["cmd/app"],"structurally_constrained_count":1,"non_volatile_zone_of_pain_count":2,"actionable_count":1,"actionable_max_distance":0.7,"actionable_mean_distance":0.7,"volatility_window_commits":200,"volatile_commit_threshold":5}}}'
 
     run bash "$BASELINE" "$PROJECT"
 
     [ "$status" -eq 0 ]
     [[ "$output" == *"アクション可能 Distance > 0.5: 1 件"* ]]
     [[ "$output" == *"構造制約パッケージ数: 1"* ]]
-    [[ "$output" == *"非揮発パッケージ数 (直近 200 commit で 5 回未満): 2"* ]]
+    [[ "$output" == *"非揮発の Zone of Pain (直近 200 commit で 5 回未満): 2 件"* ]]
     [[ "$output" == *"警告数: 3 (うち --strict が失敗に数えるもの: 1)"* ]]
     [ "$(jq '.modularity.summary.main_sequence.actionable_count' "${PROJECT}"/baseline-*.json)" -eq 1 ]
 }
