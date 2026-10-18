@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"maps"
+	"path"
 	"slices"
 	"sort"
 	"strings"
@@ -72,7 +73,7 @@ type fanOut struct {
 	Count     int    `json:"count"`
 }
 
-// scopeSize は 1 つの internal スコープ (= 1 つの cmd の木) が抱えるパッケージ数｡
+// scopeSize は internal の木の中の 1 つのディレクトリ (Root) の直下に並ぶパッケージ数｡
 // component を役割単位へ畳むと、木の中がいくら増えても設定は変わらなくなる｡
 // その肥大化はここで見る｡
 type scopeSize struct {
@@ -173,13 +174,14 @@ func usesVendor(importsBy map[string][]string, fromPkgs []string, prefixes []str
 	return false
 }
 
-// largestInternalScope は最も多くのパッケージを抱える internal スコープを返す｡
+// largestInternalScope は internal の木の中で、直下に最も多くのパッケージが並ぶディレクトリを返す｡
+// 木全体で合算すると、責務ごとにサブディレクトリへまとめても数が減らなくなる｡
 // 同数のときは名前順で安定させる｡
 func largestInternalScope(pkgs []string) scopeSize {
 	counts := map[string]int{}
 	for _, p := range pkgs {
-		if root := internalScopeRoot(p); root != "" {
-			counts[root]++
+		if internalScopeRoot(p) != "" {
+			counts[path.Dir(p)]++
 		}
 	}
 	var largest scopeSize

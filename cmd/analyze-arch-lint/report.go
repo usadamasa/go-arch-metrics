@@ -31,7 +31,7 @@ func renderReport(r report) string {
 	fmt.Fprintf(&b, "mayDependOn: %d 辺 (未使用 %d / _test.go のみ %d / internal 規則でスコープ済み %d = %.0f%%)\n",
 		r.DeclaredEdges, r.UnusedEdges, r.TestOnlyEdges, r.CompilerScopedEdges, r.compilerScopedRatio()*100)
 	fmt.Fprintf(&b, "最大 fan-out: %s (%d 辺)\n", r.MaxFanOut.Component, r.MaxFanOut.Count)
-	fmt.Fprintf(&b, "最大の internal スコープ: %s (%d パッケージ)\n",
+	fmt.Fprintf(&b, "internal で最もパッケージが並ぶディレクトリ: %s (%d パッケージ)\n",
 		r.MaxScopePackages.Root, r.MaxScopePackages.Count)
 
 	byKind := map[string][]finding{}

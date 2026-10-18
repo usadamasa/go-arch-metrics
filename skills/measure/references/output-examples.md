@@ -122,7 +122,7 @@ component: 3 個 (うち 1 パッケージのみ: 0 個 / 0%)
 パッケージ: 24 個 (どの component にも属さない: 0 個)
 mayDependOn: 4 辺 (未使用 0 / _test.go のみ 0 / internal 規則でスコープ済み 1 = 25%)
 最大 fan-out: cmd_main (2 辺)
-最大の internal スコープ: cmd/analyze-latency (5 パッケージ)
+internal で最もパッケージが並ぶディレクトリ: cmd/analyze-latency/internal (5 パッケージ)
 ```
 
 指標の意味・しきい値・対処は `analyze-arch-lint --metrics` が出す。
