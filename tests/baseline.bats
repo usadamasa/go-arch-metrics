@@ -10,7 +10,7 @@ setup() {
 
     # baseline.sh が require_tool で要求する外部ツール。中身は問わないので
     # 何も出さずに成功するスタブでよい。go と jq は本物を使う。
-    for tool in golangci-lint go-arch-lint gosec govulncheck \
+    for tool in golangci-lint go-arch-lint gosec vulncheck \
                 analyze-modularity analyze-arch-lint; do
         printf '%s\n' '#!/bin/sh' 'exit 0' > "${STUB_BIN}/${tool}"
         chmod +x "${STUB_BIN}/${tool}"
@@ -41,14 +41,14 @@ stub_go_arch_lint() {
     chmod +x "${STUB_BIN}/go-arch-lint"
 }
 
-# stub_govulncheck <exit-code> <stdout>
-# 実物は脆弱性なしで 0、脆弱性ありで 3、実行できなければそれ以外を返す。
-stub_govulncheck() {
+# stub_vulncheck <exit-code> <stdout>
+# 実物 (govulncheck の組み込み) は脆弱性なしで 0、脆弱性ありで 3、実行できなければそれ以外を返す。
+stub_vulncheck() {
     local rc="$1" out="$2"
     printf '%s\n' '#!/bin/sh' \
         "printf '%s\n' '${out}'" \
-        "exit ${rc}" > "${STUB_BIN}/govulncheck"
-    chmod +x "${STUB_BIN}/govulncheck"
+        "exit ${rc}" > "${STUB_BIN}/vulncheck"
+    chmod +x "${STUB_BIN}/vulncheck"
 }
 
 # stub_analyze_modularity <exit-code> <stdout> [stderr]
@@ -113,7 +113,7 @@ write_failing_test() {
 
 @test "govulncheck が脆弱性を見つけたら出力を残して測定を続ける" {
     write_passing_test
-    stub_govulncheck 3 'Vulnerability #1: GO-2024-0001'
+    stub_vulncheck 3 'Vulnerability #1: GO-2024-0001'
 
     run bash "$BASELINE" "$PROJECT"
 
@@ -125,14 +125,14 @@ write_failing_test() {
 
 @test "govulncheck が実行できなければ未測定として理由を出し、測定を続ける" {
     write_passing_test
-    # sandbox の中では vuln.go.dev への TLS 検証が通らず、脆弱性の有無と無関係に落ちる
-    stub_govulncheck 1 'govulncheck: fetching vulnerabilities: Get "https://vuln.go.dev/index/modules.json.gz": tls: failed to verify certificate: x509: OSStatus -26276'
+    # DB に届かないと脆弱性の有無と無関係に落ちる
+    stub_vulncheck 1 'govulncheck: fetching vulnerabilities: Get "https://vuln.go.dev/index/modules.json.gz": dial tcp: lookup vuln.go.dev: no such host'
 
     run bash "$BASELINE" "$PROJECT"
 
     [ "$status" -eq 0 ]
     [[ "$output" == *"govulncheck: 未測定"* ]]
-    [[ "$output" == *"tls: failed to verify certificate"* ]]
+    [[ "$output" == *"no such host"* ]]
     [[ "$output" != *"脆弱性なし"* ]]
     [ "$(jq -r '.govulncheck.status' "${PROJECT}"/baseline-*.json)" = "unmeasured" ]
     [ "$(jq -r '.govulncheck.exit_code' "${PROJECT}"/baseline-*.json)" = "1" ]
