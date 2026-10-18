@@ -8,7 +8,6 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"strings"
 )
 
 // MainSequenceData は Martin の Package Metrics (Ca/Ce/A/I/D) と Zone 分類結果を保持する｡
@@ -90,14 +89,8 @@ const (
 // Martin, Clean Architecture, Chapter 14 に基づく｡
 const mainSequenceDistanceThreshold = 0.5
 
-// AnalyzeDir はディレクトリ内の Go ソースファイルを解析する｡
-// テストファイル (*_test.go) は除外する｡
-func AnalyzeDir(dir string) (PackageResult, error) {
-	goFiles, err := listGoSourceFiles(dir)
-	if err != nil {
-		return PackageResult{}, err
-	}
-
+// AnalyzeDir は dir の goFiles (go list の GoFiles。テストと build constraint で外れるファイルを含まない) を解析する｡
+func AnalyzeDir(dir string, goFiles []string) (PackageResult, error) {
 	if len(goFiles) == 0 {
 		return PackageResult{}, fmt.Errorf("go ソースファイルが見つかりません: %s", dir)
 	}
@@ -119,26 +112,9 @@ func AnalyzeDir(dir string) (PackageResult, error) {
 	return result, nil
 }
 
-// listGoSourceFiles はディレクトリ内の Go ソースファイル名を返す (テストファイル除外)｡
-func listGoSourceFiles(dir string) ([]string, error) {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil, fmt.Errorf("ディレクトリの読み込みに失敗: %w", err)
-	}
-
-	var goFiles []string
-	for _, e := range entries {
-		name := e.Name()
-		if strings.HasSuffix(name, ".go") && !strings.HasSuffix(name, "_test.go") {
-			goFiles = append(goFiles, name)
-		}
-	}
-	return goFiles, nil
-}
-
 // analyzeFile は単一の Go ファイルを解析し、結果を result に加算する｡
 func analyzeFile(fset *token.FileSet, fullPath string, result *PackageResult) error {
-	src, err := os.ReadFile(fullPath) // #nosec G304 -- listGoSourceFiles で列挙した既知ファイル
+	src, err := os.ReadFile(fullPath) // #nosec G304 -- go list が列挙した既知ファイル
 	if err != nil {
 		return fmt.Errorf("ファイルの読み込みに失敗: %w", err)
 	}

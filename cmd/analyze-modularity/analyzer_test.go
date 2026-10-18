@@ -67,7 +67,7 @@ func (p *PublicType) PublicMethod() {}
 func (p *PublicType) privateMethod() {}
 `)
 
-		result, err := AnalyzeDir(dir)
+		result, err := AnalyzeDir(dir, []string{"sample.go"})
 		if err != nil {
 			t.Fatalf("AnalyzeDir 失敗: %v", err)
 		}
@@ -102,7 +102,7 @@ func (p *PublicType) privateMethod() {}
 		dir := t.TempDir()
 		writeGoFile(t, dir, "funcs.go", "package funcs\n\nfunc F() {}\n")
 
-		result, err := AnalyzeDir(dir)
+		result, err := AnalyzeDir(dir, []string{"funcs.go"})
 		if err != nil {
 			t.Fatalf("AnalyzeDir 失敗: %v", err)
 		}
@@ -111,7 +111,7 @@ func (p *PublicType) privateMethod() {}
 		}
 	})
 
-	t.Run("テストファイルを除外する", func(t *testing.T) {
+	t.Run("渡されたファイルだけを読む (go list の GoFiles にテストファイルは含まれない)", func(t *testing.T) {
 		dir := t.TempDir()
 		writeGoFile(t, dir, "lib.go", `package lib
 
@@ -124,39 +124,35 @@ func TestExported(t *testing.T) {}
 func helperFunc() {}
 `)
 
-		result, err := AnalyzeDir(dir)
+		result, err := AnalyzeDir(dir, []string{"lib.go"})
 		if err != nil {
 			t.Fatalf("AnalyzeDir 失敗: %v", err)
 		}
 
-		// テストファイルの関数はカウントされないこと
 		if result.ExportedFuncs != 1 {
-			t.Errorf("ExportedFuncs: got %d, want 1 (テストファイル除外)", result.ExportedFuncs)
+			t.Errorf("ExportedFuncs: got %d, want 1", result.ExportedFuncs)
 		}
 		if result.UnexportedFuncs != 1 {
-			t.Errorf("UnexportedFuncs: got %d, want 1 (テストファイル除外)", result.UnexportedFuncs)
+			t.Errorf("UnexportedFuncs: got %d, want 1", result.UnexportedFuncs)
+		}
+		if result.Files != 1 {
+			t.Errorf("Files: got %d, want 1", result.Files)
 		}
 	})
 
-	t.Run("空ディレクトリ", func(t *testing.T) {
+	t.Run("ファイルが無ければエラー", func(t *testing.T) {
 		dir := t.TempDir()
-		_, err := AnalyzeDir(dir)
+		_, err := AnalyzeDir(dir, nil)
 		if err == nil {
-			t.Error("空ディレクトリではエラーを返すべき")
+			t.Error("ファイルが無ければエラーを返すべき")
 		}
 	})
 
-	t.Run("権限エラーのディレクトリ", func(t *testing.T) {
+	t.Run("読めないファイルはエラー", func(t *testing.T) {
 		dir := t.TempDir()
-		err := os.Chmod(dir, 0000)
-		if err != nil {
-			t.Skipf("chmod 0000 に失敗 (root ユーザーの可能性): %v", err)
-		}
-		t.Cleanup(func() { os.Chmod(dir, 0755) })
-
-		_, err = AnalyzeDir(dir)
+		_, err := AnalyzeDir(dir, []string{"missing.go"})
 		if err == nil {
-			t.Error("権限エラーのディレクトリではエラーを返すべき")
+			t.Error("存在しないファイルではエラーを返すべき")
 		}
 	})
 }

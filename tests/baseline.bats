@@ -41,6 +41,16 @@ stub_go_arch_lint() {
     chmod +x "${STUB_BIN}/go-arch-lint"
 }
 
+# stub_govulncheck <exit-code> <stdout>
+# 実物は脆弱性なしで 0、脆弱性ありで 3、実行できなければそれ以外を返す。
+stub_govulncheck() {
+    local rc="$1" out="$2"
+    printf '%s\n' '#!/bin/sh' \
+        "printf '%s\n' '${out}'" \
+        "exit ${rc}" > "${STUB_BIN}/govulncheck"
+    chmod +x "${STUB_BIN}/govulncheck"
+}
+
 # stub_analyze_modularity <exit-code> <stdout> [stderr]
 # 実物は失敗の理由を stderr に出し、stdout には JSON だけを出す。
 stub_analyze_modularity() {
@@ -96,6 +106,36 @@ write_failing_test() {
     [ "$status" -eq 0 ]
     [[ "$output" == *"平均カバレッジ:"* ]]
     ls "${PROJECT}"/baseline-*.json
+    # 既定のスタブは exit 0 なので脆弱性なし
+    [[ "$output" == *"govulncheck: 脆弱性なし"* ]]
+    [ "$(jq -r '.govulncheck.status' "${PROJECT}"/baseline-*.json)" = "ok" ]
+}
+
+@test "govulncheck が脆弱性を見つけたら出力を残して測定を続ける" {
+    write_passing_test
+    stub_govulncheck 3 'Vulnerability #1: GO-2024-0001'
+
+    run bash "$BASELINE" "$PROJECT"
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"govulncheck: 脆弱性あり"* ]]
+    [[ "$output" == *"GO-2024-0001"* ]]
+    [ "$(jq -r '.govulncheck.status' "${PROJECT}"/baseline-*.json)" = "vulnerable" ]
+}
+
+@test "govulncheck が実行できなければ未測定として理由を出し、測定を続ける" {
+    write_passing_test
+    # sandbox の中では vuln.go.dev への TLS 検証が通らず、脆弱性の有無と無関係に落ちる
+    stub_govulncheck 1 'govulncheck: fetching vulnerabilities: Get "https://vuln.go.dev/index/modules.json.gz": tls: failed to verify certificate: x509: OSStatus -26276'
+
+    run bash "$BASELINE" "$PROJECT"
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"govulncheck: 未測定"* ]]
+    [[ "$output" == *"tls: failed to verify certificate"* ]]
+    [[ "$output" != *"脆弱性なし"* ]]
+    [ "$(jq -r '.govulncheck.status' "${PROJECT}"/baseline-*.json)" = "unmeasured" ]
+    [ "$(jq -r '.govulncheck.exit_code' "${PROJECT}"/baseline-*.json)" = "1" ]
 }
 
 @test "go-arch-lint の依存方向違反を件数と中身で出し、JSON に残す" {

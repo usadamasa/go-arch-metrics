@@ -3,7 +3,9 @@ package main
 import (
 	"math"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -202,7 +204,11 @@ func Test_enrichMainSequence(t *testing.T) {
 			{Path: filepath.Join(".", "c"), ExportedTypes: 1, InterfaceTypes: 1},
 		}
 
-		if err := enrichMainSequence(".", packages); err != nil {
+		listed, err := listModulePackages(".")
+		if err != nil {
+			t.Fatalf("listModulePackages 失敗: %v", err)
+		}
+		if err := enrichMainSequence(listed, packages); err != nil {
 			t.Fatalf("enrichMainSequence 失敗: %v", err)
 		}
 
@@ -211,6 +217,168 @@ func Test_enrichMainSequence(t *testing.T) {
 		}
 		if packages[1].MainSequence == nil || packages[1].MainSequence.Abstractness != 1 {
 			t.Errorf("c: %+v, want A=1", packages[1].MainSequence)
+		}
+	})
+}
+
+// initGitRepo は dir を git リポジトリにし、.gitignore を置く｡
+func initGitRepo(t *testing.T, dir, gitignore string) {
+	t.Helper()
+	cmd := exec.Command("git", "-C", dir, "init", "-q")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git init 失敗: %v\n%s", err, out)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte(gitignore), 0644); err != nil {
+		t.Fatalf(".gitignore 作成失敗: %v", err)
+	}
+}
+
+func Test_gitIgnoredDirs(t *testing.T) {
+	t.Run(".gitignore に当たるディレクトリを返す", func(t *testing.T) {
+		root := t.TempDir()
+		initGitRepo(t, root, "tmp/\n")
+		for _, d := range []string{"a", "tmp/x"} {
+			if err := os.MkdirAll(filepath.Join(root, d), 0755); err != nil {
+				t.Fatalf("mkdir 失敗: %v", err)
+			}
+		}
+
+		ignored, err := gitIgnoredDirs(root, []string{filepath.Join(root, "a"), filepath.Join(root, "tmp", "x")})
+		if err != nil {
+			t.Fatalf("gitIgnoredDirs 失敗: %v", err)
+		}
+
+		tmpX, _ := canonicalDir(filepath.Join(root, "tmp", "x"))
+		a, _ := canonicalDir(filepath.Join(root, "a"))
+		if !ignored[tmpX] {
+			t.Errorf("tmp/x は ignore されるはず: %v", ignored)
+		}
+		if ignored[a] {
+			t.Errorf("a は ignore されないはず: %v", ignored)
+		}
+	})
+
+	t.Run("何も当たらなければ空", func(t *testing.T) {
+		root := t.TempDir()
+		initGitRepo(t, root, "")
+		if err := os.MkdirAll(filepath.Join(root, "a"), 0755); err != nil {
+			t.Fatalf("mkdir 失敗: %v", err)
+		}
+
+		ignored, err := gitIgnoredDirs(root, []string{filepath.Join(root, "a")})
+		if err != nil {
+			t.Fatalf("gitIgnoredDirs 失敗: %v", err)
+		}
+		if len(ignored) != 0 {
+			t.Errorf("ignore は空のはず: %v", ignored)
+		}
+	})
+
+	t.Run("git が PATH に無ければエラー (リポジトリでないのとは区別する)", func(t *testing.T) {
+		root := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(root, "a"), 0755); err != nil {
+			t.Fatalf("mkdir 失敗: %v", err)
+		}
+		t.Setenv("PATH", t.TempDir())
+
+		_, err := gitIgnoredDirs(root, []string{filepath.Join(root, "a")})
+		if err == nil {
+			t.Fatal("git が無ければエラーを返すべき")
+		}
+		if !strings.Contains(err.Error(), "git が PATH に見つかりません") {
+			t.Errorf("エラー文: %v", err)
+		}
+	})
+
+	t.Run("git リポジトリでなければ空", func(t *testing.T) {
+		root := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(root, "tmp", "x"), 0755); err != nil {
+			t.Fatalf("mkdir 失敗: %v", err)
+		}
+
+		ignored, err := gitIgnoredDirs(root, []string{filepath.Join(root, "tmp", "x")})
+		if err != nil {
+			t.Fatalf("git リポジトリでなくてもエラーにしない: %v", err)
+		}
+		if len(ignored) != 0 {
+			t.Errorf("ignore は空のはず: %v", ignored)
+		}
+	})
+}
+
+func Test_dropIgnored(t *testing.T) {
+	root := writeFixtureModule(t)
+	initGitRepo(t, root, "c/\n")
+	listed, err := listModulePackages(root)
+	if err != nil {
+		t.Fatalf("listModulePackages 失敗: %v", err)
+	}
+
+	tracked, err := dropIgnored(root, listed)
+	if err != nil {
+		t.Fatalf("dropIgnored 失敗: %v", err)
+	}
+
+	if len(tracked) != 5 {
+		t.Fatalf("tracked = %d 件, want 5 (c を除く)", len(tracked))
+	}
+	for _, p := range tracked {
+		if p.Name == "c" {
+			t.Errorf("ignore された c が残っている")
+		}
+	}
+	// 辺の数え上げも tracked だけで行うので、b の Ce は c 向けの辺が落ちて 0 になる
+	if ce := computeCoupling(tracked)[tracked[1].Dir].EfferentCoupling; ce != 0 {
+		t.Errorf("b.Ce = %d, want 0 (ignore された c への辺は数えない)", ce)
+	}
+}
+
+func Test_selectPackages(t *testing.T) {
+	root := writeFixtureModule(t)
+	listed, err := listModulePackages(root)
+	if err != nil {
+		t.Fatalf("listModulePackages 失敗: %v", err)
+	}
+
+	t.Run("引数の下にあるパッケージを引数基準の Path で返す", func(t *testing.T) {
+		selected, err := selectPackages(listed, []string{root})
+		if err != nil {
+			t.Fatalf("selectPackages 失敗: %v", err)
+		}
+		var paths []string
+		for _, s := range selected {
+			paths = append(paths, s.Path)
+		}
+		want := []string{
+			filepath.Join(root, "a"), filepath.Join(root, "b"), filepath.Join(root, "c"),
+			filepath.Join(root, "d"), filepath.Join(root, "e"), filepath.Join(root, "iso"),
+		}
+		if strings.Join(paths, ",") != strings.Join(want, ",") {
+			t.Errorf("paths = %v, want %v", paths, want)
+		}
+		if len(selected[0].GoFiles) != 1 || selected[0].GoFiles[0] != "a.go" {
+			t.Errorf("a.GoFiles = %v, want [a.go]", selected[0].GoFiles)
+		}
+	})
+
+	t.Run("サブディレクトリを渡せばその下だけ", func(t *testing.T) {
+		selected, err := selectPackages(listed, []string{filepath.Join(root, "b")})
+		if err != nil {
+			t.Fatalf("selectPackages 失敗: %v", err)
+		}
+		if len(selected) != 1 || selected[0].Path != filepath.Join(root, "b") {
+			t.Errorf("selected = %+v, want b だけ", selected)
+		}
+	})
+
+	t.Run("相対パスの引数なら Path も相対", func(t *testing.T) {
+		t.Chdir(root)
+		selected, err := selectPackages(listed, []string{"."})
+		if err != nil {
+			t.Fatalf("selectPackages 失敗: %v", err)
+		}
+		if len(selected) != 6 || selected[0].Path != "a" {
+			t.Errorf("selected = %+v, want 6 件で先頭は a", selected)
 		}
 	})
 }

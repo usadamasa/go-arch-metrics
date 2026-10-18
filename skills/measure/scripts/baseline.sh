@@ -107,8 +107,29 @@ printf '%s\n' ""
 
 # govulncheck の実行
 printf '%s\n' "--- govulncheck (脆弱性スキャン) ---"
-# 脆弱性検出時の非ゼロ終了は許容
-govulncheck ./... 2>&1 || true
+# exit 0 は脆弱性なし、3 は脆弱性あり、それ以外は実行できていない (脆弱性 DB を取れなかった等)。
+# Claude Code の sandbox の中では vuln.go.dev への TLS 検証が通らず、脆弱性の有無と無関係に落ちる。
+# 未測定を「なし」に見せないよう、3 つを分けて出力と JSON に残す。
+VULN_RC=0
+VULN_OUT=$(govulncheck ./... 2>&1) || VULN_RC=$?
+case "$VULN_RC" in
+    0)
+        VULN_STATUS=ok
+        printf '%s\n' "govulncheck: 脆弱性なし"
+        ;;
+    3)
+        VULN_STATUS=vulnerable
+        printf '%s\n' "govulncheck: 脆弱性あり"
+        printf '%s\n' "$VULN_OUT"
+        ;;
+    *)
+        VULN_STATUS=unmeasured
+        printf '%s\n' "govulncheck: 未測定 (exit ${VULN_RC})。実行に失敗しているので脆弱性の有無は分からない" >&2
+        printf '%s\n' "  sandbox の中で回しているなら、単独で govulncheck ./... を打ち直すこと。理由:" >&2
+        printf '%s\n' "$VULN_OUT" | tail -5 >&2
+        ;;
+esac
+readonly VULN_STATUS VULN_RC
 printf '%s\n' ""
 
 # gosec の実行
@@ -190,12 +211,15 @@ jq -n \
   --argjson golangci "$GOLANGCI_RESULT" \
   --argjson arch "$ARCH_RESULT" \
   --argjson modularity "$MODULARITY_RESULT" \
+  --arg vuln_status "$VULN_STATUS" \
+  --argjson vuln_rc "$VULN_RC" \
   '{
     timestamp: $ts,
     project: $project,
     golangci_lint: $golangci,
     go_arch_lint: $arch,
-    modularity: $modularity
+    modularity: $modularity,
+    govulncheck: {status: $vuln_status, exit_code: $vuln_rc}
   }' > "$OUTPUT_JSON"
 printf '%s\n' "詳細結果を保存しました: $OUTPUT_JSON"
 

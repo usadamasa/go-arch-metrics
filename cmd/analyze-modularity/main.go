@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 )
 
 // Report はレポートの最上位構造｡
@@ -71,31 +70,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	var packages []PackageResult
-	for _, arg := range args {
-		dirs, err := findGoPackageDirs(arg)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "エラー: %v\n", err)
-			os.Exit(1)
-		}
-		for _, dir := range dirs {
-			result, err := AnalyzeDir(dir)
-			if err != nil {
-				if !strings.Contains(err.Error(), "go ソースファイルが見つかりません") {
-					fmt.Fprintf(os.Stderr, "警告: %s: %v\n", dir, err)
-				}
-				continue
-			}
-			packages = append(packages, result)
-		}
-	}
-
-	if len(packages) == 0 {
-		fmt.Fprintf(os.Stderr, "エラー: 解析可能な Go パッケージが見つかりません\n")
+	tracked, packages, err := collectPackages(args)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "エラー: %v\n", err)
 		os.Exit(1)
 	}
 
-	if err := enrichMainSequence(inferModuleRoot(args), packages); err != nil {
+	if err := enrichMainSequence(tracked, packages); err != nil {
 		fmt.Fprintf(os.Stderr, "エラー: %v\n", err)
 		os.Exit(1)
 	}
@@ -151,15 +132,43 @@ func main() {
 	}
 }
 
-// enrichMainSequence は go list の import 辺から Ca/Ce を数え、AST の型カウントから A を出して
-// 各パッケージの MainSequence を埋める｡go list に含まれないパッケージは nil のまま残し、stderr に知らせる｡
-func enrichMainSequence(moduleRoot string, packages []PackageResult) error {
+// collectPackages は測る対象を決めて読む｡測るのは構成管理の対象だけ: go list が列挙するパッケージ
+// (入れ子のモジュールと vendor を含まない) から git が ignore するものを落とし、args の下にあるものを
+// 解析する｡返す tracked は Ca/Ce の辺を数える集合で、ignore されたものを含まない｡
+func collectPackages(args []string) ([]listedPackage, []PackageResult, error) {
+	moduleRoot := inferModuleRoot(args)
 	listed, err := listModulePackages(moduleRoot)
 	if err != nil {
-		return err
+		return nil, nil, err
+	}
+	tracked, err := dropIgnored(moduleRoot, listed)
+	if err != nil {
+		return nil, nil, err
+	}
+	selected, err := selectPackages(tracked, args)
+	if err != nil {
+		return nil, nil, err
 	}
 
-	// go list の Dir は絶対パスで、走査したディレクトリは引数のまま (相対もある)。symlink の解決度も
+	var packages []PackageResult
+	for _, s := range selected {
+		result, err := AnalyzeDir(s.Dir, s.GoFiles)
+		if err != nil {
+			return nil, nil, fmt.Errorf("%s: %w", s.Path, err)
+		}
+		result.Path = s.Path
+		packages = append(packages, result)
+	}
+	if len(packages) == 0 {
+		return nil, nil, fmt.Errorf("解析可能な Go パッケージが見つかりません")
+	}
+	return tracked, packages, nil
+}
+
+// enrichMainSequence は listed の import 辺から Ca/Ce を数え、AST の型カウントから A を出して
+// 各パッケージの MainSequence を埋める｡
+func enrichMainSequence(listed []listedPackage, packages []PackageResult) error {
+	// go list の Dir は絶対パスで、報告側の Path は引数のまま (相対もある)。symlink の解決度も
 	// 違いうるので、両方を実体の絶対パスにそろえてから突き合わせる
 	byDir := make(map[string]PackageMetrics, len(listed))
 	for dir, m := range computeCoupling(listed) {
@@ -177,8 +186,7 @@ func enrichMainSequence(moduleRoot string, packages []PackageResult) error {
 		}
 		m, ok := byDir[dir]
 		if !ok {
-			fmt.Fprintf(os.Stderr, "警告: go list に含まれないため Ca/Ce を算出できません: %s\n", packages[i].Path)
-			continue
+			return fmt.Errorf("go list の結果に %s が無い", packages[i].Path)
 		}
 		m.Abstractness = packages[i].Abstractness()
 		m.Instability = instability(m.AfferentCoupling, m.EfferentCoupling)
@@ -194,15 +202,6 @@ func enrichMainSequence(moduleRoot string, packages []PackageResult) error {
 		}
 	}
 	return nil
-}
-
-// canonicalDir は symlink を解決した絶対パスを返す｡
-func canonicalDir(path string) (string, error) {
-	abs, err := filepath.Abs(path)
-	if err != nil {
-		return "", err
-	}
-	return filepath.EvalSymlinks(abs)
 }
 
 // buildMainSequenceSummary はパッケージの Ca/Ce/A/I/D からサマリを生成する｡
@@ -240,51 +239,4 @@ func buildMainSequenceSummary(packages []PackageResult) *MainSequenceSummary {
 	}
 
 	return summary
-}
-
-// findGoPackageDirs はディレクトリを再帰的に走査し、Go ファイルを含むディレクトリを返す｡
-func findGoPackageDirs(root string) ([]string, error) {
-	info, err := os.Stat(root)
-	if err != nil {
-		return nil, fmt.Errorf("パスが存在しません: %s", root)
-	}
-	if !info.IsDir() {
-		return nil, fmt.Errorf("ディレクトリではありません: %s", root)
-	}
-
-	var dirs []string
-	err = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "警告: Walk エラー: %s: %v\n", path, err)
-			return nil
-		}
-		if !info.IsDir() {
-			return nil
-		}
-		// vendor, testdata, .git 等を除外
-		base := filepath.Base(path)
-		if base == "vendor" || base == "testdata" || base == ".git" || base == ".worktrees" {
-			return filepath.SkipDir
-		}
-		// Go ファイルがあるかチェック
-		entries, err := os.ReadDir(path)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "警告: ReadDir エラー: %s: %v\n", path, err)
-			return nil
-		}
-		for _, e := range entries {
-			name := e.Name()
-			if filepath.Ext(name) == ".go" && !isTestFile(name) {
-				dirs = append(dirs, path)
-				break
-			}
-		}
-		return nil
-	})
-	return dirs, err
-}
-
-// isTestFile はファイル名がテストファイルかどうか判定する｡
-func isTestFile(name string) bool {
-	return len(name) > 8 && name[len(name)-8:] == "_test.go"
 }

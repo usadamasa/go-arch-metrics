@@ -40,6 +40,11 @@ bash "${CLAUDE_PLUGIN_ROOT}/skills/measure/scripts/baseline.sh" ./
 JSON は `go-arch-metrics:evaluate` がそのまま読む。測定日時が入るので、
 改善の前後を比べるときは消さずに残す。
 
+govulncheck が「未測定」になったら、脆弱性 DB (vuln.go.dev) を取れずに落ちている。
+Claude Code の sandbox の中で baseline.sh を回すと TLS 検証が通らないので、
+`govulncheck ./...` を単独で打ち直して、その結果を評価に使う。JSON の `govulncheck.status` も
+`unmeasured` のままなので、「脆弱性なし」と読まない。
+
 ## 対象メトリクス早見表
 
 | カテゴリ | メトリクス | ツール | しきい値 |
