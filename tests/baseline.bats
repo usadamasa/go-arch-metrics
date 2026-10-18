@@ -188,13 +188,14 @@ write_failing_test() {
 
 @test "analyze-modularity の Main Sequence 集計をサマリに出す" {
     write_passing_test
-    stub_analyze_modularity 0 '{"packages":[],"summary":{"mean_loc":0,"stddev_loc":0,"mean_public_ratio":0,"total_packages":3,"total_warnings":3,"actionable_warnings":1,"main_sequence":{"excluded_packages":["cmd/app"],"structurally_constrained_count":1,"actionable_count":1,"actionable_max_distance":0.7,"actionable_mean_distance":0.7}}}'
+    stub_analyze_modularity 0 '{"packages":[],"summary":{"mean_loc":0,"stddev_loc":0,"mean_public_ratio":0,"total_packages":3,"total_warnings":3,"actionable_warnings":1,"main_sequence":{"excluded_packages":["cmd/app"],"structurally_constrained_count":1,"non_volatile_count":2,"actionable_count":1,"actionable_max_distance":0.7,"actionable_mean_distance":0.7,"volatility_window_commits":200,"volatile_commit_threshold":5}}}'
 
     run bash "$BASELINE" "$PROJECT"
 
     [ "$status" -eq 0 ]
     [[ "$output" == *"アクション可能 Distance > 0.5: 1 件"* ]]
     [[ "$output" == *"構造制約パッケージ数: 1"* ]]
+    [[ "$output" == *"非揮発パッケージ数 (直近 200 commit で 5 回未満): 2"* ]]
     [[ "$output" == *"警告数: 3 (うち --strict が失敗に数えるもの: 1)"* ]]
     [ "$(jq '.modularity.summary.main_sequence.actionable_count' "${PROJECT}"/baseline-*.json)" -eq 1 ]
 }
