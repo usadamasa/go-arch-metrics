@@ -142,6 +142,9 @@ analyze-modularity --max-public-ratio 0.6 --sigma 2.0 --min-symbols 10 .
 # JSON 出力を jq で整形
 analyze-modularity . | jq '.summary'
 analyze-modularity . | jq '.warnings'
+
+# CI ゲート (actionable な警告があれば exit 1)
+analyze-modularity --strict .
 ```
 
 ---

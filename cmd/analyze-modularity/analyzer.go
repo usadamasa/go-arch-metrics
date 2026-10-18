@@ -66,12 +66,14 @@ type Stats struct {
 }
 
 // Warning は閾値超過の警告を表す｡
+// Actionable はコードを直せば消せる警告かどうかで、--strict は true のものだけを失敗に数える｡
 type Warning struct {
-	Type    string  `json:"type"`
-	Package string  `json:"package"`
-	Value   float64 `json:"value"`
-	Limit   float64 `json:"limit"`
-	Message string  `json:"message"`
+	Type       string  `json:"type"`
+	Package    string  `json:"package"`
+	Value      float64 `json:"value"`
+	Limit      float64 `json:"limit"`
+	Message    string  `json:"message"`
+	Actionable bool    `json:"actionable"`
 }
 
 // 警告タイプ定数｡
@@ -263,48 +265,67 @@ func GenerateMainSequenceWarnings(pkg PackageResult) []Warning {
 		return nil
 	}
 	ms := pkg.MainSequence
+	actionable := isMainSequenceActionable(ms)
 	var warnings []Warning
 
 	switch ms.Zone {
 	case ZoneOfPain:
+		message := fmt.Sprintf("Zone of Pain: 具象的 (A=%.2f) で安定 (I=%.2f)", ms.Abstractness, ms.Instability)
+		if !actionable {
+			message += nonActionableSuffix
+		}
 		warnings = append(warnings, Warning{
-			Type:    WarningTypeZoneOfPain,
-			Package: pkg.Path,
-			Value:   ms.Distance,
-			Message: fmt.Sprintf("Zone of Pain: 具象的 (A=%.2f) で安定 (I=%.2f)", ms.Abstractness, ms.Instability),
+			Type:       WarningTypeZoneOfPain,
+			Package:    pkg.Path,
+			Value:      ms.Distance,
+			Message:    message,
+			Actionable: actionable,
 		})
 	case ZoneOfUselessness:
 		warnings = append(warnings, Warning{
-			Type:    WarningTypeZoneOfUselessness,
-			Package: pkg.Path,
-			Value:   ms.Distance,
-			Message: fmt.Sprintf("Zone of Uselessness: 抽象的 (A=%.2f) で不安定 (I=%.2f)", ms.Abstractness, ms.Instability),
+			Type:       WarningTypeZoneOfUselessness,
+			Package:    pkg.Path,
+			Value:      ms.Distance,
+			Message:    fmt.Sprintf("Zone of Uselessness: 抽象的 (A=%.2f) で不安定 (I=%.2f)", ms.Abstractness, ms.Instability),
+			Actionable: actionable,
 		})
 	case ZoneExcluded:
 		return nil
 	}
 
+	// 構造制約であること自体の報告で、直す対象ではない
 	if ms.StructurallyConstrained {
 		warnings = append(warnings, Warning{
 			Type:    WarningTypeStructurallyConstrained,
 			Package: pkg.Path,
 			Value:   ms.Distance,
-			Message: fmt.Sprintf("構造制約: Ce=0, Ca=%d のため D=%.2f はトポロジー由来", ms.AfferentCoupling, ms.Distance),
+			Message: fmt.Sprintf("構造制約: Ce=0, Ca=%d のため D=%.2f はトポロジー由来", ms.AfferentCoupling, ms.Distance) + nonActionableSuffix,
 		})
 	}
 
 	// Excluded は上の switch で早期リターン済みなので Zone チェック不要
-	if !ms.StructurallyConstrained && ms.Distance > mainSequenceDistanceThreshold {
+	if actionable && ms.Distance > mainSequenceDistanceThreshold {
 		warnings = append(warnings, Warning{
-			Type:    WarningTypeHighDistance,
-			Package: pkg.Path,
-			Value:   ms.Distance,
-			Limit:   mainSequenceDistanceThreshold,
-			Message: fmt.Sprintf("Main Sequence から大きく外れています (D=%.2f > %.1f)", ms.Distance, mainSequenceDistanceThreshold),
+			Type:       WarningTypeHighDistance,
+			Package:    pkg.Path,
+			Value:      ms.Distance,
+			Limit:      mainSequenceDistanceThreshold,
+			Message:    fmt.Sprintf("Main Sequence から大きく外れています (D=%.2f > %.1f)", ms.Distance, mainSequenceDistanceThreshold),
+			Actionable: true,
 		})
 	}
 
 	return warnings
+}
+
+// nonActionableSuffix は --strict が失敗に数えない警告の Message に付ける｡
+const nonActionableSuffix = " (情報のみ。--strict の失敗には数えない)"
+
+// isMainSequenceActionable は Zone と Distance の警告を、コードを直して消せるものとして扱うかを返す｡
+// 構造制約 (Ce=0, Ca>0) の I=0 はトポロジーで決まり、A を上げる以外に動かす手が無いので除く｡
+// summary.main_sequence.actionable_* の集計と同じ基準｡
+func isMainSequenceActionable(ms *MainSequenceData) bool {
+	return !ms.StructurallyConstrained
 }
 
 // GenerateCrossWarnings は AST 警告と Ca/Ce を照合して複合警告を生成する｡
@@ -316,12 +337,14 @@ func GenerateCrossWarnings(pkg PackageResult, astWarnings []Warning) []Warning {
 
 	for _, w := range astWarnings {
 		if w.Type == WarningTypeLocOutlier {
+			// 肥大化した葉は分割で直せる
 			return []Warning{{
-				Type:    WarningTypeConstrainedLocOutlier,
-				Package: pkg.Path,
-				Value:   w.Value,
-				Limit:   w.Limit,
-				Message: fmt.Sprintf("構造制約 leaf パッケージが肥大化しています (LOC %.0f > %.0f)", w.Value, w.Limit),
+				Type:       WarningTypeConstrainedLocOutlier,
+				Package:    pkg.Path,
+				Value:      w.Value,
+				Limit:      w.Limit,
+				Message:    fmt.Sprintf("構造制約 leaf パッケージが肥大化しています (LOC %.0f > %.0f)", w.Value, w.Limit),
+				Actionable: true,
 			}}
 		}
 	}
@@ -352,22 +375,24 @@ func GenerateWarnings(pkg PackageResult, maxPublicRatio, sigma float64, locStats
 	ratio := pkg.PublicRatio()
 	if ratio > maxPublicRatio && pkg.TotalSymbols() >= minSymbols {
 		warnings = append(warnings, Warning{
-			Type:    WarningTypeHighPublicRatio,
-			Package: pkg.Path,
-			Value:   ratio,
-			Limit:   maxPublicRatio,
-			Message: fmt.Sprintf("API surface が大きすぎます (%.2f > %.2f)", ratio, maxPublicRatio),
+			Type:       WarningTypeHighPublicRatio,
+			Package:    pkg.Path,
+			Value:      ratio,
+			Limit:      maxPublicRatio,
+			Message:    fmt.Sprintf("API surface が大きすぎます (%.2f > %.2f)", ratio, maxPublicRatio),
+			Actionable: true,
 		})
 	}
 
 	locThreshold := math.Max(locStats.Mean+sigma*locStats.Stddev, minLOCLimit)
 	if float64(pkg.LOC) > locThreshold {
 		warnings = append(warnings, Warning{
-			Type:    WarningTypeLocOutlier,
-			Package: pkg.Path,
-			Value:   float64(pkg.LOC),
-			Limit:   locThreshold,
-			Message: fmt.Sprintf("パッケージが統計的外れ値です (LOC %d > %.0f)", pkg.LOC, locThreshold),
+			Type:       WarningTypeLocOutlier,
+			Package:    pkg.Path,
+			Value:      float64(pkg.LOC),
+			Limit:      locThreshold,
+			Message:    fmt.Sprintf("パッケージが統計的外れ値です (LOC %d > %.0f)", pkg.LOC, locThreshold),
+			Actionable: true,
 		})
 	}
 

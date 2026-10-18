@@ -13,6 +13,10 @@ analyze-modularity --strict .
 go test -coverprofile=coverage.out ./...
 ```
 
+`analyze-modularity --strict` が exit 1 にするのは、コードを直して消せる警告 (`actionable: true`) があるときだけ。
+構造制約のパッケージ (Ce=0, Ca>0) に付く `zone_of_pain` と `structurally_constrained` は JSON に出るが、
+失敗には数えない。判断の基準は `go-arch-metrics:evaluate`。
+
 ベースライン測定 (`baseline.sh`) はプラグインのディレクトリに置かれ、パスが
 プラグインのバージョンによって変わるため CI には書かない。
 `go-arch-metrics:measure` から実行する。

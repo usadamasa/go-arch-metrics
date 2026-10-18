@@ -150,7 +150,7 @@ printf '%s' "$MOD_JSON" | jq -r '
     "パッケージ数: \(.summary.total_packages)",
     "平均 LOC: \(.summary.mean_loc | floor)",
     "平均 public ratio: \(.summary.mean_public_ratio | . * 100 | floor)%",
-    "警告数: \(.summary.total_warnings)",
+    "警告数: \(.summary.total_warnings) (うち --strict が失敗に数えるもの: \(.summary.actionable_warnings))",
     if (.summary.outlier_packages | length) > 0
     then "外れ値パッケージ: \(.summary.outlier_packages | join(", "))"
     else empty end,
