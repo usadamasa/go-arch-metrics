@@ -71,7 +71,7 @@ Summary:
     "mean_loc": 308, "stddev_loc": 287,
     "mean_public_ratio": 0.62,
     "outlier_packages": ["analyze-permissions"],
-    "total_packages": 11, "total_warnings": 7,
+    "total_packages": 11, "total_warnings": 7, "actionable_warnings": 2,
     "main_sequence": {
       "excluded_packages": ["cmd/app"],
       "structurally_constrained_count": 3,
@@ -79,12 +79,33 @@ Summary:
       "actionable_max_distance": 0.53, "actionable_mean_distance": 0.53
     }
   },
-  "warnings": []
+  "warnings": [
+    {
+      "type": "zone_of_pain", "package": "analyze-permissions",
+      "value": 0.53, "limit": 0,
+      "message": "Zone of Pain: 具象的 (A=0.14) で安定 (I=0.33)",
+      "actionable": true
+    },
+    {
+      "type": "high_distance", "package": "analyze-permissions",
+      "value": 0.53, "limit": 0.5,
+      "message": "Main Sequence から大きく外れています (D=0.53 > 0.5)",
+      "actionable": true
+    },
+    {
+      "type": "structurally_constrained", "package": "internal/config",
+      "value": 1, "limit": 0,
+      "message": "構造制約: Ce=0, Ca=4 のため D=1.00 はトポロジー由来 (情報のみ。--strict の失敗には数えない)",
+      "actionable": false
+    }
+  ]
 }
 ```
 
 `structurally_constrained: true` (Ce=0 の葉パッケージ) の D=1.0 は構造的制約で、設計上の問題とは限らない。
-判定は `go-arch-metrics:evaluate` の `references/thresholds.md`。
+このパッケージに付く `zone_of_pain` と `structurally_constrained` の警告は `actionable: false` で、
+`summary.actionable_warnings` と `--strict` の判定に入らない。判定は `go-arch-metrics:evaluate` の
+`references/thresholds.md`。
 
 ## analyze-arch-lint
 

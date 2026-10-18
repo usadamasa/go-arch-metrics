@@ -25,14 +25,16 @@ type MainSequenceSummary struct {
 }
 
 // Summary は全パッケージのサマリ統計｡
+// ActionableWarnings は warnings のうち actionable なものの件数で、--strict はこれを見る｡
 type Summary struct {
-	MeanLOC         float64              `json:"mean_loc"`
-	StddevLOC       float64              `json:"stddev_loc"`
-	MeanPublicRatio float64              `json:"mean_public_ratio"`
-	OutlierPackages []string             `json:"outlier_packages,omitempty"`
-	TotalPackages   int                  `json:"total_packages"`
-	TotalWarnings   int                  `json:"total_warnings"`
-	MainSequence    *MainSequenceSummary `json:"main_sequence"`
+	MeanLOC            float64              `json:"mean_loc"`
+	StddevLOC          float64              `json:"stddev_loc"`
+	MeanPublicRatio    float64              `json:"mean_public_ratio"`
+	OutlierPackages    []string             `json:"outlier_packages,omitempty"`
+	TotalPackages      int                  `json:"total_packages"`
+	TotalWarnings      int                  `json:"total_warnings"`
+	ActionableWarnings int                  `json:"actionable_warnings"`
+	MainSequence       *MainSequenceSummary `json:"main_sequence"`
 }
 
 // inferModuleRoot は引数ディレクトリから親方向に go.mod を探索してモジュールルートを返す｡
@@ -60,7 +62,7 @@ func main() {
 	maxPublicRatio := flag.Float64("max-public-ratio", 0.6, "public ratio の警告しきい値")
 	sigma := flag.Float64("sigma", 2.0, "LOC 外れ値検出の σ 倍数")
 	minSymbols := flag.Int("min-symbols", defaultMinSymbols, "public ratio チェックの最小シンボル数")
-	strict := flag.Bool("strict", false, "警告がある場合に exit code 1 を返す")
+	strict := flag.Bool("strict", false, "actionable な警告 (コードを直して消せるもの) がある場合に exit code 1 を返す")
 	flag.Parse()
 
 	args := flag.Args()
@@ -104,14 +106,22 @@ func main() {
 		allWarnings = append(allWarnings, crossWarnings...)
 	}
 
+	actionableWarnings := 0
+	for _, w := range allWarnings {
+		if w.Actionable {
+			actionableWarnings++
+		}
+	}
+
 	summary := Summary{
-		MeanLOC:         locStats.Mean,
-		StddevLOC:       locStats.Stddev,
-		MeanPublicRatio: ratioStats.Mean,
-		OutlierPackages: outliers,
-		TotalPackages:   len(packages),
-		TotalWarnings:   len(allWarnings),
-		MainSequence:    buildMainSequenceSummary(packages),
+		MeanLOC:            locStats.Mean,
+		StddevLOC:          locStats.Stddev,
+		MeanPublicRatio:    ratioStats.Mean,
+		OutlierPackages:    outliers,
+		TotalPackages:      len(packages),
+		TotalWarnings:      len(allWarnings),
+		ActionableWarnings: actionableWarnings,
+		MainSequence:       buildMainSequenceSummary(packages),
 	}
 
 	report := Report{
@@ -127,7 +137,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if *strict && report.Summary.TotalWarnings > 0 {
+	if *strict && report.Summary.ActionableWarnings > 0 {
 		os.Exit(1)
 	}
 }

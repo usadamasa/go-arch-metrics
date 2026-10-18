@@ -42,7 +42,8 @@ Zone of Pain にあっても **harmless** だと述べている。`internal/cach
 のようなユーティリティパッケージがこれに該当する。
 
 baseline.sh はこれらのパッケージを `structurally_constrained: true` としてマークし、
-D 集計 (`actionable_*`) から除外する。
+D 集計 (`actionable_*`) から除外する。同じ基準で、構造制約のパッケージに付く `zone_of_pain` と
+`structurally_constrained` の警告は `actionable: false` になり、`analyze-modularity --strict` の失敗に数えない。
 
 構造制約パッケージでもリファクタリングを検討すべきケースの判断基準は
 `go-arch-metrics:remediate`。

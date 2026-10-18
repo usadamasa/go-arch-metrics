@@ -46,6 +46,11 @@ D > 0.5 のパッケージ
   └─ それ以外 → アクション可能: Zone 別対処へ (remediate skill)
 ```
 
+`analyze-modularity` の警告もこの分け方にそろえてある。直す対象は `actionable: true` の警告で、
+`analyze-modularity --strict` は `summary.actionable_warnings` が 1 以上のときだけ exit 1 にする。
+構造制約のパッケージに付く `zone_of_pain` と `structurally_constrained` は `actionable: false` で、
+JSON には残るが失敗には数えない。
+
 Zone の定義と構造的制約の根拠は `references/thresholds.md`。
 
 ## `.go-arch-lint.yml` 自体の健全性
