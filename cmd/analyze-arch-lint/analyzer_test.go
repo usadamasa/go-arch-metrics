@@ -248,6 +248,11 @@ func TestLargestInternalScope(t *testing.T) {
 			want: scopeSize{Root: "a/internal/x", Count: 2},
 		},
 		{
+			name: "internal ディレクトリ自体のパッケージは木の外に並ぶので数えない",
+			pkgs: []string{"cmd/foo/internal", "cmd/foo/internal/a"},
+			want: scopeSize{Root: "cmd/foo/internal", Count: 1},
+		},
+		{
 			name: "モジュール直下の共有 internal は数えない",
 			pkgs: []string{"internal/pathutil", "internal/settings", "app"},
 			want: scopeSize{},

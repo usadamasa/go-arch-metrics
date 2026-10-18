@@ -180,7 +180,8 @@ func usesVendor(importsBy map[string][]string, fromPkgs []string, prefixes []str
 func largestInternalScope(pkgs []string) scopeSize {
 	counts := map[string]int{}
 	for _, p := range pkgs {
-		if internalScopeRoot(p) != "" {
+		// internal ディレクトリ自体のパッケージは木の外 (親の直下) に並ぶので数えない
+		if internalScopeRoot(p) != "" && path.Base(p) != "internal" {
 			counts[path.Dir(p)]++
 		}
 	}
