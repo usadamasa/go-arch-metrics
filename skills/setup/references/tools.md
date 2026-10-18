@@ -61,7 +61,7 @@ go get -tool github.com/usadamasa/go-arch-metrics/cmd/vulncheck@"$VERSION"
 ```
 
 この plugin の tag は Go の semver tag ではない (`v` を付けない CalVer)。tag 名を指定すると、その tag の commit の
-pseudo-version (`v0.0.0-<日時>-<commit の先頭 12 桁>`) に解決され、go.mod の require が commit で固定する。
+pseudo-version (`v0.0.0-<日時>-<commit の先頭 12 桁>`) に解決され、go.mod の require はその commit に固定される。
 CI のコマンドは `go tool vulncheck ./...` のように `go tool` を前に付けて書く。
 
 - 対象プロジェクトの go.mod の `go` 行は 1.26.1 以上が要る (この plugin のモジュールの要求)。
@@ -72,16 +72,19 @@ CI のコマンドは `go tool vulncheck ./...` のように `go tool` を前に
 ### 版を plugin にそろえる
 
 plugin と CLI 3 本は、同じ release の tag の commit にそろえる。tag 名は plugin の版
-(`claude plugin list` の `go-arch-metrics@usadamasa` の `version`) と同じ。初めて入れるときも上げるときも同じ手順を踏む。
+(`claude plugin list` の `go-arch-metrics@usadamasa` の `version`) と同じ。取った後の照合は、上げるときと、初めて入れた直後
+(Go は上の `go get -tool`、nix は flake input を足した直後) の両方で行う。
 
-`go get ...@latest` や `nix flake update` のように「最新」を問い合わせる取り方はしない。
-どちらも問い合わせの結果がキャッシュされ、release の直後には前の commit に解決されることがある。
+`go get ...@latest` や `nix flake update` のように「最新」を問い合わせる取り方はしない。理由は 2 つある。
 
-- Go の module proxy (proxy.golang.org) は `@latest` の解決を proxy 側で持ち回る。release の直後に `@latest` が
-  前の release の commit (最新の tag より 23 commit 前) に解決された例がある
-- nix は default branch の HEAD を GitHub API で引いた結果を、手元で `tarball-ttl` (既定 3600 秒) の間使い回す
+- どちらも default branch の HEAD に解決される。tag は Go の semver tag ではないので `@latest` の候補にならず、
+  release の後に入った commit があれば tag の commit からずれる
+- 問い合わせの結果がキャッシュされ、release の直後には前の commit に解決されることがある
+  - Go の module proxy (proxy.golang.org) は `@latest` の解決結果を proxy 側でキャッシュする。release の直後に
+    `@latest` が前の release の commit (最新の tag より 23 commit 前) に解決された例がある
+  - nix は default branch の HEAD を GitHub API で引いた結果を、手元で `tarball-ttl` (既定 3600 秒) の間使い回す
 
-tag 名で問い合わせると、どちらもその tag の commit に解決される。
+tag 名で問い合わせると、どちらもその時点の tag の commit に解決される。
 
 ```bash
 VERSION=2026.1018.3   # plugin の版
@@ -93,11 +96,11 @@ go get github.com/usadamasa/go-arch-metrics@"$VERSION"
 nix flake lock --override-input go-arch-metrics "github:usadamasa/go-arch-metrics/$VERSION"
 ```
 
-取った後、tag の commit と一致するかを確かめる。tag は付け替えられるので、tag 名で取っても古い commit を
-指していることがある。
+取った後、tag の commit と一致するかを確かめる。tag は付け替えられ、proxy や nix のキャッシュは
+付け替え前の commit を返し続けることがあるため。
 
 ```bash
-# tag の commit (40 桁)
+# tag の commit (40 桁)。tagpr の tag は lightweight なので 1 行で返る。annotated なら `^{}` の付いた行が commit
 git ls-remote --tags https://github.com/usadamasa/go-arch-metrics "$VERSION"
 
 # go.mod: pseudo-version の末尾 12 桁が tag の commit の先頭 12 桁と一致するか
@@ -107,10 +110,13 @@ go list -m github.com/usadamasa/go-arch-metrics
 jq -r '.nodes["go-arch-metrics"].locked.rev' flake.lock
 ```
 
-ずれていたら、tag 名の代わりに `git ls-remote` が返した commit で取り直す
-(`go get github.com/usadamasa/go-arch-metrics@<commit>`、
-`nix flake lock --override-input go-arch-metrics github:usadamasa/go-arch-metrics/<commit>`)。
+ずれていたら、tag 名の代わりに `git ls-remote` が返した commit で取り直す。
 nix は短縮した commit を受け付けないので 40 桁で渡す。
+
+```bash
+go get github.com/usadamasa/go-arch-metrics@<commit>
+nix flake lock --override-input go-arch-metrics github:usadamasa/go-arch-metrics/<commit>
+```
 
 ---
 

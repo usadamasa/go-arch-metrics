@@ -109,7 +109,7 @@ plugin (skill と `baseline.sh`) と CLI 3 本は同じリポジトリから出�
    `--strict` の判定が変わっていれば、以前の測定結果とはそのまま比べられない
 2. plugin を上げる: `claude plugin update go-arch-metrics@usadamasa` (反映には Claude Code の再起動が要る)。
    上がった版は `claude plugin list` の `version` で見る
-3. CLI を plugin の版の tag にそろえ、取った commit が tag の commit と一致するかを確かめる。
+3. CLI を手順 2 で見た plugin の版の tag にそろえ、取った commit が tag の commit と一致するかを確かめる。
    `@latest` や `nix flake update` では前の commit に解決されることがあるので使わない。
    手順と理由は `references/tools.md` の「版を plugin にそろえる」
 4. CI を回し、`go-arch-metrics:measure` で測り直す。前回から変わった数値は、手順 1 の変更による差か、
