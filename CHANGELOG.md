@@ -1,5 +1,13 @@
 # Changelog
 
+## [2026.1021.0](https://github.com/usadamasa/go-arch-metrics/compare/2026.1018.5...2026.1021.0) - 2026-10-21
+
+### Other Changes
+- devShell の go を 1.26.10、配布バイナリの go を 1.27.3 に上げる (GO-2026-6809) by @usadamasa in https://github.com/usadamasa/go-arch-metrics/pull/51
+- Dependabot で go.mod・GitHub Actions・flake.lock の更新 PR を出す by @usadamasa in https://github.com/usadamasa/go-arch-metrics/pull/52
+- devShell の Go も Dependabot の nix PR で上がるようにする by @usadamasa in https://github.com/usadamasa/go-arch-metrics/pull/57
+- ci: govulncheck を週次で定期実行する by @usadamasa in https://github.com/usadamasa/go-arch-metrics/pull/59
+
 ## [2026.1018.5](https://github.com/usadamasa/go-arch-metrics/compare/2026.1018.4...2026.1018.5) - 2026-10-18
 
 ### Other Changes
