@@ -20,6 +20,7 @@ skill を書くときの決めごと、リリース手順はリポジトリル�
 Go と lint・テストのツール (`bats`、`shellcheck` を含む) は `flake.nix` の devShell が揃え、
 `.envrc` (nix-direnv の `use flake`) が読み込む。
 版は `flake.lock` が固定する nixpkgs で決まり、上げるときは `nix flake update`。
+`flake.lock`・`go.mod`・GitHub Actions の更新は Dependabot が週次で PR を出す (`.github/dependabot.yml`)。
 devShell の go は `go.mod` の `go` 行と同じ系列 (`go_1_26`) にし、`GOTOOLCHAIN=local` でずれを即座に落とす。
 
 `analyze-modularity` / `analyze-arch-lint` は devShell に入れない。`task lint` が `go run ./cmd/...` で
