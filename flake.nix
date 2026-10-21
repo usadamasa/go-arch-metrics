@@ -15,17 +15,17 @@
 
       # devShell の go は nixpkgs の Go 製ツール (gosec など) をビルドした系列 (pkgs.go = go_1_26) に揃える。
       # 新しい系列の go を並べると、gosec が export data を読めず SSA の解析を飛ばして exit 1 になる。
-      # nixos-unstable の go_1_26 は 1.26.8 で、net/http の脆弱性 (GO-2026-6617 ほか、1.26.9 で修正) が
-      # cmd/vulncheck の HTTP クライアントから届くため vulncheck が exit 3 を返す。nixpkgs master には
-      # 1.26.9 が入っている (NixOS/nixpkgs#571801) が channel に降りるまで、go だけソースを差し替える。
+      # nixos-unstable の go_1_26 は 1.26.9 で、crypto/x509 の脆弱性 (GO-2026-6809、1.26.10 で修正) が
+      # cmd/analyze-modularity から届くため vulncheck が exit 3 を返す。channel に 1.26.10 が降りるまで、
+      # go だけソースを差し替える。
       # channel が追いついたらこの override を消してから nix flake update を打つ (#33)。nix flake update だけでは消えない
       devGo =
         pkgs:
         pkgs.go_1_26.overrideAttrs (old: rec {
-          version = "1.26.9";
+          version = "1.26.10";
           src = pkgs.fetchurl {
             url = "https://go.dev/dl/go${version}.src.tar.gz";
-            hash = "sha256-lzXX3Ntls10/pXfwQGRzfAO4nPGitx5uaf4vPG+f1Mo=";
+            hash = "sha256-/WPog7ovK/ypPBZGsx6+9j4rHk0rMXyXidl2po2B828=";
           };
         });
     in
