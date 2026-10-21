@@ -35,11 +35,14 @@ task が何を回すかは `task --list` を見る (`Taskfile.yml` の `desc` �
 |---------|--------|
 | `task test` | go-test / bats |
 | `task lint` | go-lint |
+| `task vulncheck` | go-lint (`task lint` が呼ぶ) / vulncheck.yaml (週次と手動実行) |
 | `task build` | — |
 | `shellcheck skills/*/scripts/*.sh` | shellcheck |
 | `claude plugin validate --strict .` | plugin-validate |
 
 PR を出す前にこの全部を通す。job の定義は `.github/workflows/ci.yaml`。
+コードが変わらなくても新しく公開された脆弱性を拾うため、`.github/workflows/vulncheck.yaml` が
+`task vulncheck` を週次で回す。
 
 ## つまずきどころ
 
