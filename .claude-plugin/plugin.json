@@ -1,6 +1,6 @@
 {
   "name": "go-arch-metrics",
-  "version": "2026.1018.5",
+  "version": "2026.1021.0",
   "description": "Measure and improve Go project modularity and testability with go-arch-lint, golangci-lint and two purpose-built CLIs",
   "author": {
     "name": "usadamasa"
