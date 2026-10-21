@@ -17,17 +17,22 @@
       # 新しい系列の go を並べると、gosec が export data を読めず SSA の解析を飛ばして exit 1 になる。
       # nixos-unstable の go_1_26 は 1.26.9 で、crypto/x509 の脆弱性 (GO-2026-6809、1.26.10 で修正) が
       # cmd/analyze-modularity から届くため vulncheck が exit 3 を返す。channel に 1.26.10 が降りるまで、
-      # go だけソースを差し替える。
-      # channel が追いついたらこの override を消してから nix flake update を打つ (#33)。nix flake update だけでは消えない
+      # go だけソースを差し替える (#33)。
+      # 差し替えは channel の go_1_26 が 1.26.10 より古いときだけ効く。Dependabot の nix PR が 1.26.10 以上の
+      # nixpkgs を取り込んだ時点で channel の go_1_26 に戻り、以後のパッチ更新は flake.lock と一緒に上がる。
+      # 戻った後の差し替えの分岐は使われないので、そのとき消す
       devGo =
         pkgs:
-        pkgs.go_1_26.overrideAttrs (old: rec {
-          version = "1.26.10";
-          src = pkgs.fetchurl {
-            url = "https://go.dev/dl/go${version}.src.tar.gz";
-            hash = "sha256-/WPog7ovK/ypPBZGsx6+9j4rHk0rMXyXidl2po2B828=";
-          };
-        });
+        if pkgs.lib.versionOlder pkgs.go_1_26.version "1.26.10" then
+          pkgs.go_1_26.overrideAttrs (old: rec {
+            version = "1.26.10";
+            src = pkgs.fetchurl {
+              url = "https://go.dev/dl/go${version}.src.tar.gz";
+              hash = "sha256-/WPog7ovK/ypPBZGsx6+9j4rHk0rMXyXidl2po2B828=";
+            };
+          })
+        else
+          pkgs.go_1_26;
     in
     {
       packages = forAllSystems (
