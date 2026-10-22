@@ -9,7 +9,7 @@ go 1.26.1
 toolchain go1.26.10
 
 require (
-	golang.org/x/crypto/x509roots/fallback v0.0.0-20261016151342-0ae6809b7559
+	golang.org/x/crypto/x509roots/fallback v0.0.0-20261020153306-9f2b28d4331a
 	golang.org/x/vuln v1.9.0
 	gopkg.in/yaml.v3 v3.0.1
 )
