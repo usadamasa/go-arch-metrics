@@ -13,7 +13,7 @@ concurrency:
 permissions:
   contents: read
 
-# Go と lint・テストのツールは flake.nix の devShell から取る (.github/actions/setup-nix)。
+# Go と lint・テストのツールは flake.nix の devShell から取る (usadamasa/gh-manage の setup-nix)。
 jobs:
   go-test:
     name: go test
@@ -21,7 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
 
-      - uses: $/.github/actions/setup-nix
+      - uses: usadamasa/gh-manage/actions/setup-nix@main
 
       - name: go vet
         run: go vet ./...
@@ -44,7 +44,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: $/.github/actions/setup-nix
+      - uses: usadamasa/gh-manage/actions/setup-nix@main
 
       - name: Run all linters
         run: task lint
@@ -55,7 +55,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
 
-      - uses: $/.github/actions/setup-nix
+      - uses: usadamasa/gh-manage/actions/setup-nix@main
 
       - name: Run shellcheck
         run: shellcheck skills/*/scripts/*.sh .github/scripts/*.sh
@@ -68,7 +68,7 @@ jobs:
       - uses: actions/checkout@v7.0.1
 
       # smoke は go と go-arch-lint を PATH に要るので devShell も入れる
-      - uses: $/.github/actions/setup-nix
+      - uses: usadamasa/gh-manage/actions/setup-nix@main
 
       - name: Build packages.default
         run: nix build .#default --out-link result -L
@@ -83,7 +83,7 @@ jobs:
       - uses: actions/checkout@v7.0.1
 
       # baseline.sh のテストは fixture の Go module を go test で回すので、bats と一緒に devShell の go も使う
-      - uses: $/.github/actions/setup-nix
+      - uses: usadamasa/gh-manage/actions/setup-nix@main
 
       - name: Run bats tests
         run: bats tests/
