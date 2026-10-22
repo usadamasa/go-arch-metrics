@@ -69,6 +69,8 @@ CI のコマンドは `go tool vulncheck ./...` のように `go tool` を前に
 
 - 対象プロジェクトの go.mod の `go` 行は 1.26.1 以上が要る (この plugin のモジュールの要求)。
   `golang.org/x/vuln` などの依存も indirect の require として入る
+- 3 本は対象プロジェクトの go でビルドされる (この plugin の go.mod の `toolchain` 行は依存側では効かない)。
+  crypto/x509 の GO-2026-6809 が直った go1.26.10 / go1.27.3 以上で動かす
 - `go-arch-lint` は PATH に置く。`analyze-arch-lint` が PATH から呼ぶので、tool directive に入れると
   `baseline.sh` は動いても `analyze-arch-lint` が見つけられない
 
