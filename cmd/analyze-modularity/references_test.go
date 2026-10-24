@@ -41,9 +41,39 @@ type Box[T any] struct{ v T }
 func (b Box[T]) Get() T { return b.v }
 
 type Unseen struct{}
+
+// Made は型名を外から書かれないが、外から呼ばれる Make の戻り値として外へ渡る
+type Made struct {
+	Base
+	Part  Piece
+	inner Hidden
+}
+
+type Base struct{}
+type Piece struct{}
+type Hidden struct{}
+type Info struct{}
+type Orphan struct{}
+
+func Make() Made              { return Made{} }
+func (Made) Detail() Info     { return Info{} }
+func (Made) Unused2() Orphan  { return Orphan{} }
+
+type Constraint interface{ ~int }
+
+func Pick[T Constraint](v T) T { return v }
+
+type Target struct{}
+type Alias = Target
+
+func GetAlias() Alias { return Alias{} }
+
+type XOut struct{}
+
+func ForXTest() XOut { return XOut{} }
 `,
 		"internal/lib/lib_internal_test.go": "package lib\n\nimport \"testing\"\n\nfunc TestOwn(t *testing.T) { OnlyOwnTests() }\n",
-		"internal/lib/lib_test.go":          "package lib_test\n\nimport (\n\t\"testing\"\n\n\t\"example.com/ref/internal/lib\"\n)\n\nfunc TestX(t *testing.T) { lib.OnlyTests() }\n",
+		"internal/lib/lib_test.go":          "package lib_test\n\nimport (\n\t\"testing\"\n\n\t\"example.com/ref/internal/lib\"\n)\n\nfunc TestX(t *testing.T) {\n\tlib.OnlyTests()\n\t_ = lib.ForXTest()\n}\n",
 		"internal/dotted/dotted.go":         "package dotted\n\nfunc DotFunc() {}\n\nfunc DotUnused() {}\n",
 		"app/app.go": `package app
 
@@ -64,7 +94,10 @@ func Run() int {
 	w.Promoted()
 	b := lib.Box[int]{}
 	DotFunc()
-	return lib.Used() + b.Get()
+	m := lib.Make()
+	_ = m.Detail()
+	_ = lib.GetAlias()
+	return lib.Used() + b.Get() + lib.Pick(1)
 }
 `,
 		"other/other.go":      "package other\n",
@@ -101,13 +134,18 @@ func Test_analyzeExportedReferences(t *testing.T) {
 			t.Fatalf("lib の結果が無い: %v", got)
 		}
 		// 自パッケージ (internal test を含む) からの参照は外からの参照に数えない。
-		// Inner は埋め込みでメソッドが昇格するだけで、型名は外から参照されない
-		wantUnreferenced := []string{"Inner", "OnlyOwnTests", "Unseen", "Unused", "Widget.Uncalled", "Widget.Visit2"}
+		// 参照される func・method のシグネチャと、参照される型の exported フィールドに出てくる型は参照済み
+		// (Made・Base・Piece・Info・Constraint・Alias・Target・Inner)。unexported フィールドだけの Hidden と、
+		// 参照されないメソッドのシグネチャだけの Orphan は未参照
+		wantUnreferenced := []string{
+			"Hidden", "Made.Unused2", "OnlyOwnTests", "Orphan", "Unseen", "Unused", "Widget.Uncalled", "Widget.Visit2",
+		}
 		if !slices.Equal(lib.Unreferenced, wantUnreferenced) {
 			t.Errorf("Unreferenced = %v, want %v", lib.Unreferenced, wantUnreferenced)
 		}
-		// 外部テストパッケージと他パッケージのテストからだけ参照されるもの
-		wantTestOnly := []string{"OnlyOtherTests", "OnlyTests"}
+		// 自パッケージの外部テストからだけ参照されるもの。シグネチャを辿った XOut も同じ種類を引き継ぐ。
+		// 他パッケージのテストからの参照 (OnlyOtherTests) は参照済み
+		wantTestOnly := []string{"ForXTest", "OnlyTests", "XOut"}
 		if !slices.Equal(lib.TestOnly, wantTestOnly) {
 			t.Errorf("TestOnly = %v, want %v", lib.TestOnly, wantTestOnly)
 		}
