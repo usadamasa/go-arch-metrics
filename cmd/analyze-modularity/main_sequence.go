@@ -197,9 +197,11 @@ func dropIgnored(moduleRoot string, listed []listedPackage) ([]listedPackage, er
 // selectedPackage は報告の対象に選ばれたパッケージ｡Path は「引数 + 引数からの相対パス」で、
 // 引数に . を渡せば cmd/analyze-modularity のような形になる｡
 type selectedPackage struct {
-	Path    string
-	Dir     string
-	GoFiles []string
+	Path       string
+	ImportPath string
+	Name       string
+	Dir        string
+	GoFiles    []string
 }
 
 // selectPackages は listed のうち args のどれかの下にあり、解析する Go ファイルを持つパッケージを選ぶ｡
@@ -225,7 +227,7 @@ func selectPackages(listed []listedPackage, args []string) ([]selectedPackage, e
 			if err != nil {
 				return nil, err
 			}
-			selected = append(selected, selectedPackage{Path: filepath.Join(arg, rel), Dir: p.Dir, GoFiles: p.GoFiles})
+			selected = append(selected, selectedPackage{Path: filepath.Join(arg, rel), ImportPath: p.ImportPath, Name: p.Name, Dir: p.Dir, GoFiles: p.GoFiles})
 		}
 	}
 	return selected, nil
