@@ -27,8 +27,14 @@ func commitAll(t *testing.T, dir, message string) {
 	runGit(t, dir, "commit", "-q", "--allow-empty", "-m", message)
 }
 
-// touchCommits は rel のファイルに 1 行ずつ足して n 回 commit する｡
+// touchCommits は rel のファイルにコードを 1 行ずつ足して n 回 commit する｡
 func touchCommits(t *testing.T, dir, rel string, n int) {
+	t.Helper()
+	appendCommits(t, dir, rel, n, func(i int) string { return fmt.Sprintf("\nvar _ = %d\n", i) })
+}
+
+// appendCommits は rel のファイルに text(i) を足して n 回 commit する｡
+func appendCommits(t *testing.T, dir, rel string, n int, text func(i int) string) {
 	t.Helper()
 	path := filepath.Join(dir, rel)
 	for i := range n {
@@ -36,7 +42,7 @@ func touchCommits(t *testing.T, dir, rel string, n int) {
 		if err != nil {
 			t.Fatalf("%s を開けない: %v", rel, err)
 		}
-		if _, err := fmt.Fprintf(f, "\n// touch %d\n", i); err != nil {
+		if _, err := f.WriteString(text(i)); err != nil {
 			t.Fatalf("%s に書けない: %v", rel, err)
 		}
 		if err := f.Close(); err != nil {
@@ -99,6 +105,47 @@ func Test_recentCommitCounts(t *testing.T) {
 		}
 		if got := history.counts[canonicalOf(t, filepath.Join(root, "b"))]; got != 1 {
 			t.Errorf("b = %d, want 1 (initial だけ)", got)
+		}
+	})
+
+	t.Run("コメントだけ・空白だけの commit は数えない", func(t *testing.T) {
+		// 依存元に波及しない変更は、揮発性で見たい「変更を迫られる」に当たらない
+		root := committedFixtureModule(t)
+		appendCommits(t, root, "b/b.go", 2, func(i int) string { return fmt.Sprintf("\n// comment %d\n", i) })
+		appendCommits(t, root, "b/b.go", 2, func(i int) string { return strings.Repeat("\n", i+1) })
+		reformatted := "package b\n\nimport \"example.com/fx/c\"\n\n// B は c を呼ぶ\nfunc B() int {\n\treturn c.C()\n}\n"
+		if err := os.WriteFile(filepath.Join(root, "b", "b.go"), []byte(reformatted), 0644); err != nil {
+			t.Fatalf("b.go 書き換え失敗: %v", err)
+		}
+		commitAll(t, root, "reformat and document")
+
+		history, err := recentCommitCounts(root, 200)
+		if err != nil {
+			t.Fatalf("recentCommitCounts 失敗: %v", err)
+		}
+		if got := history.counts[canonicalOf(t, filepath.Join(root, "b"))]; got != 1 {
+			t.Errorf("b = %d, want 1 (initial だけ)", got)
+		}
+	})
+
+	t.Run("コードの変更は数え、ファイルの追加と削除も数える", func(t *testing.T) {
+		root := committedFixtureModule(t)
+		touchCommits(t, root, "b/b.go", 1)
+		if err := os.WriteFile(filepath.Join(root, "b", "b2.go"), []byte("// Package b の補助\npackage b\n"), 0644); err != nil {
+			t.Fatalf("b2.go 作成失敗: %v", err)
+		}
+		commitAll(t, root, "add b2")
+		if err := os.Remove(filepath.Join(root, "b", "b2.go")); err != nil {
+			t.Fatalf("b2.go 削除失敗: %v", err)
+		}
+		commitAll(t, root, "remove b2")
+
+		history, err := recentCommitCounts(root, 200)
+		if err != nil {
+			t.Fatalf("recentCommitCounts 失敗: %v", err)
+		}
+		if got := history.counts[canonicalOf(t, filepath.Join(root, "b"))]; got != 4 {
+			t.Errorf("b = %d, want 4 (initial + コード + 追加 + 削除)", got)
 		}
 	})
 

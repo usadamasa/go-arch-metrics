@@ -110,14 +110,19 @@ Martin の「非揮発」は、構造制約でない Zone of Pain のパッケ�
 `analyze-modularity` は git の履歴から変更頻度を測り、非揮発の Zone of Pain を actionable から外す。
 
 - 窓: HEAD から辿れる直近 200 commit (merge を除く)。`--volatility-window` で変える
-- 数え方: パッケージのディレクトリ直下の、`_test.go` でない `.go` を触った commit を 1 回と数える
+- 数え方: パッケージのディレクトリ直下の、`_test.go` でない `.go` のコードを変えた commit を 1 回と数える。
+  コメントだけ・空白だけの変更は数えない (依存元に波及しないので、揮発性で見たい「変更を迫られる」に当たらない)。
+  触ったファイルの前後をコメント無しで parse し、`go/format` で正規化して一致すればコードは変わっていないとみなす。
+  ファイルの追加・削除と、parse できない版は変更として数える
 - しきい値: 窓の中で 5 commit 以上触られたら揮発 (`volatile`)、それ未満は非揮発 (`non_volatile`)。
   `--volatile-commits` で変える
 - 測れないとき (`unmeasured`): shallow clone、git リポジトリでない、commit が無い。このときは揮発として扱い、
   `--strict` の判定を緩めない。CI では `actions/checkout` に `fetch-depth: 0` を付ける
 
-Martin は数値を示していないので、200 と 5 は目安。agents-daemon の実例では、ほぼ触られない `dreamio`
-(263 commit 中 1 回) と頻繁に変わる `sessionstate` (30 回) が、この値で両側に分かれる。
+Martin は数値を示していないので、200 と 5 は目安。agents-daemon の eb8726f では、200 commit が
+2026-10-18〜10-24 の 7 日分に当たる。Zone of Pain のパッケージは多くて 4 回 (`config`、`dag`、`domain`) で、
+揮発に転ぶのは `board` (21 回)、`parking` (13 回)、`daemon` (11 回) のような Main Sequence 側のパッケージになる。
+窓は commit の粒度に左右される。TDD で細かく commit するほど、同じ変更でも回数が増える。
 
 日数ではなく commit 数で窓を切るのは、HEAD が同じなら結果も同じにするため。日数で切ると、コードが同じでも
 日がたつだけで CI の判定が変わる。PR のブランチでは窓に PR 自身の commit も入るので、PR の中で同じパッケージを

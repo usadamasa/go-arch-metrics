@@ -116,7 +116,8 @@ exit code は指摘ありでも実行の失敗でも 1 なので、baseline.sh �
 このパッケージに付く `zone_of_pain` と `structurally_constrained` の警告は `actionable: false` で、
 `summary.actionable_warnings` と `--strict` の判定に入らない。
 
-`volatility` は直近の窓 (`volatility_window_commits`) でパッケージを触った commit 数 (`recent_commit_count`) から決まる
+`volatility` は直近の窓 (`volatility_window_commits`) でパッケージのコードを変えた commit 数 (`recent_commit_count`。
+コメントと空白だけの変更は数えない) から決まる
 (`volatile` / `non_volatile` / `unmeasured`)。非揮発の Zone of Pain の `zone_of_pain` も `actionable: false` で、
 `high_distance` は出ない。shallow clone などで測れなければ `volatility` は `unmeasured`、`recent_commit_count` は出ず、
 `summary.main_sequence.volatility_unmeasured_reason` に理由が入る。判定は `go-arch-metrics:evaluate` の

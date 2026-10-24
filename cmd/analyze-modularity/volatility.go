@@ -4,8 +4,12 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"go/format"
+	"go/parser"
+	"go/token"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -20,8 +24,7 @@ const (
 
 // 揮発性の既定値｡Martin (Agile PPP ch.28) は「非揮発」の数値を示していないので目安｡
 // 日数ではなく commit 数で窓を切る: HEAD が同じなら結果も同じになり、日がたつだけで CI の判定が変わらない｡
-// agents-daemon の実例では、非揮発の dreamio が 263 commit 中 1 回、揮発の sessionstate が 30 回で、
-// この値で両側に分かれる｡
+// 実例での分かれ方は go-arch-metrics:evaluate の references/thresholds.md「非揮発」｡
 const (
 	defaultVolatilityWindow = 200
 	defaultVolatileCommits  = 5
@@ -52,7 +55,8 @@ func (h commitHistory) volatilityOf(dir string, threshold int) (Volatility, *int
 }
 
 // recentCommitCounts は moduleRoot のリポジトリで HEAD から直近 window commit (merge を除く) を見て、
-// ディレクトリ直下の _test.go でない .go を触った commit をディレクトリごとに数える｡
+// ディレクトリ直下の _test.go でない .go のコードを変えた commit をディレクトリごとに数える｡
+// コメントだけ・空白だけの変更は数えない (codeChanged)｡
 // 履歴が欠けていて数が信用できないとき (shallow clone)、git リポジトリでないとき、commit が無いときは
 // unmeasuredReason に理由を入れて返す｡git が無いのは前提の欠如なのでエラーにする｡
 func recentCommitCounts(moduleRoot string, window int) (commitHistory, error) {
@@ -82,17 +86,22 @@ func recentCommitCounts(moduleRoot string, window int) (commitHistory, error) {
 	}
 
 	out, err := gitOutput(root, "-c", "core.quotePath=off", "log", "--no-merges", "-n", fmt.Sprint(window),
-		"--name-only", "--format=%x1e", "HEAD")
+		"--name-only", "--format=%x1e%H", "HEAD")
+	if err != nil {
+		return commitHistory{}, err
+	}
+	commits := parseTouchedFiles(out)
+
+	versions, err := readFileVersions(root, commits)
 	if err != nil {
 		return commitHistory{}, err
 	}
 
 	counts := make(map[string]int)
-	for commit := range strings.SplitSeq(out, commitSeparator) {
+	for _, c := range commits {
 		touched := make(map[string]bool)
-		for line := range strings.SplitSeq(commit, "\n") {
-			path := strings.TrimSpace(line)
-			if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+		for _, path := range c.paths {
+			if !codeChanged(versions[c.hash+"^:"+path], versions[c.hash+":"+path]) {
 				continue
 			}
 			// 削除済みのディレクトリもあるので symlink は解かず、ルートに連結するだけにする
@@ -103,6 +112,105 @@ func recentCommitCounts(moduleRoot string, window int) (commitHistory, error) {
 		}
 	}
 	return commitHistory{counts: counts}, nil
+}
+
+// touchedCommit は 1 commit と、それが触った _test.go でない .go のパス (リポジトリのルートから)｡
+type touchedCommit struct {
+	hash  string
+	paths []string
+}
+
+// parseTouchedFiles は git log --name-only --format=%x1e%H の出力を commit ごとに分ける｡
+func parseTouchedFiles(out string) []touchedCommit {
+	var commits []touchedCommit
+	for block := range strings.SplitSeq(out, commitSeparator) {
+		lines := strings.Split(strings.TrimSpace(block), "\n")
+		if lines[0] == "" {
+			continue
+		}
+		c := touchedCommit{hash: lines[0]}
+		for _, line := range lines[1:] {
+			path := strings.TrimSpace(line)
+			if strings.HasSuffix(path, ".go") && !strings.HasSuffix(path, "_test.go") {
+				c.paths = append(c.paths, path)
+			}
+		}
+		commits = append(commits, c)
+	}
+	return commits
+}
+
+// readFileVersions は各 commit が触ったファイルの、親の版と commit の版を 1 回の git cat-file --batch で読む｡
+// キーは "<hash>^:<path>" と "<hash>:<path>"｡追加・削除で片側が無いときはキーを入れない｡
+func readFileVersions(root string, commits []touchedCommit) (map[string][]byte, error) {
+	var names []string
+	for _, c := range commits {
+		for _, path := range c.paths {
+			names = append(names, c.hash+"^:"+path, c.hash+":"+path)
+		}
+	}
+	versions := make(map[string][]byte, len(names))
+	if len(names) == 0 {
+		return versions, nil
+	}
+
+	cmd := exec.Command("git", "cat-file", "--batch")
+	cmd.Dir = root
+	cmd.Stdin = strings.NewReader(strings.Join(names, "\n") + "\n")
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("git cat-file --batch の実行に失敗: %w\n%s", err, bytes.TrimSpace(stderr.Bytes()))
+	}
+
+	rest := out
+	for _, name := range names {
+		header, body, ok := bytes.Cut(rest, []byte("\n"))
+		if !ok {
+			return nil, fmt.Errorf("git cat-file --batch の出力が途中で切れている (%s)", name)
+		}
+		if bytes.HasSuffix(header, []byte(" missing")) {
+			rest = body
+			continue
+		}
+		// header は "<oid> blob <size>"
+		fields := strings.Fields(string(header))
+		if len(fields) != 3 || fields[1] != "blob" {
+			return nil, fmt.Errorf("git cat-file --batch の出力を読めない (%s): %q", name, header)
+		}
+		size, err := strconv.Atoi(fields[2])
+		if err != nil || len(body) < size+1 {
+			return nil, fmt.Errorf("git cat-file --batch の出力を読めない (%s): %q", name, header)
+		}
+		versions[name] = body[:size]
+		rest = body[size+1:]
+	}
+	return versions, nil
+}
+
+// codeChanged は before から after への変更がコードを変えたかを返す｡無い側は nil｡
+// コメントを除いて parse し、位置の情報を持たない FileSet で go/format にかけて比べる｡
+// 元の改行位置に左右されないので、コメントと空白だけの変更は一致する｡parse できなければ変更とみなす｡
+func codeChanged(before, after []byte) bool {
+	if before == nil || after == nil {
+		return true
+	}
+	a, okA := normalizedSource(before)
+	b, okB := normalizedSource(after)
+	return !okA || !okB || !bytes.Equal(a, b)
+}
+
+func normalizedSource(src []byte) ([]byte, bool) {
+	file, err := parser.ParseFile(token.NewFileSet(), "", src, parser.SkipObjectResolution)
+	if err != nil {
+		return nil, false
+	}
+	var buf bytes.Buffer
+	if err := format.Node(&buf, token.NewFileSet(), file); err != nil {
+		return nil, false
+	}
+	return buf.Bytes(), true
 }
 
 // gitOutput は dir で git を実行し、前後の空白を除いた stdout を返す｡
