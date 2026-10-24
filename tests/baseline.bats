@@ -16,6 +16,9 @@ setup() {
         chmod +x "${STUB_BIN}/${tool}"
     done
     PATH="${STUB_BIN}:${PATH}"
+    # golangci-lint と gosec は指摘なしのレポートを返す。レポートが無いと baseline.sh は実行失敗とみなす
+    stub_golangci_lint 0 '{"Issues":[],"Report":{}}'
+    stub_gosec 0 '{"Golang errors":{},"Issues":[],"Stats":{"files":1,"lines":3,"nosec":0,"found":0}}'
     # go-arch-lint は違反なしの JSON を返す (--json 以外のフラグでは何も出さず落ちる)
     stub_go_arch_lint 0 '{"Type":"models.Check","Payload":{"ArchHasWarnings":false,"ArchWarningsDeps":[],"ArchWarningsNotMatched":[],"ArchWarningsDeepScan":[]}}'
     # analyze-modularity は警告なしのレポートを返す。summary が無いと baseline.sh は実行失敗とみなす
@@ -26,6 +29,29 @@ setup() {
     printf '%s\n' 'version: 3' 'workdir: .' > "${PROJECT}/.go-arch-lint.yml"
     printf '%s\n' 'package fixture' '' 'func Answer() int { return 42 }' \
         > "${PROJECT}/fixture.go"
+}
+
+# stub_golangci_lint <exit-code> <stdout> [stderr]
+# 実物は指摘なしで 0、指摘ありで 1 を返し、どちらも stdout に JSON を出す。
+# 実行できなければ 3 以上を返し、stdout は空で理由は stderr に出る。
+stub_golangci_lint() {
+    local rc="$1" out="$2" err="${3:-}"
+    printf '%s\n' '#!/bin/sh' \
+        "printf '%s\n' '${out}'" \
+        "printf '%s' '${err}' >&2" \
+        "exit ${rc}" > "${STUB_BIN}/golangci-lint"
+    chmod +x "${STUB_BIN}/golangci-lint"
+}
+
+# stub_gosec <exit-code> <stdout> [stderr]
+# 実物は指摘ありでも実行の失敗でも 1 を返す。違いは stdout に JSON のレポートが出るかどうか。
+stub_gosec() {
+    local rc="$1" out="$2" err="${3:-}"
+    printf '%s\n' '#!/bin/sh' \
+        "printf '%s' '${out}'" \
+        "printf '%s' '${err}' >&2" \
+        "exit ${rc}" > "${STUB_BIN}/gosec"
+    chmod +x "${STUB_BIN}/gosec"
 }
 
 # stub_go_arch_lint <exit-code> <stdout> [stderr]
@@ -201,6 +227,112 @@ write_failing_test() {
 
     [ "$status" -ne 0 ]
     [[ "$output" == *"analyze-modularity の実行に失敗しました"* ]]
+}
+
+@test "golangci-lint の指摘は件数で出し、JSON に残して測定を続ける" {
+    write_passing_test
+    # 指摘があると golangci-lint は JSON を出したうえで exit 1 する
+    stub_golangci_lint 1 '{"Issues":[{"FromLinter":"gocognit","Text":"cognitive complexity 31"}],"Report":{}}'
+
+    run bash "$BASELINE" "$PROJECT"
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"合計違反数: 1"* ]]
+    [[ "$output" == *"gocognit: 1"* ]]
+    [ "$(jq '.golangci_lint.Issues | length' "${PROJECT}"/baseline-*.json)" -eq 1 ]
+}
+
+@test "golangci-lint が実行に失敗したら理由を出して止まる" {
+    write_passing_test
+    # 設定の誤りなどで実行できないと exit 3 で、stdout は空、理由は stderr に出る
+    stub_golangci_lint 3 '' "Error: unknown linters: 'nosuchlinter'"
+
+    run bash "$BASELINE" "$PROJECT"
+
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"golangci-lint の実行に失敗しました (exit 3)"* ]]
+    [[ "$output" == *"unknown linters"* ]]
+    [[ "$output" != *"違反なし"* ]]
+    run ls "${PROJECT}"/baseline-*.json
+    [ "$status" -ne 0 ]
+}
+
+@test "golangci-lint が JSON を出しても exit 0 と 1 以外なら止まる" {
+    write_passing_test
+    # エラーをログに出したまま走り切ると、JSON を出したうえで exit 7 する
+    stub_golangci_lint 7 '{"Issues":[],"Report":{"Error":"typechecking error"}}'
+
+    run bash "$BASELINE" "$PROJECT"
+
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"golangci-lint の実行に失敗しました (exit 7)"* ]]
+}
+
+@test "golangci-lint が対象コードをコンパイルできなければ理由を出して止まる" {
+    write_passing_test
+    # コンパイルできないと typecheck の Issue を出して exit 1 する。ほかの linter はそのパッケージを解析しない
+    stub_golangci_lint 1 '{"Issues":[{"FromLinter":"typecheck","Text":"./a.go:2:23: undefined: undefinedThing"}],"Report":{}}'
+
+    run bash "$BASELINE" "$PROJECT"
+
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"golangci-lint が対象のコードをコンパイルできませんでした"* ]]
+    [[ "$output" == *"undefined: undefinedThing"* ]]
+    run ls "${PROJECT}"/baseline-*.json
+    [ "$status" -ne 0 ]
+}
+
+@test "gosec が対象コードをコンパイルできなければ理由を出して止まる" {
+    write_passing_test
+    # コンパイルできないと "Golang errors" に理由を入れて exit 1 する。そのパッケージは解析しない
+    stub_gosec 1 '{"Golang errors":{"/p/a.go":[{"line":2,"column":23,"error":"undefined: undefinedThing"}]},"Issues":[],"Stats":{"files":1,"lines":2,"nosec":0,"found":0}}'
+
+    run bash "$BASELINE" "$PROJECT"
+
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"gosec が対象のコードをコンパイルできませんでした"* ]]
+    [[ "$output" == *"/p/a.go:2:23: undefined: undefinedThing"* ]]
+    run ls "${PROJECT}"/baseline-*.json
+    [ "$status" -ne 0 ]
+}
+
+@test "gosec の指摘は件数で出し、JSON に残して測定を続ける" {
+    write_passing_test
+    # 指摘があると gosec は JSON を出したうえで exit 1 する
+    stub_gosec 1 '{"Golang errors":{},"Issues":[{"rule_id":"G204","details":"Subprocess launched with variable"}],"Stats":{"files":1,"lines":3,"nosec":0,"found":1}}'
+
+    run bash "$BASELINE" "$PROJECT"
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"セキュリティ指摘数: 1"* ]]
+    [[ "$output" == *"G204: 1"* ]]
+    [ "$(jq '.gosec.Issues | length' "${PROJECT}"/baseline-*.json)" -eq 1 ]
+}
+
+@test "gosec が実行に失敗したら理由を出して止まる" {
+    write_passing_test
+    # 指摘ありと同じ exit 1 だが、stdout にレポートが出ず理由は stderr に出る
+    stub_gosec 1 '' '[gosec] No packages found'
+
+    run bash "$BASELINE" "$PROJECT"
+
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"gosec の実行に失敗しました (exit 1)"* ]]
+    [[ "$output" == *"No packages found"* ]]
+    run ls "${PROJECT}"/baseline-*.json
+    [ "$status" -ne 0 ]
+}
+
+@test "go tool で呼ぶツールのビルドが失敗したら理由を出して止まる" {
+    write_passing_test
+    isolate_path_from_host_tools
+    add_module_tool golangci-lint 'func main() { undefinedThing() }'
+
+    run bash "$BASELINE" "$PROJECT"
+
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"golangci-lint の実行に失敗しました"* ]]
+    [[ "$output" == *"undefined: undefinedThing"* ]]
 }
 
 @test "PATH に無いツールは go.mod の tool directive から go tool で呼ぶ" {
