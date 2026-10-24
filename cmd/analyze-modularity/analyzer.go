@@ -21,7 +21,7 @@ type MainSequenceData struct {
 	Instability             float64 `json:"instability"`
 	AfferentCoupling        int     `json:"afferent_coupling"`
 	EfferentCoupling        int     `json:"efferent_coupling"`
-	// RecentCommitCount は揮発性の窓の中でこのパッケージを触った commit 数｡測れなければ出さない
+	// RecentCommitCount は揮発性の窓の中でこのパッケージのコードを変えた commit 数｡測れなければ出さない
 	RecentCommitCount *int       `json:"recent_commit_count,omitempty"`
 	Volatility        Volatility `json:"volatility"`
 }

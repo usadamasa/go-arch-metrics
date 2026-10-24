@@ -24,8 +24,7 @@ const (
 
 // 揮発性の既定値｡Martin (Agile PPP ch.28) は「非揮発」の数値を示していないので目安｡
 // 日数ではなく commit 数で窓を切る: HEAD が同じなら結果も同じになり、日がたつだけで CI の判定が変わらない｡
-// agents-daemon の実例では、非揮発の dreamio が 263 commit 中 1 回、揮発の sessionstate が 30 回で、
-// この値で両側に分かれる｡
+// 実例での分かれ方は go-arch-metrics:evaluate の references/thresholds.md「非揮発」｡
 const (
 	defaultVolatilityWindow = 200
 	defaultVolatileCommits  = 5
@@ -56,7 +55,8 @@ func (h commitHistory) volatilityOf(dir string, threshold int) (Volatility, *int
 }
 
 // recentCommitCounts は moduleRoot のリポジトリで HEAD から直近 window commit (merge を除く) を見て、
-// ディレクトリ直下の _test.go でない .go を触った commit をディレクトリごとに数える｡
+// ディレクトリ直下の _test.go でない .go のコードを変えた commit をディレクトリごとに数える｡
+// コメントだけ・空白だけの変更は数えない (codeChanged)｡
 // 履歴が欠けていて数が信用できないとき (shallow clone)、git リポジトリでないとき、commit が無いときは
 // unmeasuredReason に理由を入れて返す｡git が無いのは前提の欠如なのでエラーにする｡
 func recentCommitCounts(moduleRoot string, window int) (commitHistory, error) {
