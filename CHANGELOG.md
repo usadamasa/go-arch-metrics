@@ -1,5 +1,19 @@
 # Changelog
 
+## [2026.1024.0](https://github.com/usadamasa/go-arch-metrics/compare/2026.1021.0...2026.1024.0) - 2026-10-24
+
+### Bug Fixes 🐛
+- baseline.sh が golangci-lint と gosec の実行の失敗を握りつぶさないようにする by @usadamasa in https://github.com/usadamasa/go-arch-metrics/pull/64
+### Dependencies
+- build(deps): Bump actions/create-github-app-token from 3.2.0 to 3.3.0 by @dependabot[bot] in https://github.com/usadamasa/go-arch-metrics/pull/56
+- build(deps): Bump actions/checkout from 6.0.3 to 7.0.1 by @dependabot[bot] in https://github.com/usadamasa/go-arch-metrics/pull/55
+- build(deps): Bump Songmu/tagpr from 1.20.3 to 1.21.3 by @dependabot[bot] in https://github.com/usadamasa/go-arch-metrics/pull/54
+### Other Changes
+- build(go): GO-2026-6809 のため go.mod に toolchain go1.26.10 を足す by @usadamasa in https://github.com/usadamasa/go-arch-metrics/pull/61
+- ci: setup-nix を gh-manage の共有 action へ移行する by @usadamasa in https://github.com/usadamasa/go-arch-metrics/pull/63
+- analyze-modularity: 外から参照されない exported で API surface を判定する by @usadamasa in https://github.com/usadamasa/go-arch-metrics/pull/67
+- analyze-modularity: コメントだけ・空白だけの commit を揮発性に数えない by @usadamasa in https://github.com/usadamasa/go-arch-metrics/pull/68
+
 ## [2026.1021.0](https://github.com/usadamasa/go-arch-metrics/compare/2026.1018.5...2026.1021.0) - 2026-10-21
 
 ### Other Changes
