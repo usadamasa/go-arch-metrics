@@ -11,6 +11,10 @@ cmd/server/handler.go:42:1: Function 'HandleRequest' is too long (145 > 100) (fu
 internal/usecase/order.go:89:5: nestif: nesting depth 6 > 5 (nestif)
 ```
 
+exit code が 0 なら指摘なし、1 なら指摘あり、3 以上は実行できていない。
+baseline.sh は JSON (`--output.json.path stdout`) で受け、JSON が出ないとき、exit が 0 と 1 以外のとき、
+対象のコードがコンパイルできず `typecheck` の指摘が出たときは測定失敗として止まる。
+
 ## go-arch-lint
 
 ```
@@ -49,6 +53,9 @@ Summary:
   Nosec: 0
   Issues: 0
 ```
+
+exit code は指摘ありでも実行の失敗でも 1 なので、baseline.sh は `-fmt json` のレポートが stdout に出たかで見分ける。
+レポートが出ないとき、`Golang errors` (コンパイルできず解析を飛ばしたパッケージ) があるときは測定失敗として止まる。
 
 ## analyze-modularity (JSON)
 
