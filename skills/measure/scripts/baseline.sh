@@ -106,26 +106,34 @@ readonly GOLANGCI_LINT GO_ARCH_LINT GOSEC VULNCHECK ANALYZE_MODULARITY
 cd "$PROJECT_ROOT"
 
 # golangci-lint の実行
-GOLANGCI_RESULT='null'
 printf '%s\n' "--- golangci-lint (テスト可能性・保守性) ---"
 
-# JSON 形式で実行 (違反検出時の非ゼロ終了は許容)
-# v2 では --out-format json は廃止。--output.json.path stdout を使う
-GOLANGCI_JSON=$("${GOLANGCI_LINT[@]}" run --output.json.path stdout --timeout 5m ./... 2>/dev/null | head -1 || true)
-
-if [[ -n "$GOLANGCI_JSON" ]]; then
-    GOLANGCI_SUMMARY=$(printf '%s' "$GOLANGCI_JSON" | jq -r '
-      (.Issues // []) | group_by(.FromLinter) |
-      map({linter: .[0].FromLinter, count: length}) |
-      sort_by(-.count) |
-      "合計違反数: \(map(.count) | add // 0)",
-      (.[] | "  \(.linter): \(.count)")
-    ' 2>/dev/null || printf '%s\n' "  集計スキップ (jq が必要)")
-    printf '%s\n' "$GOLANGCI_SUMMARY"
-    GOLANGCI_RESULT="$GOLANGCI_JSON"
-else
-    printf '%s\n' "  違反なし (または実行エラー)"
+# exit 0 は指摘なし、1 は指摘ありで、どちらも stdout に JSON が出る。3 以上は実行できていない
+# (pkg/exitcodes/exitcodes.go)。go tool 経由のツールのビルド失敗も 1 で stdout が空なので、JSON の有無でも見分ける。
+# v2 では --out-format json は廃止。--show-stats=false で JSON の後ろに件数の行を出させない
+GOLANGCI_RC=0
+GOLANGCI_JSON=$("${GOLANGCI_LINT[@]}" run --output.json.path stdout --show-stats=false --timeout 5m ./...) ||
+    GOLANGCI_RC=$?
+if ((GOLANGCI_RC > 1)) || ! printf '%s' "$GOLANGCI_JSON" | jq -e 'has("Issues")' >/dev/null; then
+    printf '%s\n' "エラー: golangci-lint の実行に失敗しました (exit ${GOLANGCI_RC})。理由は上の出力を参照" >&2
+    exit 1
 fi
+# コンパイルできないパッケージは typecheck の指摘になり、ほかの linter は解析しない。違反数が少なく見えるので止める
+GOLANGCI_TYPECHECK=$(printf '%s' "$GOLANGCI_JSON" |
+    jq -r '(.Issues // [])[] | select(.FromLinter == "typecheck") | "  \(.Text)"')
+if [[ -n "$GOLANGCI_TYPECHECK" ]]; then
+    printf '%s\n' "エラー: golangci-lint が対象のコードをコンパイルできませんでした。理由:" >&2
+    printf '%s\n' "$GOLANGCI_TYPECHECK" >&2
+    exit 1
+fi
+printf '%s' "$GOLANGCI_JSON" | jq -r '
+  (.Issues // []) | group_by(.FromLinter) |
+  map({linter: .[0].FromLinter, count: length}) |
+  sort_by(-.count) |
+  "合計違反数: \(map(.count) | add // 0)",
+  (.[] | "  \(.linter): \(.count)")
+'
+GOLANGCI_RESULT="$GOLANGCI_JSON"
 printf '%s\n' ""
 
 # go-arch-lint の実行
@@ -186,8 +194,31 @@ printf '%s\n' ""
 
 # gosec の実行
 printf '%s\n' "--- gosec (セキュリティ解析) ---"
-# セキュリティ警告検出時の非ゼロ終了は許容
-"${GOSEC[@]}" ./... 2>&1 || true
+# gosec は指摘ありでも実行の失敗でも exit 1 を返す (cmd/gosec/main.go)。
+# 走り切れば stdout に JSON のレポートが出るので、その有無で見分ける。ログは stderr に出る
+GOSEC_RC=0
+GOSEC_JSON=$("${GOSEC[@]}" -fmt json ./...) || GOSEC_RC=$?
+if ((GOSEC_RC > 1)) || ! printf '%s' "$GOSEC_JSON" | jq -e 'has("Issues") and has("Stats")' >/dev/null; then
+    printf '%s\n' "エラー: gosec の実行に失敗しました (exit ${GOSEC_RC})。理由は上の出力を参照" >&2
+    exit 1
+fi
+# コンパイルできないパッケージは "Golang errors" に入り、解析されない。指摘数が少なく見えるので止める
+GOSEC_BUILD_ERRORS=$(printf '%s' "$GOSEC_JSON" |
+    jq -r '(."Golang errors" // {}) | to_entries[] | .key as $file |
+      .value[] | "  \($file):\(.line):\(.column): \(.error)"')
+if [[ -n "$GOSEC_BUILD_ERRORS" ]]; then
+    printf '%s\n' "エラー: gosec が対象のコードをコンパイルできませんでした。理由:" >&2
+    printf '%s\n' "$GOSEC_BUILD_ERRORS" >&2
+    exit 1
+fi
+printf '%s' "$GOSEC_JSON" | jq -r '
+  (.Issues // []) | group_by(.rule_id) |
+  map({rule: .[0].rule_id, count: length}) |
+  sort_by(-.count) |
+  "セキュリティ指摘数: \(map(.count) | add // 0)",
+  (.[] | "  \(.rule): \(.count)")
+'
+GOSEC_RESULT="$GOSEC_JSON"
 printf '%s\n' ""
 
 # analyze-modularity の実行 (API surface と Ca/Ce/A/I/D)
@@ -266,6 +297,7 @@ jq -n \
   --arg project "$PROJECT_ROOT" \
   --argjson golangci "$GOLANGCI_RESULT" \
   --argjson arch "$ARCH_RESULT" \
+  --argjson gosec "$GOSEC_RESULT" \
   --argjson modularity "$MODULARITY_RESULT" \
   --arg vuln_status "$VULN_STATUS" \
   --argjson vuln_rc "$VULN_RC" \
@@ -274,6 +306,7 @@ jq -n \
     project: $project,
     golangci_lint: $golangci,
     go_arch_lint: $arch,
+    gosec: $gosec,
     modularity: $modularity,
     govulncheck: {status: $vuln_status, exit_code: $vuln_rc}
   }' > "$OUTPUT_JSON"
