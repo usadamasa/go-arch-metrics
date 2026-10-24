@@ -14,25 +14,57 @@ import (
 type exportedUsage struct {
 	// Unreferenced はどこからも参照されない (自パッケージとその internal test を除く)
 	Unreferenced []string
-	// TestOnly は外部テストパッケージと他パッケージのテストからだけ参照される
+	// TestOnly は自パッケージの外部テスト (package p_test) からだけ参照される
 	TestOnly []string
 }
 
-// referenceKind は exported が外のどこから参照されたか｡
+// referenceKind は exported が外のどこから参照されたか｡大きいほど強い参照｡
 type referenceKind int
 
 const (
-	referencedFromTest referenceKind = iota + 1
-	referencedFromProduction
+	// referencedFromOwnXTest は自パッケージの外部テストからの参照｡export_test.go へ移せば unexport できる
+	referencedFromOwnXTest referenceKind = iota + 1
+	// referencedFromOutside は他パッケージ (テストを含む) からの参照｡unexport すると他パッケージが壊れる
+	referencedFromOutside
 )
 
 // analyzeExportedReferences は listed の main でないパッケージごとに、外から参照されない exported を返す｡
-// 判定の軸は「unexport しても他の挙動が変わらないか」で、次のものを参照済みとみなす:
-//   - 他パッケージ (テストを含む) の識別子が型情報の上で指すもの。dot import と埋め込みで昇格したメソッドを含む
-//   - 読み込んだどこか (標準ライブラリを含む) の interface に、名前と型が同じメソッドがあるメソッド
-//
-// リフレクションと go:linkname からの参照は静的に見えないので数えない｡
+// 判定の軸は「unexport しても他の挙動が変わらないか」で、規則とその理由は
+// go-arch-metrics:evaluate の references/thresholds.md に置く｡
 func analyzeExportedReferences(moduleRoot string, listed []listedPackage) (map[string]exportedUsage, error) {
+	loaded, err := loadTypedPackages(moduleRoot)
+	if err != nil {
+		return nil, err
+	}
+	tracked := make(map[string]bool, len(listed))
+	for _, p := range listed {
+		tracked[p.ImportPath] = true
+	}
+
+	c := referenceCollector{
+		needed:     interfaceMethods(loaded),
+		references: make(map[string]map[string]referenceKind),
+	}
+	for _, p := range loaded {
+		// p.test は go test が生成する main で、利用者のコードではない
+		if strings.HasSuffix(p.ID, ".test") || !tracked[strings.TrimSuffix(p.PkgPath, "_test")] {
+			continue
+		}
+		c.collect(p)
+	}
+
+	result := make(map[string]exportedUsage)
+	for _, p := range loaded {
+		if p.ID != p.PkgPath || p.Name == "main" || !tracked[p.PkgPath] {
+			continue
+		}
+		result[p.PkgPath] = c.usageOf(p.Types)
+	}
+	return result, nil
+}
+
+// loadTypedPackages は moduleRoot のパッケージをテストを含めて型検査して返す｡
+func loadTypedPackages(moduleRoot string) ([]*packages.Package, error) {
 	cfg := &packages.Config{
 		Mode: packages.NeedName | packages.NeedImports | packages.NeedTypes |
 			packages.NeedTypesInfo | packages.NeedSyntax,
@@ -49,62 +81,169 @@ func analyzeExportedReferences(moduleRoot string, listed []listedPackage) (map[s
 			return nil, fmt.Errorf("型検査に失敗 (%s): %v", p.ID, p.Errors[0])
 		}
 	}
+	return loaded, nil
+}
 
-	tracked := make(map[string]bool, len(listed))
-	for _, p := range listed {
-		tracked[p.ImportPath] = true
+// referenceCollector はパッケージのパスごとに、exported が外からどの強さで参照されたかを集める｡
+type referenceCollector struct {
+	// needed は読み込んだどこかの interface にあるメソッドの methodSignature
+	needed     map[string]bool
+	references map[string]map[string]referenceKind
+}
+
+// collect は p の識別子が指す、他パッケージのオブジェクトを参照として記録する｡
+func (c *referenceCollector) collect(p *packages.Package) {
+	kind := referencedFromOutside
+	if p.ID != p.PkgPath && strings.HasSuffix(p.PkgPath, "_test") {
+		kind = referencedFromOwnXTest
 	}
-
-	needed := interfaceMethods(loaded)
-	references := make(map[string]map[string]referenceKind)
-	for _, p := range loaded {
-		// p.test は go test が生成する main で、利用者のコードではない
-		if strings.HasSuffix(p.ID, ".test") || !tracked[strings.TrimSuffix(p.PkgPath, "_test")] {
+	for _, obj := range p.TypesInfo.Uses {
+		if obj.Pkg() == nil || obj.Pkg().Path() == p.PkgPath {
 			continue
 		}
-		kind := referencedFromProduction
-		if p.ID != p.PkgPath {
-			kind = referencedFromTest
-		}
-		for _, obj := range p.TypesInfo.Uses {
-			if obj.Pkg() == nil || obj.Pkg().Path() == p.PkgPath {
-				continue
-			}
-			key, ok := symbolKey(obj)
-			if !ok {
-				continue
-			}
-			target := obj.Pkg().Path()
-			if references[target] == nil {
-				references[target] = make(map[string]referenceKind)
-			}
-			references[target][key] = max(references[target][key], kind)
-		}
-	}
-
-	result := make(map[string]exportedUsage)
-	for _, p := range loaded {
-		if p.ID != p.PkgPath || p.Name == "main" || !tracked[p.PkgPath] {
+		// 外部テストが参照する自パッケージ以外のものは、他パッケージのテストからの参照になる
+		if kind == referencedFromOwnXTest && obj.Pkg().Path()+"_test" != p.PkgPath {
+			c.mark(obj, referencedFromOutside)
 			continue
 		}
-		var usage exportedUsage
-		for key, method := range exportedSymbols(p.Types) {
-			if method != nil && needed[methodSignature(method)] {
-				continue
-			}
-			switch references[p.PkgPath][key] {
-			case referencedFromProduction:
-			case referencedFromTest:
-				usage.TestOnly = append(usage.TestOnly, key)
-			default:
-				usage.Unreferenced = append(usage.Unreferenced, key)
+		c.mark(obj, kind)
+	}
+}
+
+// mark は obj を kind で参照済みにし、unexport すると外から型名を書けなくなる型を同じ kind で辿る｡
+func (c *referenceCollector) mark(obj types.Object, kind referenceKind) {
+	key, ok := symbolKey(obj)
+	if !ok {
+		return
+	}
+	path := obj.Pkg().Path()
+	if c.references[path] == nil {
+		c.references[path] = make(map[string]referenceKind)
+	}
+	if c.references[path][key] >= kind {
+		return
+	}
+	c.references[path][key] = kind
+
+	switch obj := obj.(type) {
+	case *types.Func:
+		c.walk(path, obj.Origin().Signature(), kind)
+	case *types.TypeName:
+		c.markTypeName(path, obj, kind)
+	}
+}
+
+// markTypeName は参照される型から辿れる型を辿る: 別名の右辺、型パラメータの制約、exported なフィールド、
+// 外から呼ばれるか interface のために残すメソッドのシグネチャ｡
+func (c *referenceCollector) markTypeName(path string, obj *types.TypeName, kind referenceKind) {
+	if alias, ok := obj.Type().(*types.Alias); ok {
+		c.walk(path, alias.Rhs(), kind)
+		return
+	}
+	named, ok := obj.Type().(*types.Named)
+	if !ok {
+		return
+	}
+	for tp := range named.TypeParams().TypeParams() {
+		c.walk(path, tp.Constraint(), kind)
+	}
+	c.walk(path, named.Underlying(), kind)
+	for method := range named.Methods() {
+		if method.Exported() && c.needed[methodSignature(method)] {
+			c.walk(path, method.Signature(), kind)
+		}
+	}
+}
+
+// walk は t に現れる path のパッケージの型を mark する｡他パッケージの名前付き型の中へは入らない｡
+func (c *referenceCollector) walk(path string, t types.Type, kind referenceKind) {
+	switch t := t.(type) {
+	case *types.Alias:
+		c.markIfIn(path, t.Obj(), kind)
+		c.walkTypeArgs(path, t.TypeArgs(), kind)
+	case *types.Named:
+		c.markIfIn(path, t.Origin().Obj(), kind)
+		c.walkTypeArgs(path, t.TypeArgs(), kind)
+	case *types.Pointer:
+		c.walk(path, t.Elem(), kind)
+	case *types.Slice:
+		c.walk(path, t.Elem(), kind)
+	case *types.Array:
+		c.walk(path, t.Elem(), kind)
+	case *types.Chan:
+		c.walk(path, t.Elem(), kind)
+	case *types.Map:
+		c.walk(path, t.Key(), kind)
+		c.walk(path, t.Elem(), kind)
+	case *types.Signature:
+		c.walkSignature(path, t, kind)
+	case *types.Struct:
+		for field := range t.Fields() {
+			if field.Exported() {
+				c.walk(path, field.Type(), kind)
 			}
 		}
-		slices.Sort(usage.Unreferenced)
-		slices.Sort(usage.TestOnly)
-		result[p.PkgPath] = usage
+	case *types.Interface:
+		for method := range t.ExplicitMethods() {
+			if method.Exported() {
+				c.walk(path, method.Signature(), kind)
+			}
+		}
+		for embedded := range t.EmbeddedTypes() {
+			c.walk(path, embedded, kind)
+		}
+	case *types.Union:
+		for term := range t.Terms() {
+			c.walk(path, term.Type(), kind)
+		}
+	case *types.TypeParam:
+		c.walk(path, t.Constraint(), kind)
 	}
-	return result, nil
+}
+
+func (c *referenceCollector) walkSignature(path string, sig *types.Signature, kind referenceKind) {
+	for tp := range sig.TypeParams().TypeParams() {
+		c.walk(path, tp.Constraint(), kind)
+	}
+	for v := range sig.Params().Variables() {
+		c.walk(path, v.Type(), kind)
+	}
+	for v := range sig.Results().Variables() {
+		c.walk(path, v.Type(), kind)
+	}
+}
+
+func (c *referenceCollector) walkTypeArgs(path string, args *types.TypeList, kind referenceKind) {
+	for arg := range args.Types() {
+		c.walk(path, arg, kind)
+	}
+}
+
+// markIfIn は obj が path のパッケージのものなら mark する｡
+func (c *referenceCollector) markIfIn(path string, obj *types.TypeName, kind referenceKind) {
+	if obj.Pkg() != nil && obj.Pkg().Path() == path {
+		c.mark(obj, kind)
+	}
+}
+
+// usageOf は pkg の exported を、集めた参照の強さで分類する｡interface のために残すメソッドは数えない｡
+func (c *referenceCollector) usageOf(pkg *types.Package) exportedUsage {
+	var usage exportedUsage
+	for key, method := range exportedSymbols(pkg) {
+		if method != nil && c.needed[methodSignature(method)] {
+			continue
+		}
+		switch c.references[pkg.Path()][key] {
+		case referencedFromOutside:
+		case referencedFromOwnXTest:
+			usage.TestOnly = append(usage.TestOnly, key)
+		default:
+			usage.Unreferenced = append(usage.Unreferenced, key)
+		}
+	}
+	slices.Sort(usage.Unreferenced)
+	slices.Sort(usage.TestOnly)
+	return usage
 }
 
 // exportedSymbols は pkg の package scope にある exported な func と type、および exported なメソッドを返す｡
