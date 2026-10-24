@@ -52,8 +52,8 @@ import (
 	. "example.com/ref/internal/dotted"
 )
 
-// visitor は lib.Widget.Visit と名前も型も同じメソッドを持つ
-type visitor interface{ Visit(n int) bool }
+// visitor は lib.Widget.Visit と名前も型も同じメソッドを持つ。引数の名前は比べない
+type visitor interface{ Visit(depth int) bool }
 
 // visitor2 は名前だけ同じで型が違う
 type visitor2 interface{ Visit2(n int) int }
