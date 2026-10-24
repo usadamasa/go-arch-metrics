@@ -11,14 +11,16 @@ import (
 )
 
 // strictTestDir は --strict フラグのテスト用に Go ファイルを含む一時ディレクトリを作成する｡
-// withWarnings が true の場合、public ratio が高い警告を意図的に発生させる｡
+// withWarnings が true の場合、どこからも参照されない exported を持つ internal パッケージを作る｡
 func strictTestDir(t *testing.T, withWarnings bool) string {
 	t.Helper()
 	dir := t.TempDir()
 
 	var content string
+	file := "pkg.go"
 	if withWarnings {
-		// public ratio = 1.0 (> デフォルト閾値 0.6) かつシンボル数 10 (>= defaultMinSymbols) → 警告が発生する
+		// exported 10 個がどこからも参照されない internal パッケージ → unreferenced_exported が actionable
+		file = filepath.Join("internal", "highpublic", "pkg.go")
 		content = `package highpublic
 
 func FuncA() {}
@@ -51,7 +53,10 @@ type internalType struct{}
 `
 	}
 
-	err := os.WriteFile(filepath.Join(dir, "pkg.go"), []byte(content), 0644)
+	if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, file)), 0755); err != nil {
+		t.Fatalf("ディレクトリ作成失敗: %v", err)
+	}
+	err := os.WriteFile(filepath.Join(dir, file), []byte(content), 0644)
 	if err != nil {
 		t.Fatalf("テスト用ファイルの作成に失敗: %v", err)
 	}
@@ -436,6 +441,36 @@ func TestStrictFlag(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("未参照の exported を数えて JSON に出し、actionable は unreferenced_exported だけ", func(t *testing.T) {
+		dir := strictTestDir(t, true)
+
+		out, err := exec.Command("go", "run", ".", dir).Output()
+		if err != nil {
+			t.Fatalf("実行失敗: %v", err)
+		}
+		var report Report
+		if err := json.Unmarshal(out, &report); err != nil {
+			t.Fatalf("JSON パース失敗: %v", err)
+		}
+		if len(report.Packages) != 1 {
+			t.Fatalf("packages = %d, want 1", len(report.Packages))
+		}
+		p := report.Packages[0]
+		if p.UnreferencedExported == nil || *p.UnreferencedExported != 10 || len(p.UnreferencedExportedSymbols) != 10 {
+			t.Errorf("unreferenced_exported = %v %v, want 10 個", p.UnreferencedExported, p.UnreferencedExportedSymbols)
+		}
+		got := map[string]bool{}
+		for _, w := range report.Warnings {
+			got[w.Type] = w.Actionable
+		}
+		if actionable, ok := got[WarningTypeUnreferencedExported]; !ok || !actionable {
+			t.Errorf("unreferenced_exported が actionable で出ていない: %+v", report.Warnings)
+		}
+		if actionable, ok := got[WarningTypeHighPublicRatio]; !ok || actionable {
+			t.Errorf("high_public_ratio は actionable=false で残るはず: %+v", report.Warnings)
+		}
+	})
 
 	t.Run("--strict あり、構造制約の警告だけ → exit code 0", func(t *testing.T) {
 		// a → c の 2 パッケージ。c は Ce=0, Ca=1, A=0 の葉で zone_of_pain と structurally_constrained を出す。

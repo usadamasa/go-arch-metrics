@@ -426,7 +426,7 @@ func TestGenerateWarnings(t *testing.T) {
 		}
 	})
 
-	t.Run("AST 系の警告は actionable=true", func(t *testing.T) {
+	t.Run("loc_outlier は actionable、high_public_ratio は参考情報", func(t *testing.T) {
 		pkg := PackageResult{
 			Path:          "pkg/big-api",
 			LOC:           1500,
@@ -437,10 +437,82 @@ func TestGenerateWarnings(t *testing.T) {
 		if len(warnings) != 2 {
 			t.Fatalf("警告数: got %d, want 2 (high_public_ratio, loc_outlier)", len(warnings))
 		}
+		want := map[string]bool{WarningTypeHighPublicRatio: false, WarningTypeLocOutlier: true}
 		for _, w := range warnings {
-			if !w.Actionable {
-				t.Errorf("%s: actionable=false, want true", w.Type)
+			if w.Actionable != want[w.Type] {
+				t.Errorf("%s: actionable=%v, want %v", w.Type, w.Actionable, want[w.Type])
 			}
+		}
+	})
+}
+
+func TestGenerateExportedReferenceWarnings(t *testing.T) {
+	t.Run("internal の未参照は actionable で、シンボル名を並べる", func(t *testing.T) {
+		pkg := PackageResult{
+			Path:                        "internal/edge",
+			internal:                    true,
+			UnreferencedExported:        new(2),
+			UnreferencedExportedSymbols: []string{"Prune", "Walker.Skip"},
+			TestOnlyExported:            new(0),
+		}
+
+		warnings := GenerateExportedReferenceWarnings(pkg)
+		if len(warnings) != 1 {
+			t.Fatalf("警告数: got %d, want 1", len(warnings))
+		}
+		w := warnings[0]
+		if w.Type != WarningTypeUnreferencedExported || !w.Actionable || w.Value != 2 {
+			t.Errorf("got %+v, want unreferenced_exported, actionable, value 2", w)
+		}
+		for _, name := range []string{"Prune", "Walker.Skip"} {
+			if !strings.Contains(w.Message, name) {
+				t.Errorf("Message に %s が無い: %s", name, w.Message)
+			}
+		}
+	})
+
+	t.Run("テストからだけ参照される exported も数え、種類を分けて書く", func(t *testing.T) {
+		pkg := PackageResult{
+			Path:                    "internal/edge",
+			internal:                true,
+			UnreferencedExported:    new(0),
+			TestOnlyExported:        new(1),
+			TestOnlyExportedSymbols: []string{"Fixture"},
+		}
+
+		warnings := GenerateExportedReferenceWarnings(pkg)
+		if len(warnings) != 1 || !warnings[0].Actionable {
+			t.Fatalf("got %+v, want actionable な警告 1 件", warnings)
+		}
+		if !strings.Contains(warnings[0].Message, "テストからだけ") || !strings.Contains(warnings[0].Message, "Fixture") {
+			t.Errorf("Message にテストだけの分が無い: %s", warnings[0].Message)
+		}
+	})
+
+	t.Run("internal でなければ報告だけで actionable にしない", func(t *testing.T) {
+		pkg := PackageResult{
+			Path:                        "pkg/api",
+			UnreferencedExported:        new(1),
+			UnreferencedExportedSymbols: []string{"Client"},
+			TestOnlyExported:            new(0),
+		}
+
+		warnings := GenerateExportedReferenceWarnings(pkg)
+		if len(warnings) != 1 || warnings[0].Actionable {
+			t.Fatalf("got %+v, want actionable=false の警告 1 件", warnings)
+		}
+	})
+
+	t.Run("すべて参照されていれば警告なし", func(t *testing.T) {
+		pkg := PackageResult{Path: "internal/edge", internal: true, UnreferencedExported: new(0), TestOnlyExported: new(0)}
+		if warnings := GenerateExportedReferenceWarnings(pkg); len(warnings) != 0 {
+			t.Errorf("got %+v, want 0 件", warnings)
+		}
+	})
+
+	t.Run("判定しないパッケージ (main) は警告なし", func(t *testing.T) {
+		if warnings := GenerateExportedReferenceWarnings(PackageResult{Path: "cmd/app"}); len(warnings) != 0 {
+			t.Errorf("got %+v, want 0 件", warnings)
 		}
 	})
 }

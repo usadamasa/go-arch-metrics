@@ -39,6 +39,15 @@ type PackageResult struct {
 	LOC               int     `json:"loc"`
 	Files             int     `json:"files"`
 
+	// UnreferencedExported はパッケージの外から参照されない exported の数｡main など判定しないパッケージでは出さない
+	UnreferencedExported        *int     `json:"unreferenced_exported,omitempty"`
+	UnreferencedExportedSymbols []string `json:"unreferenced_exported_symbols,omitempty"`
+	// TestOnlyExported は他パッケージのテストと外部テストパッケージからだけ参照される exported の数
+	TestOnlyExported        *int     `json:"test_only_exported,omitempty"`
+	TestOnlyExportedSymbols []string `json:"test_only_exported_symbols,omitempty"`
+	// internal は import path に /internal/ を含むかどうか｡モジュールの外に利用者がいないと言えるのはこのときだけ
+	internal bool
+
 	MainSequence *MainSequenceData `json:"main_sequence,omitempty"`
 }
 
@@ -88,7 +97,13 @@ const (
 	WarningTypeStructurallyConstrained = "structurally_constrained"
 	WarningTypeHighDistance            = "high_distance"
 	WarningTypeConstrainedLocOutlier   = "constrained_loc_outlier"
+	WarningTypeUnreferencedExported    = "unreferenced_exported"
 )
+
+// GenerateExportedReferenceWarnings は未参照の exported の警告を生成する｡
+func GenerateExportedReferenceWarnings(pkg PackageResult) []Warning {
+	return nil
+}
 
 // mainSequenceDistanceThreshold は Main Sequence からの許容最大距離｡
 // Martin, Clean Architecture, Chapter 14 に基づく｡
