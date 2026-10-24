@@ -5,6 +5,7 @@ description: >-
   complexity, deep nesting, oversized public API surface, packages far from the Main Sequence,
   and `.go-arch-lint.yml` configs that have degraded into a copy of the package tree.
   Triggers for requests like "improve testability", "public ratio を下げたい",
+  "unreferenced_exported を直したい",
   "モジュール化の目的から逸脱している", "循環参照を解消したい".
 ---
 
@@ -20,7 +21,7 @@ description: >-
 | 認知的複雑度 / 関数長 / ネスト深さ | `references/remediation.md`「テスト可能性違反の是正」 |
 | コード重複 | `references/remediation.md`「コード重複の是正」 |
 | 保守性指数 / 到達不能コード | `references/remediation.md`「保守性違反の是正」 |
-| Public ratio / LOC 外れ値 / Distance | `references/remediation.md`「パッケージ責務の是正」 |
+| 外から参照されない exported / LOC 外れ値 / Distance | `references/remediation.md`「パッケージ責務の是正」 |
 | `.go-arch-lint.yml` が長大化した | `references/arch-lint-remediation.md` |
 
 ## 段階的改善のロードマップ

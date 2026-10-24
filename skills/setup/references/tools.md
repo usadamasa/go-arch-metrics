@@ -229,11 +229,13 @@ gosec ./...
 ### 概要
 
 パッケージの API surface area と、Robert C. Martin の Package Metrics (Ca/Ce/A/I/D) を測るカスタム CLI。
-前者は `go/ast` で宣言を数え、後者は `go list -json ./...` の import 辺から出す。
+前者は `go/ast` で宣言を数え、`golang.org/x/tools/go/packages` の型情報で外からの参照を解く。
+後者は `go list -json ./...` の import 辺から出す。
 
 | メトリクス | 説明 |
 |-----------|------|
-| Public ratio | exported / (exported + unexported) |
+| 外から参照されない exported | unexport しても他の挙動が変わらない exported の数と名前。判定の規則は `go-arch-metrics:evaluate` の `references/thresholds.md` |
+| Public ratio | exported / (exported + unexported)。参考値で `--strict` の判定には使わない |
 | LOC 外れ値 | パッケージ LOC > mean + 2σ |
 | Exported funcs/methods | 公開関数・メソッド数 |
 | Exported types | 公開型 (struct/interface) 数 |
@@ -256,7 +258,7 @@ git リポジトリでなければ ignore するものは無いとみなす (std
 # 実行
 analyze-modularity <directory>...
 
-# フラグ
+# フラグ (--max-public-ratio と --min-symbols は参考情報 high_public_ratio のしきい値)
 analyze-modularity --max-public-ratio 0.6 --sigma 2.0 --min-symbols 10 .
 
 # JSON 出力を jq で整形
