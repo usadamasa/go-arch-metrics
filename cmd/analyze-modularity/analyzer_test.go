@@ -489,7 +489,8 @@ func TestGenerateExportedReferenceWarnings(t *testing.T) {
 		}
 	})
 
-	t.Run("internal でなければ報告だけで actionable にしない", func(t *testing.T) {
+	t.Run("internal でなければ数をフィールドに出すだけで警告にしない", func(t *testing.T) {
+		// モジュールの外の利用者が見えないので、警告を出すと公開パッケージのすべてに付く
 		pkg := PackageResult{
 			Path:                        "pkg/api",
 			UnreferencedExported:        new(1),
@@ -497,9 +498,8 @@ func TestGenerateExportedReferenceWarnings(t *testing.T) {
 			TestOnlyExported:            new(0),
 		}
 
-		warnings := GenerateExportedReferenceWarnings(pkg)
-		if len(warnings) != 1 || warnings[0].Actionable {
-			t.Fatalf("got %+v, want actionable=false の警告 1 件", warnings)
+		if warnings := GenerateExportedReferenceWarnings(pkg); len(warnings) != 0 {
+			t.Fatalf("got %+v, want 0 件", warnings)
 		}
 	})
 
