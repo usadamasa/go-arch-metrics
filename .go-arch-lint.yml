@@ -18,6 +18,9 @@ vendors:
     in: golang.org/x/vuln/scan
   x509roots:
     in: golang.org/x/crypto/x509roots/fallback
+  # cmd/analyze-modularity が外からの参照を型情報で解くため
+  packages:
+    in: golang.org/x/tools/go/packages
 
 deps:
   cmd_main:
@@ -25,3 +28,4 @@ deps:
       - yaml
       - vuln
       - x509roots
+      - packages

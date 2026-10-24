@@ -8,6 +8,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // MainSequenceData は Martin の Package Metrics (Ca/Ce/A/I/D) と Zone 分類結果を保持する｡
@@ -38,6 +39,15 @@ type PackageResult struct {
 	PublicRatioValue  float64 `json:"public_ratio"`
 	LOC               int     `json:"loc"`
 	Files             int     `json:"files"`
+
+	// UnreferencedExported はパッケージの外から参照されない exported の数｡main など判定しないパッケージでは出さない
+	UnreferencedExported        *int     `json:"unreferenced_exported,omitempty"`
+	UnreferencedExportedSymbols []string `json:"unreferenced_exported_symbols,omitempty"`
+	// TestOnlyExported は他パッケージのテストと外部テストパッケージからだけ参照される exported の数
+	TestOnlyExported        *int     `json:"test_only_exported,omitempty"`
+	TestOnlyExportedSymbols []string `json:"test_only_exported_symbols,omitempty"`
+	// internal は import path に /internal/ を含むかどうか｡モジュールの外に利用者がいないと言えるのはこのときだけ
+	internal bool
 
 	MainSequence *MainSequenceData `json:"main_sequence,omitempty"`
 }
@@ -88,7 +98,37 @@ const (
 	WarningTypeStructurallyConstrained = "structurally_constrained"
 	WarningTypeHighDistance            = "high_distance"
 	WarningTypeConstrainedLocOutlier   = "constrained_loc_outlier"
+	WarningTypeUnreferencedExported    = "unreferenced_exported"
 )
+
+// GenerateExportedReferenceWarnings はパッケージの外から参照されない exported の警告を生成する｡
+// unexport (テストだけの分は export_test.go への移動) で直せるので actionable にする｡
+// internal でないパッケージはモジュール外の利用者が見えず unexport が安全と言えないので、
+// 警告にせず unreferenced_exported のフィールドで数を出すだけにする｡
+func GenerateExportedReferenceWarnings(pkg PackageResult) []Warning {
+	if !pkg.internal || pkg.UnreferencedExported == nil || pkg.TestOnlyExported == nil {
+		return nil
+	}
+	count := *pkg.UnreferencedExported + *pkg.TestOnlyExported
+	if count == 0 {
+		return nil
+	}
+
+	var parts []string
+	if len(pkg.UnreferencedExportedSymbols) > 0 {
+		parts = append(parts, "パッケージの外から参照されない exported: "+strings.Join(pkg.UnreferencedExportedSymbols, ", "))
+	}
+	if len(pkg.TestOnlyExportedSymbols) > 0 {
+		parts = append(parts, "テストからだけ参照される exported: "+strings.Join(pkg.TestOnlyExportedSymbols, ", "))
+	}
+	return []Warning{{
+		Type:       WarningTypeUnreferencedExported,
+		Package:    pkg.Path,
+		Value:      float64(count),
+		Message:    strings.Join(parts, "。"),
+		Actionable: true,
+	}}
+}
 
 // mainSequenceDistanceThreshold は Main Sequence からの許容最大距離｡
 // Martin, Clean Architecture, Chapter 14 に基づく｡
@@ -381,6 +421,9 @@ const minLOCLimit = 1000
 // minSymbols 未満のシンボル数のパッケージでは比率メトリクスが統計的に不安定なため
 // high_public_ratio チェックをスキップする｡同じ理由で loc_outlier にも下限
 // (minLOCLimit) を設けている — 詳細は minLOCLimit の宣言を参照｡
+//
+// high_public_ratio は参考情報で actionable にしない｡分母が unexported の量なので、exported がすべて
+// 使われていても unexported の重複を消すと悪化する｡直す対象は unreferenced_exported で判定する｡
 func GenerateWarnings(pkg PackageResult, maxPublicRatio, sigma float64, locStats Stats, minSymbols int) []Warning {
 	var warnings []Warning
 
@@ -391,8 +434,8 @@ func GenerateWarnings(pkg PackageResult, maxPublicRatio, sigma float64, locStats
 			Package:    pkg.Path,
 			Value:      ratio,
 			Limit:      maxPublicRatio,
-			Message:    fmt.Sprintf("API surface が大きすぎます (%.2f > %.2f)", ratio, maxPublicRatio),
-			Actionable: true,
+			Message:    fmt.Sprintf("public ratio が高い (%.2f > %.2f)", ratio, maxPublicRatio) + nonActionableSuffix,
+			Actionable: false,
 		})
 	}
 

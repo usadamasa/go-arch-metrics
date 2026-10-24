@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 )
 
 // Report はレポートの最上位構造｡
@@ -64,9 +66,9 @@ func inferModuleRoot(args []string) string {
 }
 
 func main() {
-	maxPublicRatio := flag.Float64("max-public-ratio", 0.6, "public ratio の警告しきい値")
+	maxPublicRatio := flag.Float64("max-public-ratio", 0.6, "high_public_ratio (参考情報) を出すしきい値。--strict の判定には効かない")
 	sigma := flag.Float64("sigma", 2.0, "LOC 外れ値検出の σ 倍数")
-	minSymbols := flag.Int("min-symbols", defaultMinSymbols, "public ratio チェックの最小シンボル数")
+	minSymbols := flag.Int("min-symbols", defaultMinSymbols, "high_public_ratio (参考情報) を出す最小シンボル数。--strict の判定には効かない")
 	strict := flag.Bool("strict", false, "actionable な警告 (コードを直して消せるもの) がある場合に exit code 1 を返す")
 	volatilityWindow := flag.Int("volatility-window", defaultVolatilityWindow, "揮発性を数える直近の commit 数 (merge を除く)")
 	volatileCommits := flag.Int("volatile-commits", defaultVolatileCommits, "窓の中でこの数以上の commit に触られたパッケージを揮発とみなす")
@@ -123,6 +125,7 @@ func main() {
 		mainSequenceWarnings := GenerateMainSequenceWarnings(p)
 		crossWarnings := GenerateCrossWarnings(p, astWarnings)
 		allWarnings = append(allWarnings, astWarnings...)
+		allWarnings = append(allWarnings, GenerateExportedReferenceWarnings(p)...)
 		allWarnings = append(allWarnings, mainSequenceWarnings...)
 		allWarnings = append(allWarnings, crossWarnings...)
 	}
@@ -180,6 +183,10 @@ func collectPackages(args []string) ([]listedPackage, []PackageResult, error) {
 	if err != nil {
 		return nil, nil, err
 	}
+	usages, err := analyzeExportedReferences(moduleRoot, tracked)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	var packages []PackageResult
 	for _, s := range selected {
@@ -188,6 +195,18 @@ func collectPackages(args []string) ([]listedPackage, []PackageResult, error) {
 			return nil, nil, fmt.Errorf("%s: %w", s.Path, err)
 		}
 		result.Path = s.Path
+		// main はどこからも import できず、exported でも変更の影響が外へ広がらないので判定しない
+		if s.Name != "main" {
+			usage, ok := usages[s.ImportPath]
+			if !ok {
+				return nil, nil, fmt.Errorf("型情報の読み込み結果に %s が無い", s.ImportPath)
+			}
+			result.UnreferencedExported = new(len(usage.Unreferenced))
+			result.UnreferencedExportedSymbols = usage.Unreferenced
+			result.TestOnlyExported = new(len(usage.TestOnly))
+			result.TestOnlyExportedSymbols = usage.TestOnly
+			result.internal = slices.Contains(strings.Split(s.ImportPath, "/"), "internal")
+		}
 		packages = append(packages, result)
 	}
 	if len(packages) == 0 {

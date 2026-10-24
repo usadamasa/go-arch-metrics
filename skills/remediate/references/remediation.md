@@ -314,15 +314,21 @@ internal/usecase/order.go:78: unreachable function "legacyCalculate"
 
 ## パッケージ責務の是正
 
-### Public ratio が高すぎる場合 (analyze-modularity)
+### 外から参照されない exported がある場合 (analyze-modularity)
 
-**問題**: `public_ratio > 0.6` は API surface が過大であることを示す
+**問題**: `unreferenced_exported` の警告は、unexport しても他の挙動が変わらない exported があることを示す。
+メッセージと `unreferenced_exported_symbols` / `test_only_exported_symbols` に名前が出る
 
 **是正パターン**:
 
-1. **unexported にできる関数・型を特定**: `package main` 内の関数は外部から参照されないため、全て unexported でよい
-2. **internal パッケージの場合**: 他パッケージから実際に使われていない exported シンボルを unexported に変更
+1. **未参照のもの** (`unreferenced_exported_symbols`): unexported に変える
+2. **テストだけのもの** (`test_only_exported_symbols`): unexported に変え、外部テストが使う名前は
+   `export_test.go` (`package p` の `_test.go`) で `var Xxx = xxx` のように公開し直す
 3. **型の公開範囲を縮小**: constructor パターン (`NewXxx()`) を使い、struct フィールドを unexported にする
+   (フィールドは判定の対象外なので、警告とは別の改善)
+
+`public_ratio` は参考値で、private なヘルパを足して下げても警告は消えない。数えるものと参照済みとみなす規則は
+`go-arch-metrics:evaluate` の `references/thresholds.md`「外から参照されない exported」。
 
 ```go
 // ❌ Bad: 全フィールドが公開
@@ -401,7 +407,7 @@ D > 0.5 のパッケージ
 |--------|------------|------|
 | 変更頻度 (churn) | `main_sequence.volatility` が `volatile` (直近の窓で `recent_commit_count` がしきい値以上) | 変わる部分と変わらない部分を分割し、変わる側の Ca を下げる |
 | 依存数 (Ca) | Ca が非常に大きい (例: >5) | 多くのパッケージから依存されている安定コア。依存元ごとの使われ方を見て、関心ごとで分割する |
-| 責務の範囲 | LOC が外れ値、または public ratio が高い | パッケージ分割を検討 |
+| 責務の範囲 | LOC が外れ値 | パッケージ分割を検討 |
 
 窓としきい値は `go-arch-metrics:evaluate` の `references/thresholds.md` の「非揮発」。
 

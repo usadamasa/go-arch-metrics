@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,14 +11,16 @@ import (
 )
 
 // strictTestDir は --strict フラグのテスト用に Go ファイルを含む一時ディレクトリを作成する｡
-// withWarnings が true の場合、public ratio が高い警告を意図的に発生させる｡
+// withWarnings が true の場合、どこからも参照されない exported を持つ internal パッケージを作る｡
 func strictTestDir(t *testing.T, withWarnings bool) string {
 	t.Helper()
 	dir := t.TempDir()
 
 	var content string
+	file := "pkg.go"
 	if withWarnings {
-		// public ratio = 1.0 (> デフォルト閾値 0.6) かつシンボル数 10 (>= defaultMinSymbols) → 警告が発生する
+		// exported 10 個がどこからも参照されない internal パッケージ → unreferenced_exported が actionable
+		file = filepath.Join("internal", "highpublic", "pkg.go")
 		content = `package highpublic
 
 func FuncA() {}
@@ -50,7 +53,10 @@ type internalType struct{}
 `
 	}
 
-	err := os.WriteFile(filepath.Join(dir, "pkg.go"), []byte(content), 0644)
+	if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, file)), 0755); err != nil {
+		t.Fatalf("ディレクトリ作成失敗: %v", err)
+	}
+	err := os.WriteFile(filepath.Join(dir, file), []byte(content), 0644)
 	if err != nil {
 		t.Fatalf("テスト用ファイルの作成に失敗: %v", err)
 	}
@@ -314,6 +320,69 @@ func TestStrictFlag_揮発性(t *testing.T) {
 	})
 }
 
+// edgeFixtureModule は agents-daemon#184 の internal/edge を写したモジュールを作る｡
+// edge の exported 10 個はすべて app から参照され、unexported は unexported 個だけ持つ｡
+func edgeFixtureModule(t *testing.T, unexported int) string {
+	t.Helper()
+	var edge strings.Builder
+	edge.WriteString("package edge\n\n")
+	for _, name := range []string{"A", "B", "C", "D", "E", "F"} {
+		fmt.Fprintf(&edge, "func %s() int { return 1 }\n", name)
+	}
+	for _, name := range []string{"G", "H", "I", "J"} {
+		fmt.Fprintf(&edge, "type %s struct{}\n", name)
+	}
+	for i := range unexported {
+		fmt.Fprintf(&edge, "func helper%d() {}\n", i)
+	}
+
+	root := t.TempDir()
+	files := map[string]string{
+		"go.mod":                "module example.com/daemon\n\ngo 1.26\n",
+		"internal/edge/edge.go": edge.String(),
+		"app/app.go": "package app\n\nimport \"example.com/daemon/internal/edge\"\n\n" +
+			"func Run() int {\n\t_ = edge.G{}\n\t_ = edge.H{}\n\t_ = edge.I{}\n\t_ = edge.J{}\n" +
+			"\treturn edge.A() + edge.B() + edge.C() + edge.D() + edge.E() + edge.F()\n}\n",
+	}
+	for name, content := range files {
+		path := filepath.Join(root, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			t.Fatalf("ディレクトリ作成失敗: %v", err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			t.Fatalf("ファイル作成失敗: %v", err)
+		}
+	}
+	return root
+}
+
+func TestStrictFlag_使われているexportedだけのパッケージ(t *testing.T) {
+	// exported がすべて外から使われていれば、unexported の重複を消しても直す対象にならない
+	for _, unexported := range []int{7, 6} {
+		t.Run(fmt.Sprintf("unexported %d 個", unexported), func(t *testing.T) {
+			root := edgeFixtureModule(t, unexported)
+
+			cmd := exec.Command("go", "run", ".", "--strict", root)
+			var stderr strings.Builder
+			cmd.Stderr = &stderr
+			out, err := cmd.Output()
+			if err != nil {
+				t.Errorf("--strict が落ちた: %v\n%s\n%s", err, out, stderr.String())
+			}
+
+			var report Report
+			if err := json.Unmarshal(out, &report); err != nil {
+				t.Fatalf("JSON パース失敗: %v", err)
+			}
+			for _, w := range report.Warnings {
+				if w.Actionable {
+					t.Errorf("actionable な警告が出た: %+v", w)
+				}
+			}
+		})
+	}
+}
+
 func TestStrictFlag(t *testing.T) {
 	// サブプロセステストには cmd/ ディレクトリから go run を使用する｡
 	// os.Exit を含む main() は直接呼び出せないため、サブプロセスで実行する｡
@@ -372,6 +441,36 @@ func TestStrictFlag(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("未参照の exported を数えて JSON に出し、actionable は unreferenced_exported だけ", func(t *testing.T) {
+		dir := strictTestDir(t, true)
+
+		out, err := exec.Command("go", "run", ".", dir).Output()
+		if err != nil {
+			t.Fatalf("実行失敗: %v", err)
+		}
+		var report Report
+		if err := json.Unmarshal(out, &report); err != nil {
+			t.Fatalf("JSON パース失敗: %v", err)
+		}
+		if len(report.Packages) != 1 {
+			t.Fatalf("packages = %d, want 1", len(report.Packages))
+		}
+		p := report.Packages[0]
+		if p.UnreferencedExported == nil || *p.UnreferencedExported != 10 || len(p.UnreferencedExportedSymbols) != 10 {
+			t.Errorf("unreferenced_exported = %v %v, want 10 個", p.UnreferencedExported, p.UnreferencedExportedSymbols)
+		}
+		got := map[string]bool{}
+		for _, w := range report.Warnings {
+			got[w.Type] = w.Actionable
+		}
+		if actionable, ok := got[WarningTypeUnreferencedExported]; !ok || !actionable {
+			t.Errorf("unreferenced_exported が actionable で出ていない: %+v", report.Warnings)
+		}
+		if actionable, ok := got[WarningTypeHighPublicRatio]; !ok || actionable {
+			t.Errorf("high_public_ratio は actionable=false で残るはず: %+v", report.Warnings)
+		}
+	})
 
 	t.Run("--strict あり、構造制約の警告だけ → exit code 0", func(t *testing.T) {
 		// a → c の 2 パッケージ。c は Ce=0, Ca=1, A=0 の葉で zone_of_pain と structurally_constrained を出す。

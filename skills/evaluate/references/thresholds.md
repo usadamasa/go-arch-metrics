@@ -10,11 +10,67 @@
 | ネストの深さ ≤ 5 | 目標値。既存コードへの一括適用は 5-8 から始め、段階的に絞る |
 | 保守性指数 ≥ 20 | Microsoft の定義: 0-9 は保守困難、10-19 は低品質 |
 | Distance ≤ 0.5 (アクション可能パッケージのみ) | Robert C. Martin の D' = \|A+I-1\|。Ce=0 の葉パッケージ (構造的制約)、非揮発の Zone of Pain、main パッケージは除外して集計。Martin (Agile PPP ch.28): 非揮発性の具象安定パッケージは Zone of Pain でも harmless |
-| Public ratio ≤ 0.6 | API surface が大きすぎると変更影響範囲が拡大する。シンボル数 < `--min-symbols` (デフォルト 10) のパッケージは比率メトリクスが統計的に不安定なためスキップ |
+| 外から参照されない exported = 0 (internal パッケージのみ) | unexport しても他の挙動が変わらない exported は、API surface を広げているだけ。判定の規則は下の「外から参照されない exported」 |
 | LOC ≤ mean + 2σ | 統計的外れ値は過大な責務の兆候 (正規分布の 95% 信頼区間外) |
 
 初期導入時は既存コードのベースライン値を記録し、段階的に目標値に近づけること。
 最初から全違反を 0 にしようとするのは逆効果。
+
+---
+
+## 外から参照されない exported
+
+`analyze-modularity` は、unexport しても他の挙動が変わらない exported を数える。
+是正 (unexport) と判定を一致させるためで、数えた結果はパッケージごとの `unreferenced_exported(_symbols)` と
+`test_only_exported(_symbols)` に出る。
+
+### 数えるもの
+
+- パッケージ直下の exported な func と type、および exported なメソッド (unexported な型のものを含む)
+- const、var、struct のフィールドは数えない。フィールドはリフレクション (`encoding/json` など) で
+  使われるのが普通で、unexport が安全と言えない
+
+### 参照済みとみなすもの
+
+型情報 (`golang.org/x/tools/go/packages`) で識別子が指す先を解く。dot import と、埋め込みで昇格した
+メソッドの呼び出しもここで解ける。
+
+- 他パッケージから参照されるもの。他パッケージのテストからの参照も含む。
+  unexport すると他パッケージのテストが壊れ、`export_test.go` でも直せない
+- 参照される func・method のシグネチャ、参照される型の exported フィールド・型パラメータの制約・別名の右辺に
+  出てくる自パッケージの型。unexport すると呼ぶ側が型名を書けなくなる。参照の種類 (下の test_only かどうか) は
+  元の参照から引き継ぐ
+- 読み込んだどこか (標準ライブラリを含む) の interface に、名前と型 (引数の名前は比べない) が同じメソッドが
+  あるメソッド。unexport すると interface を満たせなくなる。誤検知を減らす側に倒している
+- 型のメソッドのシグネチャを辿るのは、外から呼ばれるメソッドと interface のために残すメソッドだけ。
+  全メソッドを辿ると、メソッドを unexport した次の回に型が初めて出てくる 2 段階の是正になる
+
+自パッケージ (internal test を含む) からの参照は数えない。
+
+### 種類と actionable
+
+| 種類 | 条件 | 是正 |
+|------|------|------|
+| 未参照 (`unreferenced_exported`) | どこからも参照されない | unexport する |
+| テストだけ (`test_only_exported`) | 自パッケージの外部テスト (`package p_test`) からだけ参照される | `export_test.go` へ移す |
+
+import path に `internal` を含むパッケージで、どちらかが 1 個以上あれば `unreferenced_exported` の警告を
+actionable で出し、メッセージにシンボル名を並べる。
+
+- `internal` でないパッケージは数を出すが警告にしない。モジュールの外の利用者が見えず、unexport が安全と言えない
+- `main` は判定しない。どこからも import できず、exported でも変更の影響が外へ広がらない
+
+### 拾えない参照
+
+リフレクション (`text/template` のメソッド呼び出し、`encoding/json` のマーシャラなど) と `go:linkname` は
+静的に見えない。これらからだけ使われる exported は未参照と判定される (誤検知)。
+
+### public ratio (参考値)
+
+`public_ratio` = exported / (exported + unexported) は参考値として出し続けるが、`--strict` の判定には使わない。
+分母が unexported の量なので、exported がすべて使われていても unexported の重複を消すと悪化し、
+private なヘルパを足すと改善する。`--max-public-ratio` (既定 0.6) を超え、シンボル数が `--min-symbols`
+(既定 10) 以上のパッケージに `high_public_ratio` を `actionable: false` で出す。
 
 ---
 
