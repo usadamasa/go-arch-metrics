@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -312,6 +313,69 @@ func TestStrictFlag_揮発性(t *testing.T) {
 			t.Errorf("stderr に shallow と fetch-depth の案内が無い:\n%s", stderr)
 		}
 	})
+}
+
+// edgeFixtureModule は agents-daemon#184 の internal/edge を写したモジュールを作る｡
+// edge の exported 10 個はすべて app から参照され、unexported は unexported 個だけ持つ｡
+func edgeFixtureModule(t *testing.T, unexported int) string {
+	t.Helper()
+	var edge strings.Builder
+	edge.WriteString("package edge\n\n")
+	for _, name := range []string{"A", "B", "C", "D", "E", "F"} {
+		fmt.Fprintf(&edge, "func %s() int { return 1 }\n", name)
+	}
+	for _, name := range []string{"G", "H", "I", "J"} {
+		fmt.Fprintf(&edge, "type %s struct{}\n", name)
+	}
+	for i := range unexported {
+		fmt.Fprintf(&edge, "func helper%d() {}\n", i)
+	}
+
+	root := t.TempDir()
+	files := map[string]string{
+		"go.mod":                "module example.com/daemon\n\ngo 1.26\n",
+		"internal/edge/edge.go": edge.String(),
+		"app/app.go": "package app\n\nimport \"example.com/daemon/internal/edge\"\n\n" +
+			"func Run() int {\n\t_ = edge.G{}\n\t_ = edge.H{}\n\t_ = edge.I{}\n\t_ = edge.J{}\n" +
+			"\treturn edge.A() + edge.B() + edge.C() + edge.D() + edge.E() + edge.F()\n}\n",
+	}
+	for name, content := range files {
+		path := filepath.Join(root, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			t.Fatalf("ディレクトリ作成失敗: %v", err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			t.Fatalf("ファイル作成失敗: %v", err)
+		}
+	}
+	return root
+}
+
+func TestStrictFlag_使われているexportedだけのパッケージ(t *testing.T) {
+	// exported がすべて外から使われていれば、unexported の重複を消しても直す対象にならない
+	for _, unexported := range []int{7, 6} {
+		t.Run(fmt.Sprintf("unexported %d 個", unexported), func(t *testing.T) {
+			root := edgeFixtureModule(t, unexported)
+
+			cmd := exec.Command("go", "run", ".", "--strict", root)
+			var stderr strings.Builder
+			cmd.Stderr = &stderr
+			out, err := cmd.Output()
+			if err != nil {
+				t.Errorf("--strict が落ちた: %v\n%s\n%s", err, out, stderr.String())
+			}
+
+			var report Report
+			if err := json.Unmarshal(out, &report); err != nil {
+				t.Fatalf("JSON パース失敗: %v", err)
+			}
+			for _, w := range report.Warnings {
+				if w.Actionable {
+					t.Errorf("actionable な警告が出た: %+v", w)
+				}
+			}
+		})
+	}
 }
 
 func TestStrictFlag(t *testing.T) {
