@@ -246,9 +246,11 @@ func canonicalDir(path string) (string, error) {
 }
 
 // computeCoupling は tracked のパッケージどうしの参照から Ca/Ce を数え、パッケージのディレクトリをキーに返す｡
-// Martin の定義に合わせ、依存する側の中身 (宣言の単位、declarationUnits) を数える:
-// Ce はほかのパッケージを参照する自分の単位の数、Ca は自分を参照するほかのパッケージの単位の数｡
-// 依存先のパッケージの切り方では呼び手の値が動かない｡標準ライブラリ・外部モジュール・テストファイルは数えない｡
+// Ce はほかのパッケージを参照する自分の宣言の単位 (declarationUnits) の数 (Martin)、
+// Ca は自分を参照する宣言を持つほかのパッケージの数 (JDepend)｡
+// どちらも、自分のコードが変わらない限り動かない数え方を選ぶ｡Ce を依存先のパッケージの数にすると依存先の統合で、
+// Ca を依存元の宣言の数にすると既存の呼び手に関数を足すだけで値が動く｡
+// 標準ライブラリ・外部モジュール・テストファイルは数えない｡
 func computeCoupling(loaded []*packages.Package, tracked []listedPackage) map[string]PackageMetrics {
 	inModule := make(map[string]bool, len(tracked))
 	for _, p := range tracked {
@@ -256,7 +258,7 @@ func computeCoupling(loaded []*packages.Package, tracked []listedPackage) map[st
 	}
 
 	efferent := make(map[string]int, len(tracked))
-	afferent := make(map[string]int, len(tracked))
+	dependents := make(map[string]map[string]bool, len(tracked))
 	for _, p := range loaded {
 		// テストを含む変種 (p [p.test]、p_test、p.test) は数えない
 		if p.ID != p.PkgPath || !inModule[p.PkgPath] {
@@ -265,10 +267,14 @@ func computeCoupling(loaded []*packages.Package, tracked []listedPackage) map[st
 		for _, targets := range declarationUnits(p) {
 			referenced := false
 			for target := range targets {
-				if inModule[target] {
-					afferent[target]++
-					referenced = true
+				if !inModule[target] {
+					continue
 				}
+				if dependents[target] == nil {
+					dependents[target] = make(map[string]bool)
+				}
+				dependents[target][p.PkgPath] = true
+				referenced = true
 			}
 			if referenced {
 				efferent[p.PkgPath]++
@@ -281,7 +287,7 @@ func computeCoupling(loaded []*packages.Package, tracked []listedPackage) map[st
 		byDir[p.Dir] = PackageMetrics{
 			Name:             p.Name,
 			Path:             p.ImportPath,
-			AfferentCoupling: afferent[p.ImportPath],
+			AfferentCoupling: len(dependents[p.ImportPath]),
 			EfferentCoupling: efferent[p.ImportPath],
 		}
 	}
@@ -289,7 +295,7 @@ func computeCoupling(loaded []*packages.Package, tracked []listedPackage) map[st
 }
 
 // declarationUnits は p のトップレベル宣言を単位に分け、単位ごとに参照するほかのパッケージのパスを返す｡
-// 単位は Martin のクラスに当たるもの: 型とそのメソッドで 1 つ、それ以外の関数は 1 つずつ、
+// 単位は Martin の Ce が数えるクラスに当たるもの: 型とそのメソッドで 1 つ、それ以外の関数は 1 つずつ、
 // var/const/type は spec ごとに 1 つ｡メソッドを型へ寄せるのは、メソッドの多い型で Ce が膨らまないようにするため｡
 func declarationUnits(p *packages.Package) map[any]map[string]bool {
 	units := make(map[any]map[string]bool)

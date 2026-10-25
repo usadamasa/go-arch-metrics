@@ -171,7 +171,7 @@ func couplingOf(t *testing.T, root string, listed []listedPackage) map[string]Pa
 }
 
 func Test_computeCoupling(t *testing.T) {
-	t.Run("依存する側の宣言を数える", func(t *testing.T) {
+	t.Run("Ce は自分の宣言、Ca は依存元のパッケージを数える", func(t *testing.T) {
 		root := writeFixtureModule(t)
 		listed, err := listModulePackages(root)
 		if err != nil {
@@ -207,7 +207,7 @@ func Test_computeCoupling(t *testing.T) {
 		}
 	})
 
-	t.Run("型とメソッドは 1 単位、var は spec ごと、標準ライブラリとテストファイルは数えない", func(t *testing.T) {
+	t.Run("Ce: 型とメソッドは 1 単位、var は spec ごと、標準ライブラリとテストファイルは数えない", func(t *testing.T) {
 		root := writeModule(t, map[string]string{
 			"go.mod": "module example.com/unit\n\ngo 1.26\n",
 			"c/c.go": "package c\n\nfunc C() int { return 1 }\n\nfunc D() int { return 2 }\n",
@@ -227,8 +227,9 @@ func Test_computeCoupling(t *testing.T) {
 		if ce := got["p"].EfferentCoupling; ce != 3 {
 			t.Errorf("p.Ce = %d, want 3 (S, V, W)", ce)
 		}
-		if ca := got["c"].AfferentCoupling; ca != 3 {
-			t.Errorf("c.Ca = %d, want 3 (S, V, W)", ca)
+		// p の宣言 3 つが c を参照しても、c に依存するパッケージは p の 1 つ
+		if ca := got["c"].AfferentCoupling; ca != 1 {
+			t.Errorf("c.Ca = %d, want 1 (p)", ca)
 		}
 	})
 }
