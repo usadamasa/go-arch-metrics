@@ -742,6 +742,40 @@ func TestGenerateMainSequenceWarnings(t *testing.T) {
 	})
 }
 
+func TestGenerateMainSequenceWarnings_baseline(t *testing.T) {
+	count := defaultVolatileCommits
+	ms := func(distance, baseline float64) *MainSequenceData {
+		return &MainSequenceData{Zone: ZoneOfPain, Distance: distance, Instability: 1 - distance,
+			AfferentCoupling: 3, EfferentCoupling: 1, Volatility: VolatilityVolatile, RecentCommitCount: &count, BaselineDistance: &baseline}
+	}
+
+	t.Run("D が base 以下なら情報に留め、理由を添える", func(t *testing.T) {
+		warnings := GenerateMainSequenceWarnings(PackageResult{Path: "b", MainSequence: ms(0.75, 0.80)})
+		if len(warnings) != 1 || warnings[0].Actionable {
+			t.Fatalf("zone_of_pain 1 件だけで actionable でないはず: %+v", warnings)
+		}
+		if !strings.Contains(warnings[0].Message, "base から悪化していない: D=0.80 → 0.75") || strings.Contains(warnings[0].Message, "非揮発") {
+			t.Errorf("Message: %s", warnings[0].Message)
+		}
+	})
+
+	t.Run("非揮発の Zone of Pain は baseline があっても非揮発を理由に添える", func(t *testing.T) {
+		cold := ms(0.75, 0.75)
+		cold.Volatility = VolatilityNonVolatile
+		warnings := GenerateMainSequenceWarnings(PackageResult{Path: "b", MainSequence: cold})
+		if len(warnings) != 1 || !strings.Contains(warnings[0].Message, "非揮発") || strings.Contains(warnings[0].Message, "base から") {
+			t.Errorf("非揮発の理由が添えられるはず: %+v", warnings)
+		}
+	})
+
+	t.Run("D が base より大きければ actionable", func(t *testing.T) {
+		warnings := GenerateMainSequenceWarnings(PackageResult{Path: "b", MainSequence: ms(0.80, 0.75)})
+		if len(warnings) != 2 || !warnings[0].Actionable || warnings[1].Type != WarningTypeHighDistance {
+			t.Errorf("zone_of_pain と high_distance が actionable で出るはず: %+v", warnings)
+		}
+	})
+}
+
 func TestGenerateCrossWarnings(t *testing.T) {
 	t.Run("構造制約 + loc_outlier → constrained_loc_outlier", func(t *testing.T) {
 		pkg := PackageResult{

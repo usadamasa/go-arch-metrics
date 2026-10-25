@@ -52,6 +52,8 @@ D > 0.5 のパッケージ
 構造制約のパッケージに付く `zone_of_pain` と `structurally_constrained`、非揮発の Zone of Pain に付く
 `zone_of_pain` は `actionable: false` で、JSON には残るが失敗には数えない。
 揮発性の測り方 (窓・しきい値・測れないときの扱い) は `references/thresholds.md` の「非揮発」。
+`--baseline` で base のレポートを渡したとき、D が base から悪化していないパッケージの警告も同じく
+`actionable: false` になる。規則は同じファイルの「base との比較」。
 
 Zone の定義と構造的制約の根拠は `references/thresholds.md`。
 

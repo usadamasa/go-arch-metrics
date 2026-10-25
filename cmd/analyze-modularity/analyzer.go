@@ -24,11 +24,15 @@ type MainSequenceData struct {
 	// RecentCommitCount は揮発性の窓の中でこのパッケージのコードを変えた commit 数｡測れなければ出さない
 	RecentCommitCount *int       `json:"recent_commit_count,omitempty"`
 	Volatility        Volatility `json:"volatility"`
+	// BaselineDistance は --baseline のレポートでの D｡base に無いパッケージと --baseline なしでは出さない
+	BaselineDistance *float64 `json:"baseline_distance,omitempty"`
 }
 
 // PackageResult はパッケージごとの解析結果を保持する｡
+// ImportPath は --baseline で base のレポートと突き合わせるキー｡Path は引数の渡し方で変わるので使わない
 type PackageResult struct {
 	Path              string  `json:"path"`
+	ImportPath        string  `json:"import_path"`
 	ExportedFuncs     int     `json:"exported_funcs"`
 	UnexportedFuncs   int     `json:"unexported_funcs"`
 	ExportedMethods   int     `json:"exported_methods"`
@@ -311,20 +315,28 @@ func GenerateMainSequenceWarnings(pkg PackageResult) []Warning {
 	actionable := isMainSequenceActionable(ms)
 	var warnings []Warning
 
+	// 情報に留める理由を Message に添える
+	var reason string
+	switch {
+	case ms.StructurallyConstrained || actionable:
+	case !actionableWithoutBaseline(ms):
+		if ms.RecentCommitCount != nil {
+			reason = fmt.Sprintf(" (非揮発: 直近の窓で %d commit)", *ms.RecentCommitCount)
+		}
+	default:
+		reason = fmt.Sprintf(" (base から悪化していない: D=%.2f → %.2f)", *ms.BaselineDistance, ms.Distance)
+	}
+	if !actionable {
+		reason += nonActionableSuffix
+	}
+
 	switch ms.Zone {
 	case ZoneOfPain:
-		message := fmt.Sprintf("Zone of Pain: 具象的 (A=%.2f) で安定 (I=%.2f)", ms.Abstractness, ms.Instability)
-		if !ms.StructurallyConstrained && !actionable && ms.RecentCommitCount != nil {
-			message += fmt.Sprintf(" (非揮発: 直近の窓で %d commit)", *ms.RecentCommitCount)
-		}
-		if !actionable {
-			message += nonActionableSuffix
-		}
 		warnings = append(warnings, Warning{
 			Type:       WarningTypeZoneOfPain,
 			Package:    pkg.Path,
 			Value:      ms.Distance,
-			Message:    message,
+			Message:    fmt.Sprintf("Zone of Pain: 具象的 (A=%.2f) で安定 (I=%.2f)", ms.Abstractness, ms.Instability) + reason,
 			Actionable: actionable,
 		})
 	case ZoneOfUselessness:
@@ -332,7 +344,7 @@ func GenerateMainSequenceWarnings(pkg PackageResult) []Warning {
 			Type:       WarningTypeZoneOfUselessness,
 			Package:    pkg.Path,
 			Value:      ms.Distance,
-			Message:    fmt.Sprintf("Zone of Uselessness: 抽象的 (A=%.2f) で不安定 (I=%.2f)", ms.Abstractness, ms.Instability),
+			Message:    fmt.Sprintf("Zone of Uselessness: 抽象的 (A=%.2f) で不安定 (I=%.2f)", ms.Abstractness, ms.Instability) + reason,
 			Actionable: actionable,
 		})
 	case ZoneExcluded:
@@ -369,11 +381,18 @@ func GenerateMainSequenceWarnings(pkg PackageResult) []Warning {
 const nonActionableSuffix = " (情報のみ。--strict の失敗には数えない)"
 
 // isMainSequenceActionable は Zone と Distance の警告を、コードを直して消せるものとして扱うかを返す｡
-// summary.main_sequence.actionable_* の集計と同じ基準｡次の 2 つを除く:
+// summary.main_sequence.actionable_* の集計と同じ基準｡actionableWithoutBaseline の除外に加え、
+// --baseline で D が base から大きくなっていないものを除く: 揮発の窓は判定される変更自身の commit を含むので、
+// 窓で 4 commit のパッケージは中身によらず次の変更で揮発になる｡合否は変更が D を悪くしたかで決める
+func isMainSequenceActionable(ms *MainSequenceData) bool {
+	return actionableWithoutBaseline(ms) && !notWorsenedFromBaseline(ms)
+}
+
+// actionableWithoutBaseline は --baseline を見ずに、Zone と Distance の警告を actionable にするかを返す｡次の 2 つを除く:
 //   - 構造制約 (Ce=0, Ca>0): I=0 はトポロジーで決まり、A を上げる以外に動かす手が無い
 //   - 非揮発の Zone of Pain: Martin (Agile PPP ch.28) は、変更されない具象安定パッケージは
 //     Zone of Pain でも harmless だとする｡未測定は揮発として扱い、gate を緩めない
-func isMainSequenceActionable(ms *MainSequenceData) bool {
+func actionableWithoutBaseline(ms *MainSequenceData) bool {
 	if ms.StructurallyConstrained {
 		return false
 	}

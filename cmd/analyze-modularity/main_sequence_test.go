@@ -251,7 +251,7 @@ func Test_enrichMainSequence(t *testing.T) {
 		if err != nil {
 			t.Fatalf("loadTypedPackages 失敗: %v", err)
 		}
-		if err := enrichMainSequence(computeCoupling(loaded, listed), packages, commitHistory{unmeasuredReason: "test"}, defaultVolatileCommits); err != nil {
+		if err := enrichMainSequence(computeCoupling(loaded, listed), packages, commitHistory{unmeasuredReason: "test"}, defaultVolatileCommits, nil); err != nil {
 			t.Fatalf("enrichMainSequence 失敗: %v", err)
 		}
 

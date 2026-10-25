@@ -64,6 +64,7 @@ exit code は指摘ありでも実行の失敗でも 1 なので、baseline.sh �
   "packages": [
     {
       "path": "analyze-permissions",
+      "import_path": "example.com/app/analyze-permissions",
       "exported_funcs": 9, "unexported_funcs": 11,
       "exported_types": 11, "unexported_types": 3, "interface_types": 2,
       "public_ratio": 0.59, "loc": 974, "files": 5,
@@ -83,6 +84,7 @@ exit code は指摘ありでも実行の失敗でも 1 なので、baseline.sh �
     "main_sequence": {
       "excluded_packages": ["cmd/app"],
       "structurally_constrained_count": 3,
+      "baseline_not_worsened_count": 0,
       "non_volatile_zone_of_pain_count": 2,
       "actionable_count": 1,
       "actionable_max_distance": 0.53, "actionable_mean_distance": 0.53,
@@ -122,6 +124,9 @@ exit code は指摘ありでも実行の失敗でも 1 なので、baseline.sh �
 `high_distance` は出ない。shallow clone などで測れなければ `volatility` は `unmeasured`、`recent_commit_count` は出ず、
 `summary.main_sequence.volatility_unmeasured_reason` に理由が入る。判定は `go-arch-metrics:evaluate` の
 `references/thresholds.md`。
+
+`--baseline` を渡すと、base にあるパッケージの `main_sequence` に `baseline_distance` (base の D) が付き、
+D が base から悪化していないものは `baseline_not_worsened_count` に数える。規則は同じファイルの「base との比較」。
 
 ## analyze-arch-lint
 

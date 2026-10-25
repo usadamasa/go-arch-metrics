@@ -15,8 +15,8 @@ go test -coverprofile=coverage.out ./...
 ```
 
 `analyze-modularity --strict` が exit 1 にするのは、コードを直して消せる警告 (`actionable: true`) があるときだけ。
-構造制約のパッケージ (Ce=0, Ca>0) と非揮発の Zone of Pain に付く警告は JSON に出るが、
-失敗には数えない。判断の基準は `go-arch-metrics:evaluate`。
+構造制約のパッケージ (Ce=0, Ca>0)、非揮発の Zone of Pain、`--baseline` を渡したときに base から D が
+悪化していないパッケージに付く警告は JSON に出るが、失敗には数えない。判断の基準は `go-arch-metrics:evaluate`。
 
 揮発性は git の履歴から測るので、`analyze-modularity` を回す job は履歴をすべて取得する。
 付けないと shallow clone になり、揮発性の判定は効かない (すべて揮発として扱い、stderr に案内が出る)。
@@ -26,6 +26,39 @@ go test -coverprofile=coverage.out ./...
   with:
     fetch-depth: 0
 ```
+
+### base と比べて判定する (`--baseline`)
+
+揮発の窓は判定する変更自身の commit も含むので、よく触るパッケージは中身によらず落ちうる。
+base の commit で測ったレポートを `--baseline` に渡すと、base から D を悪くしたパッケージだけを落とす。
+判定の規則は `go-arch-metrics:evaluate` の `references/thresholds.md`「base との比較」。
+
+守る決まりは「base と今の 2 回を、今の checkout から解決した同じバイナリで測る」こと。
+`go tool` で呼ぶなら、今の checkout を cwd にして base の worktree を引数に渡せば、版は今の `go.mod` のものになる。
+`go.mod` で版を上げた PR も、base を新しい版で測るので測り方の違いでは落ちない。
+nix や aqua でツールを入れているなら、同じ決まりを守る形に読み替える。base 側は `--strict` を付けない。
+
+下の例は `pull_request` と `push` の job 向け。`pull_request` は `actions/checkout` の既定 (base の先頭へ PR を
+merge した ref) を前提に、`base.sha` と比べる。`pull_request.head.sha` を checkout する設定なら、比べる先は
+`git merge-base HEAD origin/$GITHUB_BASE_REF` にする (base の先頭と比べると、base 側の変更まで PR のせいになる)。
+新しいブランチの最初の push (`before` がすべて 0)、`workflow_dispatch`、`schedule` では比べる base が無いので、
+`--baseline` なしの判定になる。
+
+```yaml
+- name: Measure base
+  id: base
+  env:
+    # PR は base ブランチの先頭、push は push 前の先頭と比べる
+    BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+  if: env.BASE_SHA != '' && !startsWith(env.BASE_SHA, '0000000')
+  run: |
+    git worktree add --detach "$RUNNER_TEMP/base" "$BASE_SHA"
+    go tool analyze-modularity "$RUNNER_TEMP/base" > "$RUNNER_TEMP/base.json"
+    echo "args=--baseline $RUNNER_TEMP/base.json" >> "$GITHUB_OUTPUT"
+- run: go tool analyze-modularity --strict ${{ steps.base.outputs.args }} .
+```
+
+base の commit を checkout するので、この job も `fetch-depth: 0` が要る。
 
 ベースライン測定 (`baseline.sh`) はプラグインのディレクトリに置かれ、パスが
 プラグインのバージョンによって変わるため CI には書かない。

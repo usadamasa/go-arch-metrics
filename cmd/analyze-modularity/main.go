@@ -18,10 +18,12 @@ type Report struct {
 }
 
 // MainSequenceSummary は Ca/Ce/A/I/D の全パッケージ集計｡
-// actionable_* は構造制約と非揮発の Zone of Pain を除いて数える (isMainSequenceActionable と同じ基準)｡
+// actionable_* は構造制約、base から D が悪化していないもの、非揮発の Zone of Pain を除いて数える
+// (isMainSequenceActionable と同じ基準)｡
 type MainSequenceSummary struct {
 	ExcludedPackages             []string `json:"excluded_packages"`
 	StructurallyConstrainedCount int      `json:"structurally_constrained_count"`
+	BaselineNotWorsenedCount     int      `json:"baseline_not_worsened_count"`
 	NonVolatileZoneOfPainCount   int      `json:"non_volatile_zone_of_pain_count"`
 	ActionableCount              int      `json:"actionable_count"`
 	ActionableMaxDistance        *float64 `json:"actionable_max_distance,omitempty"`
@@ -72,6 +74,7 @@ func main() {
 	strict := flag.Bool("strict", false, "actionable な警告 (コードを直して消せるもの) がある場合に exit code 1 を返す")
 	volatilityWindow := flag.Int("volatility-window", defaultVolatilityWindow, "揮発性を数える直近の commit 数 (merge を除く)")
 	volatileCommits := flag.Int("volatile-commits", defaultVolatileCommits, "窓の中でこの数以上の commit に触られたパッケージを揮発とみなす")
+	baselinePath := flag.String("baseline", "", "base の commit で同じ版の analyze-modularity が出したレポート。base にあるパッケージは D が base より大きくなったときだけ Main Sequence の警告を actionable にする")
 	flag.Parse()
 
 	args := flag.Args()
@@ -86,22 +89,19 @@ func main() {
 		os.Exit(1)
 	}
 
+	history, baseline, err := loadJudgmentInputs(inferModuleRoot(args), *volatilityWindow, *baselinePath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "エラー: %v\n", err)
+		os.Exit(1)
+	}
+
 	coupling, packages, err := collectPackages(args)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "エラー: %v\n", err)
 		os.Exit(1)
 	}
 
-	history, err := recentCommitCounts(inferModuleRoot(args), *volatilityWindow)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "エラー: %v\n", err)
-		os.Exit(1)
-	}
-	if history.unmeasuredReason != "" {
-		fmt.Fprintf(os.Stderr, "注意: 揮発性を測りません (%s)｡Zone of Pain はすべて揮発として扱います\n", history.unmeasuredReason)
-	}
-
-	if err := enrichMainSequence(coupling, packages, history, *volatileCommits); err != nil {
+	if err := enrichMainSequence(coupling, packages, history, *volatileCommits, baseline); err != nil {
 		fmt.Fprintf(os.Stderr, "エラー: %v\n", err)
 		os.Exit(1)
 	}
@@ -196,6 +196,7 @@ func collectPackages(args []string) (map[string]PackageMetrics, []PackageResult,
 			return nil, nil, fmt.Errorf("%s: %w", s.Path, err)
 		}
 		result.Path = s.Path
+		result.ImportPath = s.ImportPath
 		// main はどこからも import できず、exported でも変更の影響が外へ広がらないので判定しない
 		if s.Name != "main" {
 			usage, ok := usages[s.ImportPath]
@@ -218,7 +219,8 @@ func collectPackages(args []string) (map[string]PackageMetrics, []PackageResult,
 
 // enrichMainSequence は coupling (computeCoupling の Ca/Ce) と AST の型カウントから出す A で
 // 各パッケージの MainSequence を埋める｡揮発性は history を volatileCommits で切って決める｡
-func enrichMainSequence(coupling map[string]PackageMetrics, packages []PackageResult, history commitHistory, volatileCommits int) error {
+// baseline (import path から base の D、nil 可) にあるパッケージには base の D を添える｡
+func enrichMainSequence(coupling map[string]PackageMetrics, packages []PackageResult, history commitHistory, volatileCommits int, baseline map[string]float64) error {
 	// go list の Dir は絶対パスで、報告側の Path は引数のまま (相対もある)。symlink の解決度も
 	// 違いうるので、両方を実体の絶対パスにそろえてから突き合わせる
 	byDir := make(map[string]PackageMetrics, len(coupling))
@@ -230,6 +232,7 @@ func enrichMainSequence(coupling map[string]PackageMetrics, packages []PackageRe
 		byDir[canonical] = m
 	}
 
+	matched := 0
 	for i := range packages {
 		dir, err := canonicalDir(packages[i].Path)
 		if err != nil {
@@ -254,6 +257,14 @@ func enrichMainSequence(coupling map[string]PackageMetrics, packages []PackageRe
 			RecentCommitCount:       recentCommits,
 			Volatility:              volatility,
 		}
+		if d, ok := baseline[packages[i].ImportPath]; ok {
+			packages[i].MainSequence.BaselineDistance = &d
+			matched++
+		}
+	}
+	// 1 つも突き合わないと --baseline なしと同じ判定に黙って戻るので、CI の配線の誤りとして知らせる
+	if baseline != nil && matched == 0 {
+		fmt.Fprintf(os.Stderr, "注意: baseline のどのパッケージとも突き合いません｡別のモジュールのレポートを渡していないか確かめてください\n")
 	}
 	return nil
 }
@@ -281,8 +292,15 @@ func buildMainSequenceSummary(packages []PackageResult, history commitHistory, v
 			summary.StructurallyConstrainedCount++
 			continue
 		}
-		if !isMainSequenceActionable(p.MainSequence) {
+		if !actionableWithoutBaseline(p.MainSequence) {
 			summary.NonVolatileZoneOfPainCount++
+			continue
+		}
+		if notWorsenedFromBaseline(p.MainSequence) {
+			// Main Sequence 側は baseline が無くても警告が出ないので、baseline で判定が変わったものに入れない
+			if p.MainSequence.Zone != ZoneMainSequence {
+				summary.BaselineNotWorsenedCount++
+			}
 			continue
 		}
 		if p.MainSequence.Distance > mainSequenceDistanceThreshold {
