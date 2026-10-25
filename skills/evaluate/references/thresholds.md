@@ -134,21 +134,26 @@ Zone of Uselessness は使われていない抽象で、変更頻度と関係な
 
 ### base との比較 (`--baseline`)
 
-PR のブランチでは窓に PR 自身の commit も入る。窓で 4 commit のパッケージは、何を変えても次の PR で 5 commit 目になって
-揮発に変わる。D を小さくする変更でも、触った時点で 1 commit 増える。揮発だけで合否を決めると、落ちるかどうかは変更の中身ではなく、
-たまたま 5 回目に当たったかで決まり、よく触るパッケージほど触れなくなる。Martin の caveat が言うのは
-「安定で具象なのに変わり続けるパッケージは設計を見直す」で、触ること自体を止める意図ではない。
+PR のブランチでは窓に PR 自身の commit も入る。窓で 4 commit のパッケージは、何を変えても
+次の PR で 5 commit 目になって揮発に変わる。D を小さくする変更でも、触った時点で 1 commit 増える。
+揮発だけで合否を決めると、落ちるかどうかは変更の中身ではなく、たまたま 5 回目に当たったかで決まり、
+よく触るパッケージほど触れなくなる。Martin の caveat が言うのは「安定で具象なのに変わり続けるパッケージは
+設計を見直す」で、触ること自体を止める意図ではない。
 
 `--baseline <report.json>` に base の commit で測ったレポートを渡すと、base にもあるパッケージは
-D が base より大きくなったときだけ Main Sequence の警告 (`zone_of_pain`、`zone_of_uselessness`、`high_distance`) を actionable にする。
+D が base より大きくなったときだけ Main Sequence の警告 (`zone_of_pain`、`zone_of_uselessness`、
+`high_distance`) を actionable にする。合否は D だけで決め、揮発に変わったかは見ない。
 
 - D が base 以下: 揮発でも `actionable: false`。Message に `base から悪化していない: D=<base> → <今>` が付き、
-  `summary.main_sequence.baseline_not_worsened_count` に数える。`main_sequence.baseline_distance` に base の D が出る
+  `summary.main_sequence.baseline_not_worsened_count` に数える。`main_sequence.baseline_distance` に base の D が出る。
+  非揮発の Zone of Pain でも、D が base 以下ならこちらに数え、`non_volatile_zone_of_pain_count` には入れない
 - D が base より大きい: 揮発なら今までどおり actionable (非揮発の Zone of Pain は今までどおり外す)
 - base に無いパッケージ、base で excluded のパッケージ: `--baseline` なしと同じ判定
 
-突き合わせは `import_path` で行う。base のレポートは同じ版の `analyze-modularity` で測る。測り方の違う版のレポートと比べると、
-コードが同じでも D が動く。`import_path` の無いレポート (この機能より前の版の出力) を渡すと測る前に止まる。
+突き合わせは `import_path` で行う。base のレポートは同じ版の `analyze-modularity` で測る。
+測り方の違う版のレポートと比べると、コードが同じでも D が動く。`import_path` の無いレポート
+(この機能より前の版の出力) を渡すと測る前に止まる。1 つも突き合わなければ stderr に注意を出す
+(別のモジュールのレポートを渡したなど、CI の配線の誤りを疑う)。
 LOC の外れ値と `unreferenced_exported` は揮発性と関係ないので、`--baseline` の影響を受けない。
 CI での組み方は `go-arch-metrics:setup` の `references/ci-integration.md`。
 

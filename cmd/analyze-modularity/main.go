@@ -231,6 +231,7 @@ func enrichMainSequence(listed []listedPackage, packages []PackageResult, histor
 		byDir[canonical] = m
 	}
 
+	matched := 0
 	for i := range packages {
 		dir, err := canonicalDir(packages[i].Path)
 		if err != nil {
@@ -257,7 +258,12 @@ func enrichMainSequence(listed []listedPackage, packages []PackageResult, histor
 		}
 		if d, ok := baseline[packages[i].ImportPath]; ok {
 			packages[i].MainSequence.BaselineDistance = &d
+			matched++
 		}
+	}
+	// 1 つも突き合わないと --baseline なしと同じ判定に黙って戻るので、CI の配線の誤りとして知らせる
+	if baseline != nil && matched == 0 {
+		fmt.Fprintf(os.Stderr, "注意: baseline のどのパッケージとも突き合いません｡別のモジュールのレポートを渡していないか確かめてください\n")
 	}
 	return nil
 }

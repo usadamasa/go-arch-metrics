@@ -407,6 +407,19 @@ func TestStrictFlag_baseline(t *testing.T) {
 		}
 	})
 
+	t.Run("どのパッケージとも突き合わない baseline は stderr で知らせる", func(t *testing.T) {
+		root := committedFixtureModule(t)
+		baseline := filepath.Join(t.TempDir(), "other.json")
+		if err := os.WriteFile(baseline, []byte(`{"packages":[{"path":"x","import_path":"example.com/other/x","main_sequence":{"zone":"zone_of_pain","distance":0.67}}]}`), 0644); err != nil {
+			t.Fatalf("baseline の書き込みに失敗: %v", err)
+		}
+
+		_, stderr := runStrictWithBaseline(t, root, baseline)
+		if !strings.Contains(stderr, "突き合いません") {
+			t.Errorf("stderr に注意が無い:\n%s", stderr)
+		}
+	})
+
 	t.Run("import_path の無い baseline (別の版の出力) は測る前に止める", func(t *testing.T) {
 		root := committedFixtureModule(t)
 		baseline := filepath.Join(t.TempDir(), "old.json")

@@ -33,18 +33,29 @@ go test -coverprofile=coverage.out ./...
 base の commit で測ったレポートを `--baseline` に渡すと、base から D を悪くしたパッケージだけを落とす。
 判定の規則は `go-arch-metrics:evaluate` の `references/thresholds.md`「base との比較」。
 
-base も今の commit と同じ版の `analyze-modularity` で測る。`go tool` で呼ぶなら、今の checkout から
-base の worktree を引数に渡せば、版は今の `go.mod` のものになる。base 側は `--strict` を付けない。
+守る決まりは「base と今の 2 回を、今の checkout から解決した同じバイナリで測る」こと。
+`go tool` で呼ぶなら、今の checkout を cwd にして base の worktree を引数に渡せば、版は今の `go.mod` のものになる。
+`go.mod` で版を上げた PR も、base を新しい版で測るので測り方の違いでは落ちない。
+nix や aqua でツールを入れているなら、同じ決まりを守る形に読み替える。base 側は `--strict` を付けない。
+
+下の例は `pull_request` と `push` の job 向け。`pull_request` は `actions/checkout` の既定 (base の先頭へ PR を
+merge した ref) を前提に、`base.sha` と比べる。`pull_request.head.sha` を checkout する設定なら、比べる先は
+`git merge-base HEAD origin/$GITHUB_BASE_REF` にする (base の先頭と比べると、base 側の変更まで PR のせいになる)。
+新しいブランチの最初の push (`before` がすべて 0)、`workflow_dispatch`、`schedule` では比べる base が無いので、
+`--baseline` なしの判定になる。
 
 ```yaml
 - name: Measure base
+  id: base
   env:
     # PR は base ブランチの先頭、push は push 前の先頭と比べる
     BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+  if: env.BASE_SHA != '' && !startsWith(env.BASE_SHA, '0000000')
   run: |
     git worktree add --detach "$RUNNER_TEMP/base" "$BASE_SHA"
     go tool analyze-modularity "$RUNNER_TEMP/base" > "$RUNNER_TEMP/base.json"
-- run: go tool analyze-modularity --strict --baseline "$RUNNER_TEMP/base.json" .
+    echo "args=--baseline $RUNNER_TEMP/base.json" >> "$GITHUB_OUTPUT"
+- run: go tool analyze-modularity --strict ${{ steps.base.outputs.args }} .
 ```
 
 base の commit を checkout するので、この job も `fetch-depth: 0` が要る。
