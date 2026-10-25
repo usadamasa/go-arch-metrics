@@ -320,6 +320,107 @@ func TestStrictFlag_揮発性(t *testing.T) {
 	})
 }
 
+// addDependent は root に b を import するパッケージ name を足す｡b の Ca が 1 増え、D が大きくなる｡
+func addDependent(t *testing.T, root, name string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Join(root, name), 0755); err != nil {
+		t.Fatalf("ディレクトリ作成失敗: %v", err)
+	}
+	writeGoFile(t, filepath.Join(root, name), name+".go",
+		"package "+name+"\n\nimport \"example.com/fx/b\"\n\nfunc F() int { return b.B() }\n")
+}
+
+// writeBaseline は root の今の測定結果をファイルに書き、パスを返す｡CI が base の commit で測る代わり｡
+func writeBaseline(t *testing.T, root string) string {
+	t.Helper()
+	out, err := exec.Command("go", "run", ".", root).Output()
+	if err != nil {
+		t.Fatalf("baseline の測定に失敗: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "baseline.json")
+	if err := os.WriteFile(path, out, 0644); err != nil {
+		t.Fatalf("baseline の書き込みに失敗: %v", err)
+	}
+	return path
+}
+
+// runStrictWithBaseline は --strict --baseline で root を測り、exit code と stderr を返す｡
+func runStrictWithBaseline(t *testing.T, root, baseline string) (int, string) {
+	t.Helper()
+	cmd := exec.Command("go", "run", ".", "--strict", "--baseline", baseline, root)
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	if err == nil {
+		return 0, stderr.String()
+	}
+	exitErr, ok := err.(*exec.ExitError)
+	if !ok {
+		t.Fatalf("予期しないエラー: %v", err)
+	}
+	return exitErr.ExitCode(), stderr.String()
+}
+
+func TestStrictFlag_baseline(t *testing.T) {
+	// agents-daemon#217: 窓の中で 4 commit のパッケージは、何を変えても 5 commit 目で落ちていた
+	t.Run("D を悪くせずに 5 commit 目で揮発になっても exit 0", func(t *testing.T) {
+		root := committedFixtureModule(t)
+		touchCommits(t, root, "b/b.go", defaultVolatileCommits-1)
+		baseline := writeBaseline(t, root)
+		touchCommits(t, root, "b/b.go", 1)
+
+		if code, stderr := runStrict(t, root); code != 1 {
+			t.Fatalf("前提: baseline なしでは exit 1 のはず (got %d)\n%s", code, stderr)
+		}
+		if code, stderr := runStrictWithBaseline(t, root, baseline); code != 0 {
+			t.Errorf("exit code = %d, want 0\n%s", code, stderr)
+		}
+	})
+
+	t.Run("base で揮発のパッケージの D を小さくする変更は exit 0", func(t *testing.T) {
+		root := committedFixtureModule(t)
+		addDependent(t, root, "f")
+		addDependent(t, root, "g")
+		commitAll(t, root, "add dependents")
+		touchCommits(t, root, "b/b.go", defaultVolatileCommits)
+		baseline := writeBaseline(t, root)
+		// Ca 4 → 3 で D 0.80 → 0.75。まだ Zone of Pain で揮発
+		if err := os.RemoveAll(filepath.Join(root, "g")); err != nil {
+			t.Fatalf("g の削除に失敗: %v", err)
+		}
+		commitAll(t, root, "drop g")
+
+		if code, stderr := runStrictWithBaseline(t, root, baseline); code != 0 {
+			t.Errorf("exit code = %d, want 0\n%s", code, stderr)
+		}
+	})
+
+	t.Run("揮発のパッケージの D を悪くする変更は exit 1", func(t *testing.T) {
+		root := committedFixtureModule(t)
+		touchCommits(t, root, "b/b.go", defaultVolatileCommits)
+		baseline := writeBaseline(t, root)
+		addDependent(t, root, "f")
+		commitAll(t, root, "add f")
+
+		if code, stderr := runStrictWithBaseline(t, root, baseline); code != 1 {
+			t.Errorf("exit code = %d, want 1\n%s", code, stderr)
+		}
+	})
+
+	t.Run("import_path の無い baseline (別の版の出力) は測る前に止める", func(t *testing.T) {
+		root := committedFixtureModule(t)
+		baseline := filepath.Join(t.TempDir(), "old.json")
+		if err := os.WriteFile(baseline, []byte(`{"packages":[{"path":"b","main_sequence":{"zone":"zone_of_pain","distance":0.67}}]}`), 0644); err != nil {
+			t.Fatalf("baseline の書き込みに失敗: %v", err)
+		}
+
+		code, stderr := runStrictWithBaseline(t, root, baseline)
+		if code != 1 || !strings.Contains(stderr, "import_path") {
+			t.Errorf("exit code = %d, want 1 と import_path の案内\n%s", code, stderr)
+		}
+	})
+}
+
 // edgeFixtureModule は agents-daemon#184 の internal/edge を写したモジュールを作る｡
 // edge の exported 10 個はすべて app から参照され、unexported は unexported 個だけ持つ｡
 func edgeFixtureModule(t *testing.T, unexported int) string {
