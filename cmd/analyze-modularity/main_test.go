@@ -228,6 +228,70 @@ func TestMainSequenceIntegration(t *testing.T) {
 	})
 }
 
+// writeModule は files をモジュールとして書き、ルートを返す｡
+func writeModule(t *testing.T, files map[string]string) string {
+	t.Helper()
+	root := t.TempDir()
+	for name, content := range files {
+		path := filepath.Join(root, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			t.Fatalf("ディレクトリ作成失敗: %v", err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			t.Fatalf("ファイル作成失敗: %v", err)
+		}
+	}
+	return root
+}
+
+// mainSequenceOf は root を解析し、末尾が base のパッケージの main_sequence を返す｡
+func mainSequenceOf(t *testing.T, root, base string) *MainSequenceData {
+	t.Helper()
+	out, err := exec.Command("go", "run", ".", root).Output()
+	if err != nil {
+		t.Fatalf("実行失敗: %v", err)
+	}
+	var report Report
+	if err := json.Unmarshal(out, &report); err != nil {
+		t.Fatalf("JSON パース失敗: %v", err)
+	}
+	for _, p := range report.Packages {
+		if filepath.Base(p.Path) == base {
+			return p.MainSequence
+		}
+	}
+	t.Fatalf("%s が報告に無い", base)
+	return nil
+}
+
+func TestMainSequence_依存先を統合しても呼び手のIとDは変わらない(t *testing.T) {
+	// agents-daemon#280: parking が使う gitrepo を domain へ統合すると、parking のコードは同じなのに I が下がった
+	split := writeModule(t, map[string]string{
+		"go.mod": "module example.com/merge\n\ngo 1.26\n",
+		"x/x.go": "package x\n\nfunc X() int { return 1 }\n",
+		"y/y.go": "package y\n\nfunc Y() int { return 2 }\n",
+		"p/p.go": "package p\n\nimport (\n\t\"example.com/merge/x\"\n\t\"example.com/merge/y\"\n)\n\n" +
+			"func P() int { return x.X() + y.Y() }\n\nfunc Local() int { return 3 }\n",
+		"q/q.go": "package q\n\nimport \"example.com/merge/p\"\n\nfunc Q() int { return p.P() }\n",
+	})
+	merged := writeModule(t, map[string]string{
+		"go.mod":   "module example.com/merge\n\ngo 1.26\n",
+		"xy/xy.go": "package xy\n\nfunc X() int { return 1 }\n\nfunc Y() int { return 2 }\n",
+		"p/p.go": "package p\n\nimport \"example.com/merge/xy\"\n\n" +
+			"func P() int { return xy.X() + xy.Y() }\n\nfunc Local() int { return 3 }\n",
+		"q/q.go": "package q\n\nimport \"example.com/merge/p\"\n\nfunc Q() int { return p.P() }\n",
+	})
+
+	before := mainSequenceOf(t, split, "p")
+	after := mainSequenceOf(t, merged, "p")
+
+	if before.Instability != after.Instability || before.Distance != after.Distance {
+		t.Errorf("統合で p が動いた: 分割 I=%.2f D=%.2f (Ca=%d Ce=%d), 統合 I=%.2f D=%.2f (Ca=%d Ce=%d)",
+			before.Instability, before.Distance, before.AfferentCoupling, before.EfferentCoupling,
+			after.Instability, after.Distance, after.AfferentCoupling, after.EfferentCoupling)
+	}
+}
+
 func Test_buildMainSequenceSummary_非揮発のパッケージはactionableから除く(t *testing.T) {
 	packages := []PackageResult{
 		{Path: "cold", MainSequence: &MainSequenceData{Zone: ZoneOfPain, Distance: 0.75, Volatility: VolatilityNonVolatile}},
