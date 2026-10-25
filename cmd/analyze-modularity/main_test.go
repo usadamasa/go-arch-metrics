@@ -292,6 +292,32 @@ func TestMainSequence_依存先を統合しても呼び手のIとDは変わら�
 	}
 }
 
+func TestMainSequence_既存の呼び手に関数を足しても呼ばれる側のIとDは変わらない(t *testing.T) {
+	// 呼び手のパッケージの中で p を使う関数が増えるのは、p と呼び手の間の新しい依存ではない
+	p := "package p\n\nimport \"example.com/grow/x\"\n\nfunc P() int { return x.X() }\n"
+	before := writeModule(t, map[string]string{
+		"go.mod": "module example.com/grow\n\ngo 1.26\n",
+		"x/x.go": "package x\n\nfunc X() int { return 1 }\n",
+		"p/p.go": p,
+		"q/q.go": "package q\n\nimport \"example.com/grow/p\"\n\nfunc Q() int { return p.P() }\n",
+	})
+	after := writeModule(t, map[string]string{
+		"go.mod": "module example.com/grow\n\ngo 1.26\n",
+		"x/x.go": "package x\n\nfunc X() int { return 1 }\n",
+		"p/p.go": p,
+		"q/q.go": "package q\n\nimport \"example.com/grow/p\"\n\nfunc Q() int { return p.P() }\n\nfunc Q2() int { return p.P() + 1 }\n",
+	})
+
+	b := mainSequenceOf(t, before, "p")
+	a := mainSequenceOf(t, after, "p")
+
+	if b.Instability != a.Instability || b.Distance != a.Distance {
+		t.Errorf("q に関数を足すと p が動いた: 前 I=%.2f D=%.2f (Ca=%d Ce=%d), 後 I=%.2f D=%.2f (Ca=%d Ce=%d)",
+			b.Instability, b.Distance, b.AfferentCoupling, b.EfferentCoupling,
+			a.Instability, a.Distance, a.AfferentCoupling, a.EfferentCoupling)
+	}
+}
+
 func Test_buildMainSequenceSummary_非揮発のパッケージはactionableから除く(t *testing.T) {
 	packages := []PackageResult{
 		{Path: "cold", MainSequence: &MainSequenceData{Zone: ZoneOfPain, Distance: 0.75, Volatility: VolatilityNonVolatile}},
