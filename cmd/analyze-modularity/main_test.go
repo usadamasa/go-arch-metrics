@@ -249,6 +249,29 @@ func Test_buildMainSequenceSummary_非揮発のパッケージはactionableか�
 	}
 }
 
+func Test_buildMainSequenceSummary_baselineで判定が変わったものだけを数える(t *testing.T) {
+	base := func(d float64) *float64 { return &d }
+	packages := []PackageResult{
+		// baseline が無くても actionable でない: 数えない
+		{Path: "fine", MainSequence: &MainSequenceData{Zone: ZoneMainSequence, Distance: 0.1, Volatility: VolatilityVolatile, BaselineDistance: base(0.1)}},
+		{Path: "cold", MainSequence: &MainSequenceData{Zone: ZoneOfPain, Distance: 0.75, Volatility: VolatilityNonVolatile, BaselineDistance: base(0.75)}},
+		// baseline があるから actionable でない: 数える
+		{Path: "hot", MainSequence: &MainSequenceData{Zone: ZoneOfPain, Distance: 0.75, Volatility: VolatilityVolatile, BaselineDistance: base(0.80)}},
+	}
+
+	summary := buildMainSequenceSummary(packages, commitHistory{}, defaultVolatilityWindow, defaultVolatileCommits)
+
+	if summary.BaselineNotWorsenedCount != 1 {
+		t.Errorf("baseline_not_worsened_count = %d, want 1 (hot)", summary.BaselineNotWorsenedCount)
+	}
+	if summary.NonVolatileZoneOfPainCount != 1 {
+		t.Errorf("non_volatile_zone_of_pain_count = %d, want 1 (cold)", summary.NonVolatileZoneOfPainCount)
+	}
+	if summary.ActionableCount != 0 {
+		t.Errorf("actionable_count = %d, want 0", summary.ActionableCount)
+	}
+}
+
 // runStrict は analyze-modularity --strict を dir に対して走らせ、exit code と stderr を返す｡
 func runStrict(t *testing.T, dir string) (int, string) {
 	t.Helper()

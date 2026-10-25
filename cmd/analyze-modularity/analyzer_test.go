@@ -759,6 +759,15 @@ func TestGenerateMainSequenceWarnings_baseline(t *testing.T) {
 		}
 	})
 
+	t.Run("非揮発の Zone of Pain は baseline があっても非揮発を理由に添える", func(t *testing.T) {
+		cold := ms(0.75, 0.75)
+		cold.Volatility = VolatilityNonVolatile
+		warnings := GenerateMainSequenceWarnings(PackageResult{Path: "b", MainSequence: cold})
+		if len(warnings) != 1 || !strings.Contains(warnings[0].Message, "非揮発") || strings.Contains(warnings[0].Message, "base から") {
+			t.Errorf("非揮発の理由が添えられるはず: %+v", warnings)
+		}
+	})
+
 	t.Run("D が base より大きければ actionable", func(t *testing.T) {
 		warnings := GenerateMainSequenceWarnings(PackageResult{Path: "b", MainSequence: ms(0.80, 0.75)})
 		if len(warnings) != 2 || !warnings[0].Actionable || warnings[1].Type != WarningTypeHighDistance {
