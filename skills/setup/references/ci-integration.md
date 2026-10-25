@@ -15,8 +15,8 @@ go test -coverprofile=coverage.out ./...
 ```
 
 `analyze-modularity --strict` が exit 1 にするのは、コードを直して消せる警告 (`actionable: true`) があるときだけ。
-構造制約のパッケージ (Ce=0, Ca>0) と非揮発の Zone of Pain に付く警告は JSON に出るが、
-失敗には数えない。判断の基準は `go-arch-metrics:evaluate`。
+構造制約のパッケージ (Ce=0, Ca>0)、非揮発の Zone of Pain、`--baseline` を渡したときに base から D が
+悪化していないパッケージに付く警告は JSON に出るが、失敗には数えない。判断の基準は `go-arch-metrics:evaluate`。
 
 揮発性は git の履歴から測るので、`analyze-modularity` を回す job は履歴をすべて取得する。
 付けないと shallow clone になり、揮発性の判定は効かない (すべて揮発として扱い、stderr に案内が出る)。
@@ -26,6 +26,28 @@ go test -coverprofile=coverage.out ./...
   with:
     fetch-depth: 0
 ```
+
+### base と比べて判定する (`--baseline`)
+
+揮発の窓は判定する変更自身の commit も含むので、よく触るパッケージは中身によらず落ちうる。
+base の commit で測ったレポートを `--baseline` に渡すと、base から D を悪くしたパッケージだけを落とす。
+判定の規則は `go-arch-metrics:evaluate` の `references/thresholds.md`「base との比較」。
+
+base も今の commit と同じ版の `analyze-modularity` で測る。`go tool` で呼ぶなら、今の checkout から
+base の worktree を引数に渡せば、版は今の `go.mod` のものになる。base 側は `--strict` を付けない。
+
+```yaml
+- name: Measure base
+  env:
+    # PR は base ブランチの先頭、push は push 前の先頭と比べる
+    BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+  run: |
+    git worktree add --detach "$RUNNER_TEMP/base" "$BASE_SHA"
+    go tool analyze-modularity "$RUNNER_TEMP/base" > "$RUNNER_TEMP/base.json"
+- run: go tool analyze-modularity --strict --baseline "$RUNNER_TEMP/base.json" .
+```
+
+base の commit を checkout するので、この job も `fetch-depth: 0` が要る。
 
 ベースライン測定 (`baseline.sh`) はプラグインのディレクトリに置かれ、パスが
 プラグインのバージョンによって変わるため CI には書かない。

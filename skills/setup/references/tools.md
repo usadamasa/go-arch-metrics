@@ -270,6 +270,9 @@ analyze-modularity --strict .
 
 # 揮発性の窓としきい値 (既定は直近 200 commit で 5 回以上触られたら揮発)
 analyze-modularity --volatility-window 200 --volatile-commits 5 .
+
+# base の測定結果と比べ、D を悪くしたパッケージだけを落とす
+analyze-modularity --strict --baseline base.json .
 ```
 
 揮発性は git の履歴から測る。shallow clone では測らず、Zone of Pain をすべて揮発として扱う

@@ -125,13 +125,32 @@ Martin は数値を示していないので、200 と 5 は目安。agents-daemo
 窓は commit の粒度に左右される。TDD で細かく commit するほど、同じ変更でも回数が増える。
 
 日数ではなく commit 数で窓を切るのは、HEAD が同じなら結果も同じにするため。日数で切ると、コードが同じでも
-日がたつだけで CI の判定が変わる。PR のブランチでは窓に PR 自身の commit も入るので、PR の中で同じパッケージを
-何度も触ると揮発に変わり、その PR の `--strict` が落ちうる。
+日がたつだけで CI の判定が変わる。
 
 非揮発の Zone of Pain に付く `zone_of_pain` は `actionable: false` になり、`high_distance` は出さない
 (D は `zone_of_pain` の `value` が持つ)。`summary.main_sequence.non_volatile_zone_of_pain_count` に数え、`actionable_*` からは除く。
 このため、この扱いが入る前と比べて `actionable_count` の値が下がることがある。
 Zone of Uselessness は使われていない抽象で、変更頻度と関係ないので外さない。
+
+### base との比較 (`--baseline`)
+
+PR のブランチでは窓に PR 自身の commit も入る。窓で 4 commit のパッケージは、何を変えても次の PR で 5 commit 目になって
+揮発に変わる。D を小さくする変更でも、触った時点で 1 commit 増える。揮発だけで合否を決めると、落ちるかどうかは変更の中身ではなく、
+たまたま 5 回目に当たったかで決まり、よく触るパッケージほど触れなくなる。Martin の caveat が言うのは
+「安定で具象なのに変わり続けるパッケージは設計を見直す」で、触ること自体を止める意図ではない。
+
+`--baseline <report.json>` に base の commit で測ったレポートを渡すと、base にもあるパッケージは
+D が base より大きくなったときだけ Main Sequence の警告 (`zone_of_pain`、`zone_of_uselessness`、`high_distance`) を actionable にする。
+
+- D が base 以下: 揮発でも `actionable: false`。Message に `base から悪化していない: D=<base> → <今>` が付き、
+  `summary.main_sequence.baseline_not_worsened_count` に数える。`main_sequence.baseline_distance` に base の D が出る
+- D が base より大きい: 揮発なら今までどおり actionable (非揮発の Zone of Pain は今までどおり外す)
+- base に無いパッケージ、base で excluded のパッケージ: `--baseline` なしと同じ判定
+
+突き合わせは `import_path` で行う。base のレポートは同じ版の `analyze-modularity` で測る。測り方の違う版のレポートと比べると、
+コードが同じでも D が動く。`import_path` の無いレポート (この機能より前の版の出力) を渡すと測る前に止まる。
+LOC の外れ値と `unreferenced_exported` は揮発性と関係ないので、`--baseline` の影響を受けない。
+CI での組み方は `go-arch-metrics:setup` の `references/ci-integration.md`。
 
 ### Go 固有の考慮事項
 
