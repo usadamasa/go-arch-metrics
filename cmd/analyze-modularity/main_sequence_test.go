@@ -156,43 +156,81 @@ func Test_distance(t *testing.T) {
 	}
 }
 
+// couplingOf は root のモジュールを読み、import path の末尾をキーにした Ca/Ce を返す｡
+func couplingOf(t *testing.T, root string, listed []listedPackage) map[string]PackageMetrics {
+	t.Helper()
+	loaded, err := loadTypedPackages(root)
+	if err != nil {
+		t.Fatalf("loadTypedPackages 失敗: %v", err)
+	}
+	byBase := make(map[string]PackageMetrics)
+	for _, m := range computeCoupling(loaded, listed) {
+		byBase[filepath.Base(m.Path)] = m
+	}
+	return byBase
+}
+
 func Test_computeCoupling(t *testing.T) {
-	// 標準ライブラリと外部モジュールへの import はモジュール内の辺ではないので数えない
-	pkgs := []listedPackage{
-		{ImportPath: "m/a", Name: "a", Dir: "/m/a", Imports: []string{"fmt", "m/b", "m/c"}},
-		{ImportPath: "m/b", Name: "b", Dir: "/m/b", Imports: []string{"m/c", "github.com/x/y"}},
-		{ImportPath: "m/c", Name: "c", Dir: "/m/c", Imports: []string{"os"}},
-		{ImportPath: "m/d", Name: "d", Dir: "/m/d", Imports: []string{"m/c"}},
-		{ImportPath: "m/e", Name: "e", Dir: "/m/e", Imports: []string{"m/b"}},
-		{ImportPath: "m/iso", Name: "iso", Dir: "/m/iso", Imports: nil},
-	}
-
-	got := computeCoupling(pkgs)
-
-	want := map[string]struct{ ca, ce int }{
-		"/m/a":   {0, 2},
-		"/m/b":   {2, 1},
-		"/m/c":   {3, 0},
-		"/m/d":   {0, 1},
-		"/m/e":   {0, 1},
-		"/m/iso": {0, 0},
-	}
-	if len(got) != len(want) {
-		t.Fatalf("パッケージ数: got %d, want %d", len(got), len(want))
-	}
-	for dir, w := range want {
-		m, ok := got[dir]
-		if !ok {
-			t.Errorf("%s がない", dir)
-			continue
+	t.Run("依存する側の宣言を数える", func(t *testing.T) {
+		root := writeFixtureModule(t)
+		listed, err := listModulePackages(root)
+		if err != nil {
+			t.Fatalf("listModulePackages 失敗: %v", err)
 		}
-		if m.AfferentCoupling != w.ca || m.EfferentCoupling != w.ce {
-			t.Errorf("%s: Ca=%d Ce=%d, want Ca=%d Ce=%d", dir, m.AfferentCoupling, m.EfferentCoupling, w.ca, w.ce)
+
+		got := couplingOf(t, root, listed)
+
+		// a は b と c を参照するが、参照する宣言は A の 1 つなので Ce=1
+		want := map[string]struct{ ca, ce int }{
+			"a":   {0, 1},
+			"b":   {2, 1},
+			"c":   {3, 0},
+			"d":   {0, 1},
+			"e":   {0, 1},
+			"iso": {0, 0},
 		}
-	}
-	if got["/m/b"].Name != "b" || got["/m/b"].Path != "m/b" {
-		t.Errorf("Name/Path が引き継がれていない: %+v", got["/m/b"])
-	}
+		if len(got) != len(want) {
+			t.Fatalf("パッケージ数: got %d, want %d", len(got), len(want))
+		}
+		for base, w := range want {
+			m, ok := got[base]
+			if !ok {
+				t.Errorf("%s がない", base)
+				continue
+			}
+			if m.AfferentCoupling != w.ca || m.EfferentCoupling != w.ce {
+				t.Errorf("%s: Ca=%d Ce=%d, want Ca=%d Ce=%d", base, m.AfferentCoupling, m.EfferentCoupling, w.ca, w.ce)
+			}
+		}
+		if got["b"].Name != "b" || got["b"].Path != "example.com/fx/b" {
+			t.Errorf("Name/Path が引き継がれていない: %+v", got["b"])
+		}
+	})
+
+	t.Run("型とメソッドは 1 単位、var は spec ごと、標準ライブラリとテストファイルは数えない", func(t *testing.T) {
+		root := writeModule(t, map[string]string{
+			"go.mod": "module example.com/unit\n\ngo 1.26\n",
+			"c/c.go": "package c\n\nfunc C() int { return 1 }\n\nfunc D() int { return 2 }\n",
+			// S とメソッド 2 つで 1 単位、V と W で 2 単位、fmt だけを使う F は数えない
+			"p/p.go": "package p\n\nimport (\n\t\"fmt\"\n\n\t\"example.com/unit/c\"\n)\n\n" +
+				"type S struct{}\n\nfunc (S) M() int { return c.C() }\n\nfunc (*S) N() int { return c.D() }\n\n" +
+				"var (\n\tV = c.C()\n\tW = c.D()\n)\n\nfunc F() { fmt.Println() }\n",
+			"p/p_test.go": "package p\n\nimport (\n\t\"testing\"\n\n\t\"example.com/unit/c\"\n)\n\nfunc TestP(t *testing.T) { _ = c.C() }\n",
+		})
+		listed, err := listModulePackages(root)
+		if err != nil {
+			t.Fatalf("listModulePackages 失敗: %v", err)
+		}
+
+		got := couplingOf(t, root, listed)
+
+		if ce := got["p"].EfferentCoupling; ce != 3 {
+			t.Errorf("p.Ce = %d, want 3 (S, V, W)", ce)
+		}
+		if ca := got["c"].AfferentCoupling; ca != 3 {
+			t.Errorf("c.Ca = %d, want 3 (S, V, W)", ca)
+		}
+	})
 }
 
 func Test_enrichMainSequence(t *testing.T) {
@@ -208,7 +246,11 @@ func Test_enrichMainSequence(t *testing.T) {
 		if err != nil {
 			t.Fatalf("listModulePackages 失敗: %v", err)
 		}
-		if err := enrichMainSequence(listed, packages, commitHistory{unmeasuredReason: "test"}, defaultVolatileCommits); err != nil {
+		loaded, err := loadTypedPackages(".")
+		if err != nil {
+			t.Fatalf("loadTypedPackages 失敗: %v", err)
+		}
+		if err := enrichMainSequence(computeCoupling(loaded, listed), packages, commitHistory{unmeasuredReason: "test"}, defaultVolatileCommits); err != nil {
 			t.Fatalf("enrichMainSequence 失敗: %v", err)
 		}
 
@@ -327,8 +369,8 @@ func Test_dropIgnored(t *testing.T) {
 			t.Errorf("ignore された c が残っている")
 		}
 	}
-	// 辺の数え上げも tracked だけで行うので、b の Ce は c 向けの辺が落ちて 0 になる
-	if ce := computeCoupling(tracked)[tracked[1].Dir].EfferentCoupling; ce != 0 {
+	// 参照の数え上げも tracked だけで行うので、b の Ce は c への参照が落ちて 0 になる
+	if ce := couplingOf(t, root, tracked)["b"].EfferentCoupling; ce != 0 {
 		t.Errorf("b.Ce = %d, want 0 (ignore された c への辺は数えない)", ce)
 	}
 }
@@ -384,7 +426,7 @@ func Test_selectPackages(t *testing.T) {
 }
 
 func Test_listModulePackages(t *testing.T) {
-	t.Run("fixture モジュールの import 辺を返す", func(t *testing.T) {
+	t.Run("fixture モジュールのパッケージを返す", func(t *testing.T) {
 		root := writeFixtureModule(t)
 
 		pkgs, err := listModulePackages(root)
@@ -400,14 +442,11 @@ func Test_listModulePackages(t *testing.T) {
 			t.Fatalf("パッケージ数: got %d, want 6 (%v)", len(byPath), pkgs)
 		}
 		a := byPath["example.com/fx/a"]
-		if a.Name != "a" || len(a.Imports) != 2 {
+		if a.Name != "a" || len(a.GoFiles) != 1 {
 			t.Errorf("a: %+v", a)
 		}
 		if filepath.Base(a.Dir) != "a" {
 			t.Errorf("a.Dir: %q", a.Dir)
-		}
-		if len(byPath["example.com/fx/iso"].Imports) != 0 {
-			t.Errorf("iso は import を持たないはず: %+v", byPath["example.com/fx/iso"])
 		}
 	})
 

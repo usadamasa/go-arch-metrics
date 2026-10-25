@@ -230,7 +230,7 @@ gosec ./...
 
 パッケージの API surface area と、Robert C. Martin の Package Metrics (Ca/Ce/A/I/D) を測るカスタム CLI。
 前者は `go/ast` で宣言を数え、`golang.org/x/tools/go/packages` の型情報で外からの参照を解く。
-後者は `go list -json ./...` の import 辺から出す。
+後者は同じ型情報で、宣言どうしのパッケージをまたぐ参照から出す。
 
 | メトリクス | 説明 |
 |-----------|------|
@@ -239,17 +239,22 @@ gosec ./...
 | LOC 外れ値 | パッケージ LOC > mean + 2σ |
 | Exported funcs/methods | 公開関数・メソッド数 |
 | Exported types | 公開型 (struct/interface) 数 |
-| Afferent Coupling (Ca) | このパッケージに依存するモジュール内パッケージ数 |
-| Efferent Coupling (Ce) | このパッケージが依存するモジュール内パッケージ数 (標準ライブラリ・外部モジュール・テストファイルの import は数えない) |
+| Afferent Coupling (Ca) | モジュール内のほかのパッケージの宣言のうち、このパッケージを参照するものの数 |
+| Efferent Coupling (Ce) | このパッケージの宣言のうち、モジュール内のほかのパッケージを参照するものの数 (標準ライブラリ・外部モジュール・テストファイルは数えない) |
 | Abstractness (A) | interface 型宣言 / 全型宣言 |
 | Instability (I) | Ce / (Ca + Ce)。孤立パッケージ (Ca = Ce = 0) は 1 |
 | Distance (D) | \|A + I - 1\| (Main Sequence からの距離) |
+
+Ca/Ce の「宣言」は Martin の定義のクラスに当たる単位で、型とそのメソッドで 1 つ、それ以外の関数は 1 つずつ、
+var・const・type は spec ごとに 1 つ。Martin と同じく依存する側の中身を数えるので、依存先のパッケージを
+統合・分割しても呼び手の Ca/Ce は変わらない。import 先のパッケージの数で数えると、依存先を統合しただけで
+コードが同じ呼び手の I が下がる。
 
 Zone 分類と構造的制約の扱いは `go-arch-metrics:evaluate`。
 
 対象は `go list ./...` が列挙するパッケージ (入れ子のモジュールと vendor を含まない) のうち、
 git が ignore していないもの。測るのは構成管理の対象だけで、`tmp/` のような ignore 済みの試し書きは
-一覧にも Ca/Ce の辺にも入らない。前提は `go.mod` のあるモジュールで `go list ./...` が通ること。
+一覧にも Ca/Ce の参照にも入らない。前提は `go.mod` のあるモジュールで `go list ./...` が通ること。
 git リポジトリでなければ ignore するものは無いとみなす (stderr に 1 行出る)。
 
 ### 実行

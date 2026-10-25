@@ -5,12 +5,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"go/ast"
+	"go/types"
 	"io"
 	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"golang.org/x/tools/go/packages"
 )
 
 // PackageMetrics は Robert C. Martin の Package Metrics (Ca/Ce/A/I/D) の 1 パッケージ分｡
@@ -83,13 +87,12 @@ type listedPackage struct {
 	Name       string
 	Dir        string
 	GoFiles    []string
-	Imports    []string
 }
 
 // listModulePackages は moduleRoot で go list -json ./... を実行し、モジュール内の全パッケージを返す｡
-// 入れ子のモジュールと vendor は go list が除く｡GoFiles と Imports はテストファイルの分を含まない｡
+// 入れ子のモジュールと vendor は go list が除く｡GoFiles はテストファイルを含まない｡
 func listModulePackages(moduleRoot string) ([]listedPackage, error) {
-	cmd := exec.Command("go", "list", "-json=ImportPath,Name,Dir,GoFiles,Imports", "./...")
+	cmd := exec.Command("go", "list", "-json=ImportPath,Name,Dir,GoFiles", "./...")
 	cmd.Dir = moduleRoot
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -242,29 +245,108 @@ func canonicalDir(path string) (string, error) {
 	return filepath.EvalSymlinks(abs)
 }
 
-// computeCoupling はモジュール内の import 辺から Ca/Ce を数え、パッケージのディレクトリをキーに返す｡
-// 標準ライブラリと外部モジュールへの import は数えない｡
-func computeCoupling(pkgs []listedPackage) map[string]PackageMetrics {
-	inModule := make(map[string]bool, len(pkgs))
-	for _, p := range pkgs {
+// computeCoupling は tracked のパッケージどうしの参照から Ca/Ce を数え、パッケージのディレクトリをキーに返す｡
+// Martin の定義に合わせ、依存する側の中身 (宣言の単位、declarationUnits) を数える:
+// Ce はほかのパッケージを参照する自分の単位の数、Ca は自分を参照するほかのパッケージの単位の数｡
+// 依存先のパッケージの切り方では呼び手の値が動かない｡標準ライブラリ・外部モジュール・テストファイルは数えない｡
+func computeCoupling(loaded []*packages.Package, tracked []listedPackage) map[string]PackageMetrics {
+	inModule := make(map[string]bool, len(tracked))
+	for _, p := range tracked {
 		inModule[p.ImportPath] = true
 	}
 
-	afferent := make(map[string]int, len(pkgs))
-	byDir := make(map[string]PackageMetrics, len(pkgs))
-	for _, p := range pkgs {
-		efferent := 0
-		for _, imp := range p.Imports {
-			if inModule[imp] {
-				efferent++
-				afferent[imp]++
+	efferent := make(map[string]int, len(tracked))
+	afferent := make(map[string]int, len(tracked))
+	for _, p := range loaded {
+		// テストを含む変種 (p [p.test]、p_test、p.test) は数えない
+		if p.ID != p.PkgPath || !inModule[p.PkgPath] {
+			continue
+		}
+		for _, targets := range declarationUnits(p) {
+			referenced := false
+			for target := range targets {
+				if inModule[target] {
+					afferent[target]++
+					referenced = true
+				}
+			}
+			if referenced {
+				efferent[p.PkgPath]++
 			}
 		}
-		byDir[p.Dir] = PackageMetrics{Name: p.Name, Path: p.ImportPath, EfferentCoupling: efferent}
 	}
-	for dir, m := range byDir {
-		m.AfferentCoupling = afferent[m.Path]
-		byDir[dir] = m
+
+	byDir := make(map[string]PackageMetrics, len(tracked))
+	for _, p := range tracked {
+		byDir[p.Dir] = PackageMetrics{
+			Name:             p.Name,
+			Path:             p.ImportPath,
+			AfferentCoupling: afferent[p.ImportPath],
+			EfferentCoupling: efferent[p.ImportPath],
+		}
 	}
 	return byDir
+}
+
+// declarationUnits は p のトップレベル宣言を単位に分け、単位ごとに参照するほかのパッケージのパスを返す｡
+// 単位は Martin のクラスに当たるもの: 型とそのメソッドで 1 つ、それ以外の関数は 1 つずつ、
+// var/const/type は spec ごとに 1 つ｡メソッドを型へ寄せるのは、メソッドの多い型で Ce が膨らまないようにするため｡
+func declarationUnits(p *packages.Package) map[any]map[string]bool {
+	units := make(map[any]map[string]bool)
+	add := func(unit any, node ast.Node) {
+		if units[unit] == nil {
+			units[unit] = make(map[string]bool)
+		}
+		ast.Inspect(node, func(n ast.Node) bool {
+			id, ok := n.(*ast.Ident)
+			if !ok {
+				return true
+			}
+			if obj := p.TypesInfo.Uses[id]; obj != nil && obj.Pkg() != nil && obj.Pkg().Path() != p.PkgPath {
+				units[unit][obj.Pkg().Path()] = true
+			}
+			return true
+		})
+	}
+
+	for _, file := range p.Syntax {
+		for _, decl := range file.Decls {
+			switch decl := decl.(type) {
+			case *ast.FuncDecl:
+				add(funcUnit(p.TypesInfo, decl), decl)
+			case *ast.GenDecl:
+				for _, spec := range decl.Specs {
+					switch spec := spec.(type) {
+					case *ast.ImportSpec:
+					case *ast.TypeSpec:
+						add(p.TypesInfo.Defs[spec.Name], spec)
+					default:
+						add(spec, spec)
+					}
+				}
+			}
+		}
+	}
+	return units
+}
+
+// funcUnit は関数宣言が属する単位を返す｡メソッドはレシーバの型 (*types.TypeName)、それ以外は宣言そのもの｡
+func funcUnit(info *types.Info, decl *ast.FuncDecl) any {
+	fn, ok := info.Defs[decl.Name].(*types.Func)
+	if !ok {
+		return decl
+	}
+	recv := fn.Signature().Recv()
+	if recv == nil {
+		return decl
+	}
+	recvType := recv.Type()
+	if ptr, ok := recvType.(*types.Pointer); ok {
+		recvType = ptr.Elem()
+	}
+	named, ok := recvType.(*types.Named)
+	if !ok {
+		return decl
+	}
+	return named.Origin().Obj()
 }
