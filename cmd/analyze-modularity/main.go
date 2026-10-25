@@ -86,7 +86,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	tracked, packages, err := collectPackages(args)
+	coupling, packages, err := collectPackages(args)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "エラー: %v\n", err)
 		os.Exit(1)
@@ -101,7 +101,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "注意: 揮発性を測りません (%s)｡Zone of Pain はすべて揮発として扱います\n", history.unmeasuredReason)
 	}
 
-	if err := enrichMainSequence(tracked, packages, history, *volatileCommits); err != nil {
+	if err := enrichMainSequence(coupling, packages, history, *volatileCommits); err != nil {
 		fmt.Fprintf(os.Stderr, "エラー: %v\n", err)
 		os.Exit(1)
 	}
@@ -168,8 +168,8 @@ func main() {
 
 // collectPackages は測る対象を決めて読む｡測るのは構成管理の対象だけ: go list が列挙するパッケージ
 // (入れ子のモジュールと vendor を含まない) から git が ignore するものを落とし、args の下にあるものを
-// 解析する｡返す tracked は Ca/Ce の辺を数える集合で、ignore されたものを含まない｡
-func collectPackages(args []string) ([]listedPackage, []PackageResult, error) {
+// 解析する｡返す Ca/Ce はディレクトリをキーにし、ignore されたパッケージからの参照も向けた参照も数えない｡
+func collectPackages(args []string) (map[string]PackageMetrics, []PackageResult, error) {
 	moduleRoot := inferModuleRoot(args)
 	listed, err := listModulePackages(moduleRoot)
 	if err != nil {
@@ -183,10 +183,11 @@ func collectPackages(args []string) ([]listedPackage, []PackageResult, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	usages, err := analyzeExportedReferences(moduleRoot, tracked)
+	loaded, err := loadTypedPackages(moduleRoot)
 	if err != nil {
 		return nil, nil, err
 	}
+	usages := analyzeExportedReferences(loaded, tracked)
 
 	var packages []PackageResult
 	for _, s := range selected {
@@ -212,16 +213,16 @@ func collectPackages(args []string) ([]listedPackage, []PackageResult, error) {
 	if len(packages) == 0 {
 		return nil, nil, fmt.Errorf("解析可能な Go パッケージが見つかりません")
 	}
-	return tracked, packages, nil
+	return computeCoupling(loaded, tracked), packages, nil
 }
 
-// enrichMainSequence は listed の import 辺から Ca/Ce を数え、AST の型カウントから A を出して
+// enrichMainSequence は coupling (computeCoupling の Ca/Ce) と AST の型カウントから出す A で
 // 各パッケージの MainSequence を埋める｡揮発性は history を volatileCommits で切って決める｡
-func enrichMainSequence(listed []listedPackage, packages []PackageResult, history commitHistory, volatileCommits int) error {
+func enrichMainSequence(coupling map[string]PackageMetrics, packages []PackageResult, history commitHistory, volatileCommits int) error {
 	// go list の Dir は絶対パスで、報告側の Path は引数のまま (相対もある)。symlink の解決度も
 	// 違いうるので、両方を実体の絶対パスにそろえてから突き合わせる
-	byDir := make(map[string]PackageMetrics, len(listed))
-	for dir, m := range computeCoupling(listed) {
+	byDir := make(map[string]PackageMetrics, len(coupling))
+	for dir, m := range coupling {
 		canonical, err := canonicalDir(dir)
 		if err != nil {
 			return fmt.Errorf("go list が返したディレクトリを解決できません: %w", err)

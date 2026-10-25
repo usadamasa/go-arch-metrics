@@ -123,10 +123,11 @@ func Test_analyzeExportedReferences(t *testing.T) {
 		t.Fatalf("listModulePackages: %v", err)
 	}
 
-	got, err := analyzeExportedReferences(root, listed)
+	loaded, err := loadTypedPackages(root)
 	if err != nil {
-		t.Fatalf("analyzeExportedReferences: %v", err)
+		t.Fatalf("loadTypedPackages: %v", err)
 	}
+	got := analyzeExportedReferences(loaded, listed)
 
 	t.Run("lib", func(t *testing.T) {
 		lib, ok := got["example.com/ref/internal/lib"]

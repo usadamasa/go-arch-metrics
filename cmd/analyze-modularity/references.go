@@ -31,11 +31,8 @@ const (
 // analyzeExportedReferences は listed の main でないパッケージごとに、外から参照されない exported を返す｡
 // 判定の軸は「unexport しても他の挙動が変わらないか」で、規則とその理由は
 // go-arch-metrics:evaluate の references/thresholds.md に置く｡
-func analyzeExportedReferences(moduleRoot string, listed []listedPackage) (map[string]exportedUsage, error) {
-	loaded, err := loadTypedPackages(moduleRoot)
-	if err != nil {
-		return nil, err
-	}
+// loaded は loadTypedPackages の結果｡
+func analyzeExportedReferences(loaded []*packages.Package, listed []listedPackage) map[string]exportedUsage {
 	tracked := make(map[string]bool, len(listed))
 	for _, p := range listed {
 		tracked[p.ImportPath] = true
@@ -60,7 +57,7 @@ func analyzeExportedReferences(moduleRoot string, listed []listedPackage) (map[s
 		}
 		result[p.PkgPath] = c.usageOf(p.Types)
 	}
-	return result, nil
+	return result
 }
 
 // loadTypedPackages は moduleRoot のパッケージをテストを含めて型検査して返す｡
