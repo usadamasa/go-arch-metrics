@@ -291,12 +291,15 @@ func buildMainSequenceSummary(packages []PackageResult, history commitHistory, v
 			summary.StructurallyConstrainedCount++
 			continue
 		}
-		if notWorsenedFromBaseline(p.MainSequence) {
-			summary.BaselineNotWorsenedCount++
+		if !actionableWithoutBaseline(p.MainSequence) {
+			summary.NonVolatileZoneOfPainCount++
 			continue
 		}
-		if !isMainSequenceActionable(p.MainSequence) {
-			summary.NonVolatileZoneOfPainCount++
+		if notWorsenedFromBaseline(p.MainSequence) {
+			// Main Sequence 側は baseline が無くても警告が出ないので、baseline で判定が変わったものに入れない
+			if p.MainSequence.Zone != ZoneMainSequence {
+				summary.BaselineNotWorsenedCount++
+			}
 			continue
 		}
 		if p.MainSequence.Distance > mainSequenceDistanceThreshold {

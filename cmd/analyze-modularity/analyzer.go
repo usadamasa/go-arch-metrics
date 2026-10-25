@@ -319,10 +319,12 @@ func GenerateMainSequenceWarnings(pkg PackageResult) []Warning {
 	var reason string
 	switch {
 	case ms.StructurallyConstrained || actionable:
-	case notWorsenedFromBaseline(ms):
+	case !actionableWithoutBaseline(ms):
+		if ms.RecentCommitCount != nil {
+			reason = fmt.Sprintf(" (非揮発: 直近の窓で %d commit)", *ms.RecentCommitCount)
+		}
+	default:
 		reason = fmt.Sprintf(" (base から悪化していない: D=%.2f → %.2f)", *ms.BaselineDistance, ms.Distance)
-	case ms.RecentCommitCount != nil:
-		reason = fmt.Sprintf(" (非揮発: 直近の窓で %d commit)", *ms.RecentCommitCount)
 	}
 	if !actionable {
 		reason += nonActionableSuffix
@@ -379,14 +381,19 @@ func GenerateMainSequenceWarnings(pkg PackageResult) []Warning {
 const nonActionableSuffix = " (情報のみ。--strict の失敗には数えない)"
 
 // isMainSequenceActionable は Zone と Distance の警告を、コードを直して消せるものとして扱うかを返す｡
-// summary.main_sequence.actionable_* の集計と同じ基準｡次の 3 つを除く:
+// summary.main_sequence.actionable_* の集計と同じ基準｡actionableWithoutBaseline の除外に加え、
+// --baseline で D が base から大きくなっていないものを除く: 揮発の窓は判定される変更自身の commit を含むので、
+// 窓で 4 commit のパッケージは中身によらず次の変更で揮発になる｡合否は変更が D を悪くしたかで決める
+func isMainSequenceActionable(ms *MainSequenceData) bool {
+	return actionableWithoutBaseline(ms) && !notWorsenedFromBaseline(ms)
+}
+
+// actionableWithoutBaseline は --baseline を見ずに、Zone と Distance の警告を actionable にするかを返す｡次の 2 つを除く:
 //   - 構造制約 (Ce=0, Ca>0): I=0 はトポロジーで決まり、A を上げる以外に動かす手が無い
-//   - --baseline で D が base から大きくなっていない: 揮発の窓は判定される変更自身の commit を含むので、
-//     窓で 4 commit のパッケージは中身によらず次の変更で揮発になる｡合否は変更が D を悪くしたかで決める
 //   - 非揮発の Zone of Pain: Martin (Agile PPP ch.28) は、変更されない具象安定パッケージは
 //     Zone of Pain でも harmless だとする｡未測定は揮発として扱い、gate を緩めない
-func isMainSequenceActionable(ms *MainSequenceData) bool {
-	if ms.StructurallyConstrained || notWorsenedFromBaseline(ms) {
+func actionableWithoutBaseline(ms *MainSequenceData) bool {
+	if ms.StructurallyConstrained {
 		return false
 	}
 	return ms.Zone != ZoneOfPain || ms.Volatility != VolatilityNonVolatile

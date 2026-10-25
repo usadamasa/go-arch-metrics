@@ -146,7 +146,8 @@ D が base より大きくなったときだけ Main Sequence の警告 (`zone_o
 
 - D が base 以下: 揮発でも `actionable: false`。Message に `base から悪化していない: D=<base> → <今>` が付き、
   `summary.main_sequence.baseline_not_worsened_count` に数える。`main_sequence.baseline_distance` に base の D が出る。
-  非揮発の Zone of Pain でも、D が base 以下ならこちらに数え、`non_volatile_zone_of_pain_count` には入れない
+  数えるのは baseline で判定が変わったもの (揮発の Zone of Pain と Zone of Uselessness) だけで、
+  非揮発の Zone of Pain は今までどおり `non_volatile_zone_of_pain_count` に数え、Message も非揮発を理由にする
 - D が base より大きい: 揮発なら今までどおり actionable (非揮発の Zone of Pain は今までどおり外す)
 - base に無いパッケージ、base で excluded のパッケージ: `--baseline` なしと同じ判定
 
