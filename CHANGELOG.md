@@ -1,5 +1,13 @@
 # Changelog
 
+## [2026.1027.0](https://github.com/usadamasa/go-arch-metrics/compare/2026.1024.0...2026.1027.0) - 2026-10-27
+
+### Other Changes
+- ci: pull_request の types に edited を足し、base の付け替えで CI を走り直す by @usadamasa in https://github.com/usadamasa/go-arch-metrics/pull/73
+- analyze-modularity: Ce を自分の宣言の数で数え、依存先の統合で呼び手が動かないようにする by @usadamasa in https://github.com/usadamasa/go-arch-metrics/pull/71
+- analyze-modularity: --baseline で base から D を悪くしたパッケージだけを落とす by @usadamasa in https://github.com/usadamasa/go-arch-metrics/pull/72
+- docs: 開発者向けの md から「正本」を除き、添削を当てる by @usadamasa in https://github.com/usadamasa/go-arch-metrics/pull/80
+
 ## [2026.1024.0](https://github.com/usadamasa/go-arch-metrics/compare/2026.1021.0...2026.1024.0) - 2026-10-24
 
 ### Bug Fixes 🐛
