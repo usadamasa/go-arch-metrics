@@ -31,7 +31,7 @@ claude plugin validate --strict .    # plugin manifest
 - SKILL.md から script を呼ぶときは `"${CLAUDE_PLUGIN_ROOT}/skills/<name>/scripts/..."`
 - `baseline.sh` が出す案内も skill 名で書く。相対パスで届く references が
   measure skill 側に無いため
-- `analyze-arch-lint` の指標一覧はドキュメントに書かない。`--metrics` が正本
+- `analyze-arch-lint` の指標一覧はドキュメントに書かない。一覧は `--metrics` の出力で見る
 
 ## 責務の分け方
 
