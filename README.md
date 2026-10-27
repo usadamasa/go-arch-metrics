@@ -28,12 +28,12 @@ claude plugin install go-arch-metrics@usadamasa
 
 ## 同梱する CLI
 
-- **`analyze-arch-lint`** — `.go-arch-lint.yml` 自体の健全性。`go-arch-lint check` は
+- **`analyze-arch-lint`**: `.go-arch-lint.yml` 自体の健全性。`go-arch-lint check` は
   コードが設定に違反していないかしか見ず、設定がパッケージツリーの転記へ劣化していく
-  方向は検出できない。そこを数値にする。指標は `--metrics` が正本
-- **`analyze-modularity`** — パッケージの API surface area (exported/unexported 比率、
-  サイズ分布) と、宣言どうしの参照から出す Martin の Ca/Ce/A/I/D と Zone 分類
-- **`vulncheck`** — govulncheck をライブラリとして組み込んだもの。引数と exit code は govulncheck と同じ。
+  方向は検出できない。そこを数値にする。指標の一覧は `--metrics` の出力にある
+- **`analyze-modularity`**: パッケージの API surface area (exported/unexported 比率、
+  サイズ分布) を測る。宣言どうしの参照から Martin の Ca/Ce/A/I/D と Zone 分類も出す
+- **`vulncheck`**: govulncheck をライブラリとして組み込んだもの。引数と exit code は govulncheck と同じ。
   違いは証明書の検証だけで、OS の証明書ストアに頼らず埋め込みの roots を使うので、trustd に届かない
   sandbox (Claude Code など) の中でも vuln.go.dev に届く
 

@@ -20,7 +20,7 @@ skill を書くときの決めごと、リリース手順はリポジトリル�
 Go と lint・テストのツール (`bats`、`shellcheck` を含む) は `flake.nix` の devShell が揃え、
 `.envrc` (nix-direnv の `use flake`) が読み込む。
 版は `flake.lock` が固定する nixpkgs で決まり、上げるときは `nix flake update`。
-`flake.lock`・`go.mod`・GitHub Actions の更新は Dependabot が週次で PR を出す (`.github/dependabot.yml`)。
+`flake.lock`・`go.mod`・GitHub Actions の更新 PR は Dependabot が週次で出す (`.github/dependabot.yml`)。
 devShell の go は `go.mod` の `go` 行と同じ系列 (`go_1_26`) にし、`GOTOOLCHAIN=local` でずれを即座に落とす。
 
 `analyze-modularity` / `analyze-arch-lint` は devShell に入れない。`task lint` が `go run ./cmd/...` で
@@ -28,7 +28,7 @@ devShell の go は `go.mod` の `go` 行と同じ系列 (`go_1_26`) にし、`G
 
 ## 検証
 
-task が何を回すかは `task --list` を見る (`Taskfile.yml` の `desc` が正本)。
+task が何を回すかは `task --list` を見る (各 task の説明は `Taskfile.yml` の `desc` にある)。
 ここでは CI のどの job に対応するかだけを持つ。
 
 | コマンド | CI job |
@@ -46,7 +46,7 @@ PR を出す前にこの全部を通す。job の定義は `.github/workflows/ci
 
 ## つまずきどころ
 
-- **`analyze-arch-lint --strict` が落ちたとき**: 指標の意味としきい値と対処は
+- **`analyze-arch-lint --strict` が落ちたとき**: 指標の意味・しきい値・対処は
   `analyze-arch-lint --metrics` が出す。ドキュメント側に表を書き写さない
 - **配布用の skill (`skills/`) を足したとき**: `.claude-plugin/plugin.json` の `skills`
   に追記する。追記しないと `claude plugin validate --strict skills` は通っても plugin
