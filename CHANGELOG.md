@@ -1,5 +1,11 @@
 # Changelog
 
+## [2026.1028.0](https://github.com/usadamasa/go-arch-metrics/compare/2026.1027.0...2026.1028.0) - 2026-10-28
+
+### Other Changes
+- baseline の JSON を測った場所に依らない形にし、日付付きファイルをやめる by @usadamasa in https://github.com/usadamasa/go-arch-metrics/pull/81
+- LOC 外れ値のしきい値を 1 つにそろえ、limit の由来を出す by @usadamasa in https://github.com/usadamasa/go-arch-metrics/pull/83
+
 ## [2026.1027.0](https://github.com/usadamasa/go-arch-metrics/compare/2026.1024.0...2026.1027.0) - 2026-10-27
 
 ### Other Changes
