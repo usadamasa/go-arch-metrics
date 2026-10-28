@@ -236,7 +236,7 @@ gosec ./...
 |-----------|------|
 | 外から参照されない exported | unexport しても他の挙動が変わらない exported の数と名前。判定の規則は `go-arch-metrics:evaluate` の `references/thresholds.md` |
 | Public ratio | exported / (exported + unexported)。参考値で `--strict` の判定には使わない |
-| LOC 外れ値 | パッケージ LOC > mean + 2σ |
+| LOC 外れ値 | パッケージ LOC > max(mean + 2σ, 1000)。下限 1000 は固定 |
 | Exported funcs/methods | 公開関数・メソッド数 |
 | Exported types | 公開型 (struct/interface) 数 |
 | Afferent Coupling (Ca) | このパッケージを参照する宣言を持つ、モジュール内のほかのパッケージの数 |

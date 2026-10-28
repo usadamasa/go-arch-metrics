@@ -255,7 +255,7 @@ func TestDetectOutliers(t *testing.T) {
 			{Path: "pkg/outlier", LOC: 2000}, // 外れ値
 		}
 
-		outliers := DetectOutliers(packages, 2.0)
+		outliers := DetectOutliers(packages, NewLOCThreshold(locStatsOf(packages), 2.0))
 		if len(outliers) != 1 {
 			t.Fatalf("外れ値の数: got %d, want 1", len(outliers))
 		}
@@ -271,11 +271,42 @@ func TestDetectOutliers(t *testing.T) {
 			{Path: "pkg/c", LOC: 105},
 		}
 
-		outliers := DetectOutliers(packages, 2.0)
+		outliers := DetectOutliers(packages, NewLOCThreshold(locStatsOf(packages), 2.0))
 		if len(outliers) != 0 {
 			t.Errorf("外れ値の数: got %d, want 0", len(outliers))
 		}
 	})
+
+	// loc_outlier の警告と同じ下限を使い、警告の出ないパッケージを外れ値に載せない
+	t.Run("統計値を超えても下限以下なら外れ値にしない", func(t *testing.T) {
+		packages := []PackageResult{
+			{Path: "pkg/a", LOC: 100},
+			{Path: "pkg/b", LOC: 100},
+			{Path: "pkg/c", LOC: 100},
+			{Path: "pkg/d", LOC: 100},
+			{Path: "pkg/e", LOC: 100},
+			{Path: "pkg/f", LOC: 100},
+			{Path: "pkg/g", LOC: 100},
+			{Path: "pkg/h", LOC: 100},
+			{Path: "pkg/mid", LOC: 900}, // 統計値は約 692
+		}
+
+		threshold := NewLOCThreshold(locStatsOf(packages), 2.0)
+		if threshold.Statistical >= 900 {
+			t.Fatalf("前提: 統計値 %v が 900 未満でない", threshold.Statistical)
+		}
+		if outliers := DetectOutliers(packages, threshold); len(outliers) != 0 {
+			t.Errorf("外れ値: got %v, want なし (900 は下限 %d 以下)", outliers, minLOCLimit)
+		}
+	})
+}
+
+func locStatsOf(packages []PackageResult) Stats {
+	locs := make([]float64, len(packages))
+	for i, p := range packages {
+		locs[i] = float64(p.LOC)
+	}
+	return CalcStats(locs)
 }
 
 func TestTotalSymbols(t *testing.T) {
@@ -323,7 +354,7 @@ func TestGenerateWarnings(t *testing.T) {
 			UnexportedTypes: 1,
 		}
 
-		warnings := GenerateWarnings(pkg, 0.6, 2.0, Stats{Mean: 100, Stddev: 50}, defaultMinSymbols)
+		warnings := GenerateWarnings(pkg, 0.6, NewLOCThreshold(Stats{Mean: 100, Stddev: 50}, 2.0), defaultMinSymbols)
 		found := false
 		for _, w := range warnings {
 			if w.Type == "high_public_ratio" {
@@ -343,7 +374,7 @@ func TestGenerateWarnings(t *testing.T) {
 			ExportedTypes: 3,
 		}
 
-		warnings := GenerateWarnings(pkg, 0.6, 2.0, Stats{Mean: 100, Stddev: 50}, defaultMinSymbols)
+		warnings := GenerateWarnings(pkg, 0.6, NewLOCThreshold(Stats{Mean: 100, Stddev: 50}, 2.0), defaultMinSymbols)
 		for _, w := range warnings {
 			if w.Type == "high_public_ratio" {
 				t.Error("小規模パッケージ (シンボル数 < 10) では high_public_ratio 警告を生成すべきでない")
@@ -360,7 +391,7 @@ func TestGenerateWarnings(t *testing.T) {
 			ExportedTypes:   1,
 		}
 
-		warnings := GenerateWarnings(pkg, 0.6, 2.0, Stats{Mean: 100, Stddev: 50}, defaultMinSymbols)
+		warnings := GenerateWarnings(pkg, 0.6, NewLOCThreshold(Stats{Mean: 100, Stddev: 50}, 2.0), defaultMinSymbols)
 		found := false
 		for _, w := range warnings {
 			if w.Type == "high_public_ratio" {
@@ -380,7 +411,7 @@ func TestGenerateWarnings(t *testing.T) {
 			ExportedFuncs: 3,
 		}
 
-		warnings := GenerateWarnings(pkg, 0.6, 2.0, Stats{Mean: 100, Stddev: 50}, defaultMinSymbols)
+		warnings := GenerateWarnings(pkg, 0.6, NewLOCThreshold(Stats{Mean: 100, Stddev: 50}, 2.0), defaultMinSymbols)
 		found := false
 		for _, w := range warnings {
 			if w.Type == "loc_outlier" {
@@ -400,7 +431,7 @@ func TestGenerateWarnings(t *testing.T) {
 			UnexportedFuncs: 7,
 		}
 
-		warnings := GenerateWarnings(pkg, 0.6, 2.0, Stats{Mean: 100, Stddev: 50}, defaultMinSymbols)
+		warnings := GenerateWarnings(pkg, 0.6, NewLOCThreshold(Stats{Mean: 100, Stddev: 50}, 2.0), defaultMinSymbols)
 		if len(warnings) != 0 {
 			t.Errorf("警告数: got %d, want 0", len(warnings))
 		}
@@ -414,7 +445,7 @@ func TestGenerateWarnings(t *testing.T) {
 			UnexportedFuncs: 5,
 		}
 
-		warnings := GenerateWarnings(pkg, 0.6, 2.0, Stats{Mean: 100, Stddev: 50}, defaultMinSymbols)
+		warnings := GenerateWarnings(pkg, 0.6, NewLOCThreshold(Stats{Mean: 100, Stddev: 50}, 2.0), defaultMinSymbols)
 		found := false
 		for _, w := range warnings {
 			if w.Type == "loc_outlier" {
@@ -433,7 +464,7 @@ func TestGenerateWarnings(t *testing.T) {
 			ExportedFuncs: 10,
 		}
 
-		warnings := GenerateWarnings(pkg, 0.6, 2.0, Stats{Mean: 100, Stddev: 50}, defaultMinSymbols)
+		warnings := GenerateWarnings(pkg, 0.6, NewLOCThreshold(Stats{Mean: 100, Stddev: 50}, 2.0), defaultMinSymbols)
 		if len(warnings) != 2 {
 			t.Fatalf("警告数: got %d, want 2 (high_public_ratio, loc_outlier)", len(warnings))
 		}
@@ -786,7 +817,7 @@ func TestGenerateCrossWarnings(t *testing.T) {
 			},
 		}
 		astWarnings := []Warning{
-			{Type: "loc_outlier", Package: "pkg/big-leaf", Value: 500, Limit: 200},
+			{Type: "loc_outlier", Package: "pkg/big-leaf", Value: 1500, Limit: 1000, LimitSource: LOCLimitSourceMinimum, StatisticalLimit: new(200.0)},
 		}
 		warnings := GenerateCrossWarnings(pkg, astWarnings)
 		if len(warnings) != 1 {
@@ -794,6 +825,13 @@ func TestGenerateCrossWarnings(t *testing.T) {
 		}
 		if warnings[0].Type != "constrained_loc_outlier" {
 			t.Errorf("Type: got %q, want %q", warnings[0].Type, "constrained_loc_outlier")
+		}
+		// 元の loc_outlier と limit の由来を食い違わせない
+		if warnings[0].LimitSource != LOCLimitSourceMinimum || warnings[0].StatisticalLimit == nil || *warnings[0].StatisticalLimit != 200 {
+			t.Errorf("limit の由来が引き継がれていない: source=%q statistical=%v", warnings[0].LimitSource, warnings[0].StatisticalLimit)
+		}
+		if !strings.Contains(warnings[0].Message, "(下限)") {
+			t.Errorf("message が下限による警告を示していない: %q", warnings[0].Message)
 		}
 		// 肥大化した葉は分割で直せる
 		if !warnings[0].Actionable {
@@ -856,7 +894,7 @@ func TestGenerateWarnings_LOC閾値には下限がある(t *testing.T) {
 	t.Run("統計上は外れ値でも下限未満なら警告しない", func(t *testing.T) {
 		pkg := PackageResult{Path: "pkg/unrelated", LOC: 899, ExportedFuncs: 1, UnexportedFuncs: 5}
 
-		for _, w := range GenerateWarnings(pkg, 0.6, 2.0, tightStats, defaultMinSymbols) {
+		for _, w := range GenerateWarnings(pkg, 0.6, NewLOCThreshold(tightStats, 2.0), defaultMinSymbols) {
 			if w.Type == WarningTypeLocOutlier {
 				t.Errorf("LOC %d は下限 %d 未満なので警告すべきでない (limit=%v)", pkg.LOC, minLOCLimit, w.Limit)
 			}
@@ -867,11 +905,20 @@ func TestGenerateWarnings_LOC閾値には下限がある(t *testing.T) {
 		pkg := PackageResult{Path: "pkg/huge", LOC: minLOCLimit + 1, ExportedFuncs: 1, UnexportedFuncs: 5}
 
 		found := false
-		for _, w := range GenerateWarnings(pkg, 0.6, 2.0, tightStats, defaultMinSymbols) {
+		for _, w := range GenerateWarnings(pkg, 0.6, NewLOCThreshold(tightStats, 2.0), defaultMinSymbols) {
 			if w.Type == WarningTypeLocOutlier {
 				found = true
 				if w.Limit != minLOCLimit {
 					t.Errorf("limit = %v, want %d (統計値より下限が優先される)", w.Limit, minLOCLimit)
+				}
+				if w.LimitSource != LOCLimitSourceMinimum {
+					t.Errorf("limit_source = %q, want %q", w.LimitSource, LOCLimitSourceMinimum)
+				}
+				if w.StatisticalLimit == nil || *w.StatisticalLimit != 200 {
+					t.Errorf("statistical_limit = %v, want 200", w.StatisticalLimit)
+				}
+				if !strings.Contains(w.Message, "(下限)") || strings.Contains(w.Message, "統計的外れ値") {
+					t.Errorf("message が下限による警告を示していない: %q", w.Message)
 				}
 			}
 		}
@@ -880,14 +927,62 @@ func TestGenerateWarnings_LOC閾値には下限がある(t *testing.T) {
 		}
 	})
 
+	wideStats := Stats{Mean: 2000, Stddev: 500} // 閾値 3000
+
 	t.Run("統計値が下限より大きければ統計値が使われる", func(t *testing.T) {
-		wideStats := Stats{Mean: 2000, Stddev: 500} // 閾値 3000
 		pkg := PackageResult{Path: "pkg/mid", LOC: 2500, ExportedFuncs: 1, UnexportedFuncs: 5}
 
-		for _, w := range GenerateWarnings(pkg, 0.6, 2.0, wideStats, defaultMinSymbols) {
+		for _, w := range GenerateWarnings(pkg, 0.6, NewLOCThreshold(wideStats, 2.0), defaultMinSymbols) {
 			if w.Type == WarningTypeLocOutlier {
 				t.Errorf("LOC %d は統計閾値 3000 未満なので警告すべきでない (limit=%v)", pkg.LOC, w.Limit)
 			}
 		}
 	})
+
+	t.Run("統計値で警告するときは由来を statistical にする", func(t *testing.T) {
+		pkg := PackageResult{Path: "pkg/big", LOC: 3500, ExportedFuncs: 1, UnexportedFuncs: 5}
+
+		found := false
+		for _, w := range GenerateWarnings(pkg, 0.6, NewLOCThreshold(wideStats, 2.0), defaultMinSymbols) {
+			if w.Type != WarningTypeLocOutlier {
+				continue
+			}
+			found = true
+			if w.Limit != 3000 || w.LimitSource != LOCLimitSourceStatistical {
+				t.Errorf("limit = %v (%q), want 3000 (%q)", w.Limit, w.LimitSource, LOCLimitSourceStatistical)
+			}
+			if w.StatisticalLimit == nil || *w.StatisticalLimit != 3000 {
+				t.Errorf("statistical_limit = %v, want 3000", w.StatisticalLimit)
+			}
+			if !strings.Contains(w.Message, "統計的外れ値") || strings.Contains(w.Message, "下限") {
+				t.Errorf("message が統計値による警告を示していない: %q", w.Message)
+			}
+		}
+		if !found {
+			t.Errorf("LOC %d は統計閾値 3000 を超えているので警告すべき", pkg.LOC)
+		}
+	})
+}
+
+func TestNewLOCThreshold(t *testing.T) {
+	tests := []struct {
+		name            string
+		stats           Stats
+		wantStatistical float64
+		wantLimit       float64
+		wantSource      string
+	}{
+		{"統計値が下限より小さい", Stats{Mean: 100, Stddev: 50}, 200, minLOCLimit, LOCLimitSourceMinimum},
+		{"統計値が下限より大きい", Stats{Mean: 2000, Stddev: 500}, 3000, 3000, LOCLimitSourceStatistical},
+		// 同じ値なら統計値でも外れ値と言えるので statistical を返す
+		{"統計値が下限と同じ", Stats{Mean: 500, Stddev: 250}, minLOCLimit, minLOCLimit, LOCLimitSourceStatistical},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := NewLOCThreshold(tt.stats, 2.0)
+			if got.Statistical != tt.wantStatistical || got.Limit != tt.wantLimit || got.Source != tt.wantSource {
+				t.Errorf("got %+v, want statistical=%v limit=%v source=%q", got, tt.wantStatistical, tt.wantLimit, tt.wantSource)
+			}
+		})
+	}
 }
