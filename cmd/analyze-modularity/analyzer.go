@@ -87,12 +87,15 @@ type Stats struct {
 // Warning は閾値超過の警告を表す｡
 // Actionable はコードを直せば消せる警告かどうかで、--strict は true のものだけを失敗に数える｡
 type Warning struct {
-	Type       string  `json:"type"`
-	Package    string  `json:"package"`
-	Value      float64 `json:"value"`
-	Limit      float64 `json:"limit"`
-	Message    string  `json:"message"`
-	Actionable bool    `json:"actionable"`
+	Type    string  `json:"type"`
+	Package string  `json:"package"`
+	Value   float64 `json:"value"`
+	Limit   float64 `json:"limit"`
+	// LimitSource と StatisticalLimit は LOC の警告だけが持つ｡Limit が統計値と下限のどちらから来たかを示す
+	LimitSource      string   `json:"limit_source,omitempty"`
+	StatisticalLimit *float64 `json:"statistical_limit,omitempty"`
+	Message          string   `json:"message"`
+	Actionable       bool     `json:"actionable"`
 }
 
 // 警告タイプ定数｡
@@ -263,19 +266,11 @@ func CalcStats(values []float64) Stats {
 	return Stats{Mean: mean, Stddev: stddev}
 }
 
-// DetectOutliers は LOC が mean + sigma*stddev を超えるパッケージを検出する｡
-func DetectOutliers(packages []PackageResult, sigma float64) []string {
-	locs := make([]float64, len(packages))
-	for i, p := range packages {
-		locs[i] = float64(p.LOC)
-	}
-
-	stats := CalcStats(locs)
-	threshold := stats.Mean + sigma*stats.Stddev
-
+// DetectOutliers は LOC が threshold を超えるパッケージを検出する｡loc_outlier の警告と同じ判定になる
+func DetectOutliers(packages []PackageResult, threshold LOCThreshold) []string {
 	var outliers []string
 	for _, p := range packages {
-		if float64(p.LOC) > threshold {
+		if threshold.Exceeds(p.LOC) {
 			outliers = append(outliers, p.Path)
 		}
 	}
@@ -414,10 +409,12 @@ func GenerateCrossWarnings(pkg PackageResult, astWarnings []Warning) []Warning {
 			return []Warning{{
 				Type:       WarningTypeConstrainedLocOutlier,
 				Package:    pkg.Path,
-				Value:      w.Value,
-				Limit:      w.Limit,
-				Message:    fmt.Sprintf("構造制約 leaf パッケージが肥大化しています (LOC %.0f > %.0f)", w.Value, w.Limit),
-				Actionable: true,
+				Value:            w.Value,
+				Limit:            w.Limit,
+				LimitSource:      w.LimitSource,
+				StatisticalLimit: w.StatisticalLimit,
+				Message:          fmt.Sprintf("構造制約 leaf パッケージが肥大化しています (LOC %.0f > %.0f%s)", w.Value, w.Limit, limitSourceNote(w.LimitSource)),
+				Actionable:       true,
 			}}
 		}
 	}
@@ -438,6 +435,63 @@ func GenerateCrossWarnings(pkg PackageResult, astWarnings []Warning) []Warning {
 // パッケージを免除しているのと同じ考え方｡
 const minLOCLimit = 1000
 
+// LOC 外れ値のしきい値の由来｡警告の limit_source に出す
+const (
+	LOCLimitSourceStatistical = "statistical"
+	LOCLimitSourceMinimum     = "minimum"
+)
+
+// LOCThreshold は LOC 外れ値のしきい値｡outlier_packages と loc_outlier の警告は同じ値で判定する
+type LOCThreshold struct {
+	Sigma       float64
+	Statistical float64 // mean + sigma*stddev
+	Limit       float64 // Statistical と minLOCLimit の大きい方
+	Source      string
+}
+
+// NewLOCThreshold は stats と sigma からしきい値を決める｡統計値が下限と同じなら statistical とする
+func NewLOCThreshold(stats Stats, sigma float64) LOCThreshold {
+	t := LOCThreshold{Sigma: sigma, Statistical: stats.Mean + sigma*stats.Stddev}
+	if t.Statistical >= minLOCLimit {
+		t.Limit, t.Source = t.Statistical, LOCLimitSourceStatistical
+	} else {
+		t.Limit, t.Source = minLOCLimit, LOCLimitSourceMinimum
+	}
+	return t
+}
+
+// Exceeds は loc がしきい値を超えるかを返す｡
+func (t LOCThreshold) Exceeds(loc int) bool {
+	return float64(loc) > t.Limit
+}
+
+// warning は pkg の loc_outlier 警告を作る｡下限が効いたときは「統計的外れ値」と書かない
+func (t LOCThreshold) warning(pkg PackageResult) Warning {
+	message := fmt.Sprintf("パッケージが統計的外れ値です (LOC %d > %.0f = mean+%gσ)", pkg.LOC, t.Limit, t.Sigma)
+	if t.Source == LOCLimitSourceMinimum {
+		message = fmt.Sprintf("パッケージが大きすぎます (LOC %d > %.0f%s。mean+%gσ は %.0f)",
+			pkg.LOC, t.Limit, limitSourceNote(t.Source), t.Sigma, t.Statistical)
+	}
+	return Warning{
+		Type:             WarningTypeLocOutlier,
+		Package:          pkg.Path,
+		Value:            float64(pkg.LOC),
+		Limit:            t.Limit,
+		LimitSource:      t.Source,
+		StatisticalLimit: new(t.Statistical),
+		Message:          message,
+		Actionable:       true,
+	}
+}
+
+// limitSourceNote は下限が効いた警告の Message で limit に添える注記を返す｡
+func limitSourceNote(source string) string {
+	if source == LOCLimitSourceMinimum {
+		return " (下限)"
+	}
+	return ""
+}
+
 // GenerateWarnings はパッケージの警告を生成する｡
 // minSymbols 未満のシンボル数のパッケージでは比率メトリクスが統計的に不安定なため
 // high_public_ratio チェックをスキップする｡同じ理由で loc_outlier にも下限
@@ -445,7 +499,7 @@ const minLOCLimit = 1000
 //
 // high_public_ratio は参考情報で actionable にしない｡分母が unexported の量なので、exported がすべて
 // 使われていても unexported の重複を消すと悪化する｡直す対象は unreferenced_exported で判定する｡
-func GenerateWarnings(pkg PackageResult, maxPublicRatio, sigma float64, locStats Stats, minSymbols int) []Warning {
+func GenerateWarnings(pkg PackageResult, maxPublicRatio float64, locThreshold LOCThreshold, minSymbols int) []Warning {
 	var warnings []Warning
 
 	ratio := pkg.PublicRatio()
@@ -460,16 +514,8 @@ func GenerateWarnings(pkg PackageResult, maxPublicRatio, sigma float64, locStats
 		})
 	}
 
-	locThreshold := math.Max(locStats.Mean+sigma*locStats.Stddev, minLOCLimit)
-	if float64(pkg.LOC) > locThreshold {
-		warnings = append(warnings, Warning{
-			Type:       WarningTypeLocOutlier,
-			Package:    pkg.Path,
-			Value:      float64(pkg.LOC),
-			Limit:      locThreshold,
-			Message:    fmt.Sprintf("パッケージが統計的外れ値です (LOC %d > %.0f)", pkg.LOC, locThreshold),
-			Actionable: true,
-		})
+	if locThreshold.Exceeds(pkg.LOC) {
+		warnings = append(warnings, locThreshold.warning(pkg))
 	}
 
 	return warnings

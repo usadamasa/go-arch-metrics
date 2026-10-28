@@ -69,7 +69,7 @@ func inferModuleRoot(args []string) string {
 
 func main() {
 	maxPublicRatio := flag.Float64("max-public-ratio", 0.6, "high_public_ratio (参考情報) を出すしきい値。--strict の判定には効かない")
-	sigma := flag.Float64("sigma", 2.0, "LOC 外れ値検出の σ 倍数")
+	sigma := flag.Float64("sigma", 2.0, "LOC 外れ値検出の σ 倍数。しきい値は max(mean + sigma*stddev, 1000) で、下限 1000 は固定")
 	minSymbols := flag.Int("min-symbols", defaultMinSymbols, "high_public_ratio (参考情報) を出す最小シンボル数。--strict の判定には効かない")
 	strict := flag.Bool("strict", false, "actionable な警告 (コードを直して消せるもの) がある場合に exit code 1 を返す")
 	volatilityWindow := flag.Int("volatility-window", defaultVolatilityWindow, "揮発性を数える直近の commit 数 (merge を除く)")
@@ -116,12 +116,13 @@ func main() {
 
 	locStats := CalcStats(locs)
 	ratioStats := CalcStats(ratios)
-	outliers := DetectOutliers(packages, *sigma)
+	locThreshold := NewLOCThreshold(locStats, *sigma)
+	outliers := DetectOutliers(packages, locThreshold)
 
 	// 警告生成
 	var allWarnings []Warning
 	for _, p := range packages {
-		astWarnings := GenerateWarnings(p, *maxPublicRatio, *sigma, locStats, *minSymbols)
+		astWarnings := GenerateWarnings(p, *maxPublicRatio, locThreshold, *minSymbols)
 		mainSequenceWarnings := GenerateMainSequenceWarnings(p)
 		crossWarnings := GenerateCrossWarnings(p, astWarnings)
 		allWarnings = append(allWarnings, astWarnings...)
