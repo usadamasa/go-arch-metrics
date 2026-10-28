@@ -1,0 +1,529 @@
+{
+  "project": "github.com/usadamasa/go-arch-metrics",
+  "golangci_lint": {
+    "Issues": [],
+    "Report": {
+      "Linters": [
+        {
+          "Name": "arangolint"
+        },
+        {
+          "Name": "asasalint"
+        },
+        {
+          "Name": "asciicheck"
+        },
+        {
+          "Name": "bidichk"
+        },
+        {
+          "Name": "bodyclose"
+        },
+        {
+          "Name": "canonicalheader"
+        },
+        {
+          "Name": "clickhouselint"
+        },
+        {
+          "Name": "containedctx"
+        },
+        {
+          "Name": "contextcheck"
+        },
+        {
+          "Name": "copyloopvar"
+        },
+        {
+          "Name": "cyclop",
+          "Enabled": true
+        },
+        {
+          "Name": "decorder"
+        },
+        {
+          "Name": "depguard"
+        },
+        {
+          "Name": "dogsled"
+        },
+        {
+          "Name": "dupl"
+        },
+        {
+          "Name": "dupword"
+        },
+        {
+          "Name": "durationcheck"
+        },
+        {
+          "Name": "embeddedstructfieldcheck"
+        },
+        {
+          "Name": "errcheck",
+          "Enabled": true
+        },
+        {
+          "Name": "errchkjson"
+        },
+        {
+          "Name": "errname"
+        },
+        {
+          "Name": "errorlint"
+        },
+        {
+          "Name": "exhaustive"
+        },
+        {
+          "Name": "exhaustruct"
+        },
+        {
+          "Name": "exhaustruct_v5"
+        },
+        {
+          "Name": "exptostd"
+        },
+        {
+          "Name": "forbidigo"
+        },
+        {
+          "Name": "forcetypeassert"
+        },
+        {
+          "Name": "funcorder"
+        },
+        {
+          "Name": "fatcontext"
+        },
+        {
+          "Name": "funlen",
+          "Enabled": true
+        },
+        {
+          "Name": "gci"
+        },
+        {
+          "Name": "ginkgolinter"
+        },
+        {
+          "Name": "gocheckcompilerdirectives"
+        },
+        {
+          "Name": "gochecknoglobals"
+        },
+        {
+          "Name": "gochecknoinits"
+        },
+        {
+          "Name": "gochecksumtype"
+        },
+        {
+          "Name": "gocognit",
+          "Enabled": true
+        },
+        {
+          "Name": "goconst"
+        },
+        {
+          "Name": "gocritic"
+        },
+        {
+          "Name": "gocyclo",
+          "Enabled": true
+        },
+        {
+          "Name": "godoclint"
+        },
+        {
+          "Name": "godot"
+        },
+        {
+          "Name": "godox"
+        },
+        {
+          "Name": "err113"
+        },
+        {
+          "Name": "gofmt"
+        },
+        {
+          "Name": "gofumpt"
+        },
+        {
+          "Name": "golines"
+        },
+        {
+          "Name": "goheader"
+        },
+        {
+          "Name": "goimports"
+        },
+        {
+          "Name": "mnd"
+        },
+        {
+          "Name": "modernize"
+        },
+        {
+          "Name": "gomoddirectives"
+        },
+        {
+          "Name": "gomodguard"
+        },
+        {
+          "Name": "gomodguard_v2"
+        },
+        {
+          "Name": "goprintffuncname"
+        },
+        {
+          "Name": "gosec"
+        },
+        {
+          "Name": "gosmopolitan"
+        },
+        {
+          "Name": "govet",
+          "Enabled": true
+        },
+        {
+          "Name": "grouper"
+        },
+        {
+          "Name": "iface"
+        },
+        {
+          "Name": "importas"
+        },
+        {
+          "Name": "inamedparam"
+        },
+        {
+          "Name": "ineffassign",
+          "Enabled": true
+        },
+        {
+          "Name": "interfacebloat"
+        },
+        {
+          "Name": "intrange"
+        },
+        {
+          "Name": "iotamixing"
+        },
+        {
+          "Name": "ireturn"
+        },
+        {
+          "Name": "lll"
+        },
+        {
+          "Name": "loggercheck"
+        },
+        {
+          "Name": "maintidx",
+          "Enabled": true
+        },
+        {
+          "Name": "makezero"
+        },
+        {
+          "Name": "mirror"
+        },
+        {
+          "Name": "misspell"
+        },
+        {
+          "Name": "musttag"
+        },
+        {
+          "Name": "nakedret"
+        },
+        {
+          "Name": "nestif",
+          "Enabled": true
+        },
+        {
+          "Name": "nilerr"
+        },
+        {
+          "Name": "nilnesserr"
+        },
+        {
+          "Name": "nilnil"
+        },
+        {
+          "Name": "nlreturn"
+        },
+        {
+          "Name": "noctx"
+        },
+        {
+          "Name": "noinlineerr"
+        },
+        {
+          "Name": "nonamedreturns"
+        },
+        {
+          "Name": "nosprintfhostport"
+        },
+        {
+          "Name": "paralleltest"
+        },
+        {
+          "Name": "perfsprint"
+        },
+        {
+          "Name": "prealloc"
+        },
+        {
+          "Name": "predeclared"
+        },
+        {
+          "Name": "promlinter"
+        },
+        {
+          "Name": "protogetter"
+        },
+        {
+          "Name": "reassign"
+        },
+        {
+          "Name": "recvcheck"
+        },
+        {
+          "Name": "revive"
+        },
+        {
+          "Name": "rowserrcheck"
+        },
+        {
+          "Name": "sloglint"
+        },
+        {
+          "Name": "sqlclosecheck"
+        },
+        {
+          "Name": "spancheck"
+        },
+        {
+          "Name": "staticcheck",
+          "Enabled": true
+        },
+        {
+          "Name": "swaggo"
+        },
+        {
+          "Name": "tagalign"
+        },
+        {
+          "Name": "tagliatelle"
+        },
+        {
+          "Name": "testableexamples"
+        },
+        {
+          "Name": "testifylint"
+        },
+        {
+          "Name": "testpackage"
+        },
+        {
+          "Name": "thelper"
+        },
+        {
+          "Name": "tparallel"
+        },
+        {
+          "Name": "typecheck",
+          "Enabled": true
+        },
+        {
+          "Name": "unconvert"
+        },
+        {
+          "Name": "unparam"
+        },
+        {
+          "Name": "unqueryvet"
+        },
+        {
+          "Name": "unused",
+          "Enabled": true
+        },
+        {
+          "Name": "usestdlibvars"
+        },
+        {
+          "Name": "usetesting"
+        },
+        {
+          "Name": "varnamelen"
+        },
+        {
+          "Name": "wastedassign"
+        },
+        {
+          "Name": "whitespace"
+        },
+        {
+          "Name": "wrapcheck"
+        },
+        {
+          "Name": "wsl"
+        },
+        {
+          "Name": "wsl_v5"
+        },
+        {
+          "Name": "zerologlint"
+        },
+        {
+          "Name": "nolintlint"
+        }
+      ]
+    }
+  },
+  "go_arch_lint": {
+    "Type": "models.Check",
+    "Payload": {
+      "ExecutionWarnings": [],
+      "ArchHasWarnings": false,
+      "ArchWarningsDeps": [],
+      "ArchWarningsNotMatched": [],
+      "ArchWarningsDeepScan": [],
+      "OmittedCount": 0,
+      "ModuleName": "github.com/usadamasa/go-arch-metrics",
+      "Qualities": [
+        {
+          "ID": "component_imports",
+          "Used": true
+        },
+        {
+          "ID": "vendor_imports",
+          "Used": true
+        },
+        {
+          "ID": "deepscan",
+          "Used": true
+        }
+      ]
+    }
+  },
+  "gosec": {
+    "Golang errors": {},
+    "Issues": [],
+    "Stats": {
+      "files": 11,
+      "lines": 2577,
+      "nosec": 5,
+      "found": 0
+    },
+    "GosecVersion": "2.29.0"
+  },
+  "modularity": {
+    "packages": [
+      {
+        "path": "cmd/analyze-arch-lint",
+        "import_path": "github.com/usadamasa/go-arch-metrics/cmd/analyze-arch-lint",
+        "exported_funcs": 0,
+        "unexported_funcs": 17,
+        "exported_methods": 2,
+        "unexported_methods": 2,
+        "exported_types": 0,
+        "unexported_types": 13,
+        "interface_types": 0,
+        "public_ratio": 0.058823529411764705,
+        "loc": 729,
+        "files": 4,
+        "main_sequence": {
+          "zone": "excluded",
+          "distance": 0,
+          "structurally_constrained": false,
+          "abstractness": 0,
+          "instability": 1,
+          "afferent_coupling": 0,
+          "efferent_coupling": 0,
+          "recent_commit_count": 5,
+          "volatility": "volatile"
+        }
+      },
+      {
+        "path": "cmd/analyze-modularity",
+        "import_path": "github.com/usadamasa/go-arch-metrics/cmd/analyze-modularity",
+        "exported_funcs": 7,
+        "unexported_funcs": 38,
+        "exported_methods": 3,
+        "unexported_methods": 9,
+        "exported_types": 10,
+        "unexported_types": 7,
+        "interface_types": 0,
+        "public_ratio": 0.2702702702702703,
+        "loc": 1805,
+        "files": 6,
+        "main_sequence": {
+          "zone": "excluded",
+          "distance": 0,
+          "structurally_constrained": false,
+          "abstractness": 0,
+          "instability": 1,
+          "afferent_coupling": 0,
+          "efferent_coupling": 0,
+          "recent_commit_count": 19,
+          "volatility": "volatile"
+        }
+      },
+      {
+        "path": "cmd/vulncheck",
+        "import_path": "github.com/usadamasa/go-arch-metrics/cmd/vulncheck",
+        "exported_funcs": 0,
+        "unexported_funcs": 1,
+        "exported_methods": 0,
+        "unexported_methods": 0,
+        "exported_types": 0,
+        "unexported_types": 0,
+        "interface_types": 0,
+        "public_ratio": 0,
+        "loc": 43,
+        "files": 1,
+        "main_sequence": {
+          "zone": "excluded",
+          "distance": 0,
+          "structurally_constrained": false,
+          "abstractness": 0,
+          "instability": 1,
+          "afferent_coupling": 0,
+          "efferent_coupling": 0,
+          "recent_commit_count": 1,
+          "volatility": "non_volatile"
+        }
+      }
+    ],
+    "summary": {
+      "mean_loc": 859,
+      "stddev_loc": 725.1831952456336,
+      "mean_public_ratio": 0.109697933227345,
+      "total_packages": 3,
+      "total_warnings": 0,
+      "actionable_warnings": 0,
+      "main_sequence": {
+        "excluded_packages": [
+          "cmd/analyze-arch-lint",
+          "cmd/analyze-modularity",
+          "cmd/vulncheck"
+        ],
+        "structurally_constrained_count": 0,
+        "baseline_not_worsened_count": 0,
+        "non_volatile_zone_of_pain_count": 0,
+        "actionable_count": 0,
+        "volatility_window_commits": 200,
+        "volatile_commit_threshold": 5
+      }
+    }
+  },
+  "govulncheck": {
+    "status": "ok",
+    "exit_code": 0
+  }
+}
