@@ -197,13 +197,50 @@ func TestMainSequenceIntegration(t *testing.T) {
 			t.Errorf("total_packages = %d, want 6 (a b c d e iso)", report.Summary.TotalPackages)
 		}
 		for _, p := range report.Packages {
-			rel, _ := filepath.Rel(root, p.Path)
-			if strings.HasPrefix(rel, "tmp") {
+			if strings.HasPrefix(p.Path, "tmp/") {
 				t.Errorf("tmp 配下が報告に混ざっている: %s", p.Path)
 			}
 			if filepath.Base(p.Path) == "c" && p.MainSequence.AfferentCoupling != 3 {
 				t.Errorf("c.Ca = %d, want 3 (a, b, d。gitignore 済みの tmp/x は数えない)", p.MainSequence.AfferentCoupling)
 			}
+		}
+	})
+
+	t.Run("絶対パスで渡しても相対で渡しても同じ JSON を出す", func(t *testing.T) {
+		root := writeFixtureModule(t)
+		bin := filepath.Join(t.TempDir(), "analyze-modularity")
+		if out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
+			t.Fatalf("build 失敗: %v\n%s", err, out)
+		}
+		run := func(cwd, arg string) []byte {
+			cmd := exec.Command(bin, arg)
+			cmd.Dir = cwd
+			out, err := cmd.Output()
+			if err != nil {
+				t.Fatalf("実行失敗 (cwd=%s arg=%s): %v", cwd, arg, err)
+			}
+			return out
+		}
+
+		absolute := run(t.TempDir(), root)
+		relative := run(root, ".")
+		if string(absolute) != string(relative) {
+			t.Errorf("引数の渡し方で出力が変わる\nabsolute:\n%s\nrelative:\n%s", absolute, relative)
+		}
+
+		var report Report
+		if err := json.Unmarshal(absolute, &report); err != nil {
+			t.Fatalf("JSON パース失敗: %v", err)
+		}
+		var paths []string
+		for _, p := range report.Packages {
+			paths = append(paths, p.Path)
+		}
+		if got := strings.Join(paths, ","); got != "a,b,c,d,e,iso" {
+			t.Errorf("paths = %s, want モジュールルートからの相対 (a,b,c,d,e,iso)", got)
+		}
+		if got := strings.Join(report.Summary.MainSequence.ExcludedPackages, ","); got != "iso" {
+			t.Errorf("excluded_packages = %s, want iso", got)
 		}
 	})
 

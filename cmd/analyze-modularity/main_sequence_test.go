@@ -235,12 +235,12 @@ func Test_computeCoupling(t *testing.T) {
 }
 
 func Test_enrichMainSequence(t *testing.T) {
-	t.Run("相対パスで渡したパッケージにも go list の結果を突き合わせる", func(t *testing.T) {
+	t.Run("go list のディレクトリで突き合わせ、cwd に依らない", func(t *testing.T) {
 		root := writeFixtureModule(t)
 		t.Chdir(root)
 		packages := []PackageResult{
-			{Path: "b", ExportedTypes: 0},
-			{Path: filepath.Join(".", "c"), ExportedTypes: 1, InterfaceTypes: 1},
+			{Path: "b", dir: filepath.Join(root, "b"), ExportedTypes: 0},
+			{Path: "c", dir: filepath.Join(root, "c"), ExportedTypes: 1, InterfaceTypes: 1},
 		}
 
 		listed, err := listModulePackages(".")
@@ -383,21 +383,22 @@ func Test_selectPackages(t *testing.T) {
 		t.Fatalf("listModulePackages 失敗: %v", err)
 	}
 
-	t.Run("引数の下にあるパッケージを引数基準の Path で返す", func(t *testing.T) {
-		selected, err := selectPackages(listed, []string{root})
-		if err != nil {
-			t.Fatalf("selectPackages 失敗: %v", err)
-		}
+	wantAll := "a,b,c,d,e,iso"
+	pathsOf := func(selected []selectedPackage) string {
 		var paths []string
 		for _, s := range selected {
 			paths = append(paths, s.Path)
 		}
-		want := []string{
-			filepath.Join(root, "a"), filepath.Join(root, "b"), filepath.Join(root, "c"),
-			filepath.Join(root, "d"), filepath.Join(root, "e"), filepath.Join(root, "iso"),
+		return strings.Join(paths, ",")
+	}
+
+	t.Run("絶対パスの引数でも Path はモジュールルートからの相対", func(t *testing.T) {
+		selected, err := selectPackages(listed, root, []string{root})
+		if err != nil {
+			t.Fatalf("selectPackages 失敗: %v", err)
 		}
-		if strings.Join(paths, ",") != strings.Join(want, ",") {
-			t.Errorf("paths = %v, want %v", paths, want)
+		if got := pathsOf(selected); got != wantAll {
+			t.Errorf("paths = %v, want %v", got, wantAll)
 		}
 		if len(selected[0].GoFiles) != 1 || selected[0].GoFiles[0] != "a.go" {
 			t.Errorf("a.GoFiles = %v, want [a.go]", selected[0].GoFiles)
@@ -405,23 +406,34 @@ func Test_selectPackages(t *testing.T) {
 	})
 
 	t.Run("サブディレクトリを渡せばその下だけ", func(t *testing.T) {
-		selected, err := selectPackages(listed, []string{filepath.Join(root, "b")})
+		selected, err := selectPackages(listed, root, []string{filepath.Join(root, "b")})
 		if err != nil {
 			t.Fatalf("selectPackages 失敗: %v", err)
 		}
-		if len(selected) != 1 || selected[0].Path != filepath.Join(root, "b") {
-			t.Errorf("selected = %+v, want b だけ", selected)
+		if got := pathsOf(selected); got != "b" {
+			t.Errorf("paths = %v, want b だけ", got)
 		}
 	})
 
-	t.Run("相対パスの引数なら Path も相対", func(t *testing.T) {
+	t.Run("相対パスの引数でも絶対パスと同じ Path", func(t *testing.T) {
 		t.Chdir(root)
-		selected, err := selectPackages(listed, []string{"."})
+		selected, err := selectPackages(listed, root, []string{"."})
 		if err != nil {
 			t.Fatalf("selectPackages 失敗: %v", err)
 		}
-		if len(selected) != 6 || selected[0].Path != "a" {
-			t.Errorf("selected = %+v, want 6 件で先頭は a", selected)
+		if got := pathsOf(selected); got != wantAll {
+			t.Errorf("paths = %v, want %v", got, wantAll)
+		}
+	})
+
+	t.Run("サブディレクトリから相対で渡してもモジュールルートからの相対", func(t *testing.T) {
+		t.Chdir(filepath.Join(root, "b"))
+		selected, err := selectPackages(listed, root, []string{"."})
+		if err != nil {
+			t.Fatalf("selectPackages 失敗: %v", err)
+		}
+		if got := pathsOf(selected); got != "b" {
+			t.Errorf("paths = %v, want b", got)
 		}
 	})
 }
