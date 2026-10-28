@@ -416,7 +416,7 @@
     "Issues": [],
     "Stats": {
       "files": 11,
-      "lines": 2577,
+      "lines": 2624,
       "nosec": 5,
       "found": 0
     },
@@ -452,15 +452,15 @@
       {
         "path": "cmd/analyze-modularity",
         "import_path": "github.com/usadamasa/go-arch-metrics/cmd/analyze-modularity",
-        "exported_funcs": 7,
-        "unexported_funcs": 38,
-        "exported_methods": 3,
-        "unexported_methods": 9,
-        "exported_types": 10,
+        "exported_funcs": 8,
+        "unexported_funcs": 39,
+        "exported_methods": 4,
+        "unexported_methods": 10,
+        "exported_types": 11,
         "unexported_types": 7,
         "interface_types": 0,
-        "public_ratio": 0.2702702702702703,
-        "loc": 1805,
+        "public_ratio": 0.2911392405063291,
+        "loc": 1852,
         "files": 6,
         "main_sequence": {
           "zone": "excluded",
@@ -470,7 +470,7 @@
           "instability": 1,
           "afferent_coupling": 0,
           "efferent_coupling": 0,
-          "recent_commit_count": 19,
+          "recent_commit_count": 20,
           "volatility": "volatile"
         }
       },
@@ -501,9 +501,9 @@
       }
     ],
     "summary": {
-      "mean_loc": 859,
-      "stddev_loc": 725.1831952456336,
-      "mean_public_ratio": 0.109697933227345,
+      "mean_loc": 874.6666666666666,
+      "stddev_loc": 745.6694233297278,
+      "mean_public_ratio": 0.11665425663936461,
       "total_packages": 3,
       "total_warnings": 0,
       "actionable_warnings": 0,
