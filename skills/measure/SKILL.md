@@ -26,20 +26,32 @@ Go プロジェクトの現状のメトリクスを取る。数値の解釈と�
 ## 実行
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/skills/measure/scripts/baseline.sh" ./
+bash "${CLAUDE_PLUGIN_ROOT}/skills/measure/scripts/baseline.sh" ./ [<output-json>]
 ```
 
-引数は Go プロジェクトのルート (`go.mod` があるディレクトリ)。
+1 つめの引数は Go プロジェクトのルート (`go.mod` があるディレクトリ)。2 つめは JSON の出力先で、
+省くとルートの `baseline.json` に書く。
 `go` と `jq` は PATH に要る。ほかのツールは PATH を先に見て、無ければ対象プロジェクトの go.mod の
 tool directive から `go tool` で呼ぶ。どちらにも無いツールがあればエラー終了する。
 
 出力は 2 つ:
 
 - 標準出力のサマリ (違反件数と代表的な違反)
-- `baseline-YYYYMMDD_HHMMSS.json` (全ツールの生の結果)
+- JSON (全ツールの生の結果)
 
-JSON は `go-arch-metrics:evaluate` がそのまま読む。測定日時が入るので、
-改善の前後を比べるときは消さずに残す。
+JSON は `go-arch-metrics:evaluate` がそのまま読む。既定の出力先は測るたびに上書きする。
+パッケージは `import_path` とモジュールルートからの相対パスで出るので、どの checkout で測っても同じ文字列になる。
+
+改善の前後を比べるときは、前の JSON を残しておくのではなく、比べたい commit を `git worktree` で取り出して
+同じ版のツールで測り直す。2 つめの引数で出力先を分ければ上書きし合わない。
+
+```bash
+git worktree add --detach ../base origin/main
+bash "${CLAUDE_PLUGIN_ROOT}/skills/measure/scripts/baseline.sh" ../base "$TMPDIR/before.json"
+bash "${CLAUDE_PLUGIN_ROOT}/skills/measure/scripts/baseline.sh" ./ "$TMPDIR/after.json"
+```
+
+CI で base と比べる組み方は `go-arch-metrics:setup` の `references/ci-integration.md`。
 
 govulncheck は plugin が組み込んだ `vulncheck` で回す。埋め込みの roots で TLS を検証するので、
 Claude Code の sandbox の中でも vuln.go.dev に届く。それでも「未測定」になったら DB に届いていない
