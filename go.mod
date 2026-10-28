@@ -21,3 +21,9 @@ require (
 	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/telemetry v0.0.0-20261010193011-f71dc92da45e // indirect
 )
+
+tool (
+	github.com/usadamasa/go-arch-metrics/cmd/analyze-arch-lint
+	github.com/usadamasa/go-arch-metrics/cmd/analyze-modularity
+	github.com/usadamasa/go-arch-metrics/cmd/vulncheck
+)
