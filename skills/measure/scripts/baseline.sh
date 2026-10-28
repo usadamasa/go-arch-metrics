@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # baseline.sh - Go プロジェクトのアーキテクチャメトリクス ベースライン測定スクリプト
-# 使用方法: baseline.sh <project-root>
-# 出力: メトリクスサマリと JSON 詳細ファイル (baseline-YYYYMMDD_HHMMSS.json)
+# 使用方法: baseline.sh <project-root> [<output-json>]
+# 出力: メトリクスサマリと JSON 詳細ファイル (省略時は <project-root>/baseline.json を上書き)
 set -euo pipefail
 
-PROJECT_ROOT="${1:?使用方法: baseline.sh <project-root>}"
+readonly USAGE="使用方法: baseline.sh <project-root> [<output-json>]"
+PROJECT_ROOT="${1:?${USAGE}}"
 
 if [[ ! -d "$PROJECT_ROOT" ]]; then
     printf '%s\n' "エラー: ディレクトリが存在しません: $PROJECT_ROOT" >&2
@@ -15,8 +16,18 @@ fi
 PROJECT_ROOT=$(cd "$PROJECT_ROOT" && pwd)
 readonly PROJECT_ROOT
 
-TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-OUTPUT_JSON="${PROJECT_ROOT}/baseline-${TIMESTAMP}.json"
+# 出力先の相対パスは呼び出したディレクトリから解決する。測り終えてから書けないと分かるのを避け、先に確かめる
+if [[ -n "${2:-}" ]]; then
+    OUTPUT_DIR=$(dirname "$2")
+    if [[ ! -d "$OUTPUT_DIR" ]]; then
+        printf '%s\n' "エラー: 出力先のディレクトリが存在しません: $OUTPUT_DIR" >&2
+        exit 1
+    fi
+    OUTPUT_JSON="$(cd "$OUTPUT_DIR" && pwd)/$(basename "$2")"
+else
+    OUTPUT_JSON="${PROJECT_ROOT}/baseline.json"
+fi
+readonly OUTPUT_JSON
 
 if [[ ! -f "${PROJECT_ROOT}/go.mod" ]]; then
     # サブディレクトリに go.mod があるか検索
@@ -49,9 +60,12 @@ for tool in go jq; do
     fi
 done
 
+GO_MOD_JSON=$(go mod edit -json "${PROJECT_ROOT}/go.mod")
+# JSON の project には測った場所に依らない module path を入れる
+MODULE_PATH=$(printf '%s' "$GO_MOD_JSON" | jq -r '.Module.Path')
 # go.mod の tool directive に載るパッケージパス (1 行に 1 つ)
-MODULE_TOOLS=$(go mod edit -json "${PROJECT_ROOT}/go.mod" | jq -r '.Tool // [] | .[].Path')
-readonly MODULE_TOOLS
+MODULE_TOOLS=$(printf '%s' "$GO_MOD_JSON" | jq -r '.Tool // [] | .[].Path')
+readonly GO_MOD_JSON MODULE_PATH MODULE_TOOLS
 
 # tool_package <name>
 # tool directive のうち、go tool での名前が name のパッケージパスを出す。無ければ 1 を返す。
@@ -293,8 +307,7 @@ printf '%s\n' ""
 
 # JSON サマリファイルの出力
 jq -n \
-  --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  --arg project "$PROJECT_ROOT" \
+  --arg project "$MODULE_PATH" \
   --argjson golangci "$GOLANGCI_RESULT" \
   --argjson arch "$ARCH_RESULT" \
   --argjson gosec "$GOSEC_RESULT" \
@@ -302,7 +315,6 @@ jq -n \
   --arg vuln_status "$VULN_STATUS" \
   --argjson vuln_rc "$VULN_RC" \
   '{
-    timestamp: $ts,
     project: $project,
     golangci_lint: $golangci,
     go_arch_lint: $arch,

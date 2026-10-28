@@ -179,7 +179,7 @@ func collectPackages(args []string) (map[string]PackageMetrics, []PackageResult,
 	if err != nil {
 		return nil, nil, err
 	}
-	selected, err := selectPackages(tracked, args)
+	selected, err := selectPackages(tracked, moduleRoot, args)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -197,6 +197,7 @@ func collectPackages(args []string) (map[string]PackageMetrics, []PackageResult,
 		}
 		result.Path = s.Path
 		result.ImportPath = s.ImportPath
+		result.dir = s.Dir
 		// main はどこからも import できず、exported でも変更の影響が外へ広がらないので判定しない
 		if s.Name != "main" {
 			usage, ok := usages[s.ImportPath]
@@ -221,8 +222,8 @@ func collectPackages(args []string) (map[string]PackageMetrics, []PackageResult,
 // 各パッケージの MainSequence を埋める｡揮発性は history を volatileCommits で切って決める｡
 // baseline (import path から base の D、nil 可) にあるパッケージには base の D を添える｡
 func enrichMainSequence(coupling map[string]PackageMetrics, packages []PackageResult, history commitHistory, volatileCommits int, baseline map[string]float64) error {
-	// go list の Dir は絶対パスで、報告側の Path は引数のまま (相対もある)。symlink の解決度も
-	// 違いうるので、両方を実体の絶対パスにそろえてから突き合わせる
+	// 報告側の Path はモジュールルートからの相対なので、go list の Dir どうしで突き合わせる。
+	// symlink の解決度は違いうるので、両方を実体の絶対パスにそろえる
 	byDir := make(map[string]PackageMetrics, len(coupling))
 	for dir, m := range coupling {
 		canonical, err := canonicalDir(dir)
@@ -234,7 +235,7 @@ func enrichMainSequence(coupling map[string]PackageMetrics, packages []PackageRe
 
 	matched := 0
 	for i := range packages {
-		dir, err := canonicalDir(packages[i].Path)
+		dir, err := canonicalDir(packages[i].dir)
 		if err != nil {
 			return fmt.Errorf("パッケージのディレクトリを解決できません: %w", err)
 		}

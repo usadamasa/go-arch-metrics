@@ -138,7 +138,7 @@ write_failing_test() {
     # 後ろの成功パッケージの ok 行に埋もれず、失敗した関数名まで届く
     [[ "$output" == *"--- FAIL: TestAnswer"* ]]
     # 参考値が取れなくても測定結果そのものは残る
-    ls "${PROJECT}"/baseline-*.json
+    ls "${PROJECT}/baseline.json"
 }
 
 @test "go test が通れば平均カバレッジを出す" {
@@ -148,10 +148,70 @@ write_failing_test() {
 
     [ "$status" -eq 0 ]
     [[ "$output" == *"平均カバレッジ:"* ]]
-    ls "${PROJECT}"/baseline-*.json
+    ls "${PROJECT}/baseline.json"
     # 既定のスタブは exit 0 なので脆弱性なし
     [[ "$output" == *"govulncheck: 脆弱性なし"* ]]
-    [ "$(jq -r '.govulncheck.status' "${PROJECT}"/baseline-*.json)" = "ok" ]
+    [ "$(jq -r '.govulncheck.status' "${PROJECT}/baseline.json")" = "ok" ]
+}
+
+@test "JSON の project は測った場所ではなく module path" {
+    write_passing_test
+
+    run bash "$BASELINE" "$PROJECT"
+
+    [ "$status" -eq 0 ]
+    [ "$(jq -r '.project' "${PROJECT}/baseline.json")" = "baseline-fixture" ]
+}
+
+@test "同じコードを測り直せば JSON は変わらない (測定日時を入れない)" {
+    write_passing_test
+
+    run bash "$BASELINE" "$PROJECT" "${BATS_TEST_TMPDIR}/first.json"
+    [ "$status" -eq 0 ]
+    sleep 1
+    run bash "$BASELINE" "$PROJECT" "${BATS_TEST_TMPDIR}/second.json"
+    [ "$status" -eq 0 ]
+
+    cmp "${BATS_TEST_TMPDIR}/first.json" "${BATS_TEST_TMPDIR}/second.json"
+    [ "$(jq 'has("timestamp")' "${BATS_TEST_TMPDIR}/first.json")" = "false" ]
+}
+
+@test "出力先を省くとルートの baseline.json に書き、測り直すと上書きする" {
+    write_passing_test
+
+    run bash "$BASELINE" "$PROJECT"
+    [ "$status" -eq 0 ]
+    stub_analyze_modularity 0 '{"packages":[],"summary":{"mean_loc":0,"stddev_loc":0,"mean_public_ratio":0,"total_packages":5,"total_warnings":0,"actionable_warnings":0,"main_sequence":{"excluded_packages":null,"structurally_constrained_count":0,"non_volatile_zone_of_pain_count":0,"actionable_count":0,"volatility_window_commits":200,"volatile_commit_threshold":5}}}'
+    run bash "$BASELINE" "$PROJECT"
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"詳細結果を保存しました: ${PROJECT}/baseline.json"* ]]
+    [ "$(jq '.modularity.summary.total_packages' "${PROJECT}/baseline.json")" -eq 5 ]
+    run ls "${PROJECT}"/baseline-*.json
+    [ "$status" -ne 0 ]
+}
+
+@test "2 つめの引数で出力先を指定でき、ルートには書かない" {
+    write_passing_test
+    mkdir -p "${BATS_TEST_TMPDIR}/out"
+
+    # 相対パスは呼び出したディレクトリから解決する
+    cd "${BATS_TEST_TMPDIR}"
+    run bash "$BASELINE" "$PROJECT" out/before.json
+
+    [ "$status" -eq 0 ]
+    [ "$(jq -r '.govulncheck.status' "${BATS_TEST_TMPDIR}/out/before.json")" = "ok" ]
+    [ ! -e "${PROJECT}/baseline.json" ]
+}
+
+@test "出力先のディレクトリが無ければ測る前に止まる" {
+    write_passing_test
+
+    run bash "$BASELINE" "$PROJECT" "${BATS_TEST_TMPDIR}/missing/out.json"
+
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"出力先のディレクトリが存在しません"* ]]
+    [[ "$output" != *"golangci-lint"* ]]
 }
 
 @test "govulncheck が脆弱性を見つけたら出力を残して測定を続ける" {
@@ -163,7 +223,7 @@ write_failing_test() {
     [ "$status" -eq 0 ]
     [[ "$output" == *"govulncheck: 脆弱性あり"* ]]
     [[ "$output" == *"GO-2024-0001"* ]]
-    [ "$(jq -r '.govulncheck.status' "${PROJECT}"/baseline-*.json)" = "vulnerable" ]
+    [ "$(jq -r '.govulncheck.status' "${PROJECT}/baseline.json")" = "vulnerable" ]
 }
 
 @test "govulncheck が実行できなければ未測定として理由を出し、測定を続ける" {
@@ -177,8 +237,8 @@ write_failing_test() {
     [[ "$output" == *"govulncheck: 未測定"* ]]
     [[ "$output" == *"no such host"* ]]
     [[ "$output" != *"脆弱性なし"* ]]
-    [ "$(jq -r '.govulncheck.status' "${PROJECT}"/baseline-*.json)" = "unmeasured" ]
-    [ "$(jq -r '.govulncheck.exit_code' "${PROJECT}"/baseline-*.json)" = "1" ]
+    [ "$(jq -r '.govulncheck.status' "${PROJECT}/baseline.json")" = "unmeasured" ]
+    [ "$(jq -r '.govulncheck.exit_code' "${PROJECT}/baseline.json")" = "1" ]
 }
 
 @test "go-arch-lint の依存方向違反を件数と中身で出し、JSON に残す" {
@@ -191,7 +251,7 @@ write_failing_test() {
     [ "$status" -eq 0 ]
     [[ "$output" == *"依存方向違反数: 1"* ]]
     [[ "$output" == *"domain -> example.com/infra"* ]]
-    [ "$(jq '.go_arch_lint.Payload.ArchWarningsDeps | length' "${PROJECT}"/baseline-*.json)" -eq 1 ]
+    [ "$(jq '.go_arch_lint.Payload.ArchWarningsDeps | length' "${PROJECT}/baseline.json")" -eq 1 ]
 }
 
 @test "go-arch-lint が実行に失敗したら理由を出して止まる" {
@@ -215,7 +275,7 @@ write_failing_test() {
 
     [ "$status" -ne 0 ]
     [[ "$output" == *"go list の実行に失敗"* ]]
-    run ls "${PROJECT}"/baseline-*.json
+    run ls "${PROJECT}/baseline.json"
     [ "$status" -ne 0 ]
 }
 
@@ -239,7 +299,7 @@ write_failing_test() {
     [ "$status" -eq 0 ]
     [[ "$output" == *"合計違反数: 1"* ]]
     [[ "$output" == *"gocognit: 1"* ]]
-    [ "$(jq '.golangci_lint.Issues | length' "${PROJECT}"/baseline-*.json)" -eq 1 ]
+    [ "$(jq '.golangci_lint.Issues | length' "${PROJECT}/baseline.json")" -eq 1 ]
 }
 
 @test "golangci-lint が実行に失敗したら理由を出して止まる" {
@@ -253,7 +313,7 @@ write_failing_test() {
     [[ "$output" == *"golangci-lint の実行に失敗しました (exit 3)"* ]]
     [[ "$output" == *"unknown linters"* ]]
     [[ "$output" != *"違反なし"* ]]
-    run ls "${PROJECT}"/baseline-*.json
+    run ls "${PROJECT}/baseline.json"
     [ "$status" -ne 0 ]
 }
 
@@ -278,7 +338,7 @@ write_failing_test() {
     [ "$status" -ne 0 ]
     [[ "$output" == *"golangci-lint が対象のコードをコンパイルできませんでした"* ]]
     [[ "$output" == *"undefined: undefinedThing"* ]]
-    run ls "${PROJECT}"/baseline-*.json
+    run ls "${PROJECT}/baseline.json"
     [ "$status" -ne 0 ]
 }
 
@@ -292,7 +352,7 @@ write_failing_test() {
     [ "$status" -ne 0 ]
     [[ "$output" == *"gosec が対象のコードをコンパイルできませんでした"* ]]
     [[ "$output" == *"/p/a.go:2:23: undefined: undefinedThing"* ]]
-    run ls "${PROJECT}"/baseline-*.json
+    run ls "${PROJECT}/baseline.json"
     [ "$status" -ne 0 ]
 }
 
@@ -306,7 +366,7 @@ write_failing_test() {
     [ "$status" -eq 0 ]
     [[ "$output" == *"セキュリティ指摘数: 1"* ]]
     [[ "$output" == *"G204: 1"* ]]
-    [ "$(jq '.gosec.Issues | length' "${PROJECT}"/baseline-*.json)" -eq 1 ]
+    [ "$(jq '.gosec.Issues | length' "${PROJECT}/baseline.json")" -eq 1 ]
 }
 
 @test "gosec が実行に失敗したら理由を出して止まる" {
@@ -319,7 +379,7 @@ write_failing_test() {
     [ "$status" -ne 0 ]
     [[ "$output" == *"gosec の実行に失敗しました (exit 1)"* ]]
     [[ "$output" == *"No packages found"* ]]
-    run ls "${PROJECT}"/baseline-*.json
+    run ls "${PROJECT}/baseline.json"
     [ "$status" -ne 0 ]
 }
 
@@ -352,7 +412,7 @@ func main() {
 
     [ "$status" -eq 0 ]
     [[ "$output" == *"govulncheck: 脆弱性なし"* ]]
-    [ "$(jq '.modularity.summary.total_packages' "${PROJECT}"/baseline-*.json)" -eq 7 ]
+    [ "$(jq '.modularity.summary.total_packages' "${PROJECT}/baseline.json")" -eq 7 ]
 }
 
 @test "PATH にも tool directive にも無いツールは両方を挙げて止まる" {
@@ -377,5 +437,5 @@ func main() {
     [[ "$output" == *"構造制約パッケージ数: 1"* ]]
     [[ "$output" == *"非揮発の Zone of Pain (直近 200 commit で 5 回未満): 2 件"* ]]
     [[ "$output" == *"警告数: 3 (うち --strict が失敗に数えるもの: 1)"* ]]
-    [ "$(jq '.modularity.summary.main_sequence.actionable_count' "${PROJECT}"/baseline-*.json)" -eq 1 ]
+    [ "$(jq '.modularity.summary.main_sequence.actionable_count' "${PROJECT}/baseline.json")" -eq 1 ]
 }

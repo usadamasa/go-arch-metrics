@@ -2,5 +2,4 @@
 /tmp/
 /.direnv/
 coverage.out
-baseline-*.json
 .DS_Store
