@@ -114,6 +114,9 @@ exit code は指摘ありでも実行の失敗でも 1 なので、baseline.sh �
 }
 ```
 
+`path` (と `excluded_packages`・`outlier_packages`・警告の `package`) はモジュールルートからの相対パスで、
+測った checkout の場所や引数の渡し方 (絶対・相対) に依らない。ルートのパッケージは `.` になる。
+
 `structurally_constrained: true` (Ce=0 の葉パッケージ) の D=1.0 は構造的制約で、設計上の問題とは限らない。
 このパッケージに付く `zone_of_pain` と `structurally_constrained` の警告は `actionable: false` で、
 `summary.actionable_warnings` と `--strict` の判定に入らない。

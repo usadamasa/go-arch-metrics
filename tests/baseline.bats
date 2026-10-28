@@ -154,6 +154,15 @@ write_failing_test() {
     [ "$(jq -r '.govulncheck.status' "${PROJECT}"/baseline-*.json)" = "ok" ]
 }
 
+@test "JSON の project は測った場所ではなく module path" {
+    write_passing_test
+
+    run bash "$BASELINE" "$PROJECT"
+
+    [ "$status" -eq 0 ]
+    [ "$(jq -r '.project' "${PROJECT}"/baseline-*.json)" = "baseline-fixture" ]
+}
+
 @test "govulncheck が脆弱性を見つけたら出力を残して測定を続ける" {
     write_passing_test
     stub_vulncheck 3 'Vulnerability #1: GO-2024-0001'

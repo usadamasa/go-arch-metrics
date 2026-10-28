@@ -29,7 +29,7 @@ type MainSequenceData struct {
 }
 
 // PackageResult はパッケージごとの解析結果を保持する｡
-// ImportPath は --baseline で base のレポートと突き合わせるキー｡Path は引数の渡し方で変わるので使わない
+// Path はモジュールルートからの相対パス｡ImportPath は --baseline で base のレポートと突き合わせるキー
 type PackageResult struct {
 	Path              string  `json:"path"`
 	ImportPath        string  `json:"import_path"`
@@ -52,6 +52,8 @@ type PackageResult struct {
 	TestOnlyExportedSymbols []string `json:"test_only_exported_symbols,omitempty"`
 	// internal は import path に /internal/ を含むかどうか｡モジュールの外に利用者がいないと言えるのはこのときだけ
 	internal bool
+	// dir は go list が返したディレクトリ｡Ca/Ce と揮発性はこれで引く
+	dir string
 
 	MainSequence *MainSequenceData `json:"main_sequence,omitempty"`
 }

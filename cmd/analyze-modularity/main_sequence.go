@@ -197,8 +197,8 @@ func dropIgnored(moduleRoot string, listed []listedPackage) ([]listedPackage, er
 	return tracked, nil
 }
 
-// selectedPackage は報告の対象に選ばれたパッケージ｡Path は「引数 + 引数からの相対パス」で、
-// 引数に . を渡せば cmd/analyze-modularity のような形になる｡
+// selectedPackage は報告の対象に選ばれたパッケージ｡Path はモジュールルートからの相対パス (区切りは /) で、
+// 測った checkout の場所にも引数の渡し方にも依らない｡
 type selectedPackage struct {
 	Path       string
 	ImportPath string
@@ -208,7 +208,11 @@ type selectedPackage struct {
 }
 
 // selectPackages は listed のうち args のどれかの下にあり、解析する Go ファイルを持つパッケージを選ぶ｡
-func selectPackages(listed []listedPackage, args []string) ([]selectedPackage, error) {
+func selectPackages(listed []listedPackage, moduleRoot string, args []string) ([]selectedPackage, error) {
+	base, err := canonicalDir(moduleRoot)
+	if err != nil {
+		return nil, fmt.Errorf("モジュールルートを解決できません: %w", err)
+	}
 	var selected []selectedPackage
 	for _, arg := range args {
 		root, err := canonicalDir(arg)
@@ -226,11 +230,11 @@ func selectPackages(listed []listedPackage, args []string) ([]selectedPackage, e
 			if len(p.GoFiles) == 0 {
 				continue
 			}
-			rel, err := filepath.Rel(root, dir)
+			rel, err := filepath.Rel(base, dir)
 			if err != nil {
 				return nil, err
 			}
-			selected = append(selected, selectedPackage{Path: filepath.Join(arg, rel), ImportPath: p.ImportPath, Name: p.Name, Dir: p.Dir, GoFiles: p.GoFiles})
+			selected = append(selected, selectedPackage{Path: filepath.ToSlash(rel), ImportPath: p.ImportPath, Name: p.Name, Dir: p.Dir, GoFiles: p.GoFiles})
 		}
 	}
 	return selected, nil

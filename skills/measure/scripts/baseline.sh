@@ -49,9 +49,12 @@ for tool in go jq; do
     fi
 done
 
+GO_MOD_JSON=$(go mod edit -json "${PROJECT_ROOT}/go.mod")
+# JSON の project には測った場所に依らない module path を入れる
+MODULE_PATH=$(printf '%s' "$GO_MOD_JSON" | jq -r '.Module.Path')
 # go.mod の tool directive に載るパッケージパス (1 行に 1 つ)
-MODULE_TOOLS=$(go mod edit -json "${PROJECT_ROOT}/go.mod" | jq -r '.Tool // [] | .[].Path')
-readonly MODULE_TOOLS
+MODULE_TOOLS=$(printf '%s' "$GO_MOD_JSON" | jq -r '.Tool // [] | .[].Path')
+readonly GO_MOD_JSON MODULE_PATH MODULE_TOOLS
 
 # tool_package <name>
 # tool directive のうち、go tool での名前が name のパッケージパスを出す。無ければ 1 を返す。
@@ -294,7 +297,7 @@ printf '%s\n' ""
 # JSON サマリファイルの出力
 jq -n \
   --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  --arg project "$PROJECT_ROOT" \
+  --arg project "$MODULE_PATH" \
   --argjson golangci "$GOLANGCI_RESULT" \
   --argjson arch "$ARCH_RESULT" \
   --argjson gosec "$GOSEC_RESULT" \
