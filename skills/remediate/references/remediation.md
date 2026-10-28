@@ -352,7 +352,8 @@ func NewConfig(host string, port int) *Config {
 
 ### パッケージが統計的外れ値の場合 (analyze-modularity)
 
-**問題**: LOC > mean + 2σ は単一パッケージに過大な責務が集中している兆候
+**問題**: LOC > max(mean + 2σ, 1000) は単一パッケージに過大な責務が集中している兆候。
+しきい値の決め方は `go-arch-metrics:evaluate` の `references/thresholds.md`
 
 **是正パターン**:
 

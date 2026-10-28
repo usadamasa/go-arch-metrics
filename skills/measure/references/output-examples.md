@@ -67,7 +67,7 @@ exit code は指摘ありでも実行の失敗でも 1 なので、baseline.sh �
       "import_path": "example.com/app/analyze-permissions",
       "exported_funcs": 9, "unexported_funcs": 11,
       "exported_types": 11, "unexported_types": 3, "interface_types": 2,
-      "public_ratio": 0.59, "loc": 974, "files": 5,
+      "public_ratio": 0.59, "loc": 1015, "files": 5,
       "main_sequence": {
         "zone": "zone_of_pain", "distance": 0.53, "structurally_constrained": false,
         "abstractness": 0.14, "instability": 0.33,
@@ -105,6 +105,13 @@ exit code は指摘ありでも実行の失敗でも 1 なので、baseline.sh �
       "actionable": true
     },
     {
+      "type": "loc_outlier", "package": "analyze-permissions",
+      "value": 1015, "limit": 1000,
+      "limit_source": "minimum", "statistical_limit": 882,
+      "message": "パッケージが大きすぎます (LOC 1015 > 1000 (下限)。mean+2σ は 882)",
+      "actionable": true
+    },
+    {
       "type": "structurally_constrained", "package": "internal/config",
       "value": 1, "limit": 0,
       "message": "構造制約: Ce=0, Ca=4 のため D=1.00 はトポロジー由来 (情報のみ。--strict の失敗には数えない)",
@@ -116,6 +123,10 @@ exit code は指摘ありでも実行の失敗でも 1 なので、baseline.sh �
 
 `path` (と `excluded_packages`・`outlier_packages`・警告の `package`) はモジュールルートからの相対パスで、
 測った checkout の場所や引数の渡し方 (絶対・相対) に依らない。ルートのパッケージは `.` になる。
+
+`outlier_packages` と `loc_outlier` は同じしきい値 `max(mean + 2σ, 1000)` で判定する。
+`limit_source` は `limit` が統計値 (`statistical`) と下限 1000 (`minimum`) のどちらから来たかを示し、
+`statistical_limit` は mean + 2σ の値。読み方は `go-arch-metrics:evaluate` の `references/thresholds.md`。
 
 `structurally_constrained: true` (Ce=0 の葉パッケージ) の D=1.0 は構造的制約で、設計上の問題とは限らない。
 このパッケージに付く `zone_of_pain` と `structurally_constrained` の警告は `actionable: false` で、

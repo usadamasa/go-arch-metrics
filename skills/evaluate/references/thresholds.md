@@ -11,7 +11,7 @@
 | 保守性指数 ≥ 20 | Microsoft の定義: 0-9 は保守困難、10-19 は低品質 |
 | Distance ≤ 0.5 (アクション可能パッケージのみ) | Robert C. Martin の D' = \|A+I-1\|。Ce=0 の葉パッケージ (構造的制約)、非揮発の Zone of Pain、main パッケージは除外して集計。Martin (Agile PPP ch.28): 非揮発性の具象安定パッケージは Zone of Pain でも harmless |
 | 外から参照されない exported = 0 (internal パッケージのみ) | unexport しても他の挙動が変わらない exported は、API surface を広げているだけ。判定の規則は下の「外から参照されない exported」 |
-| LOC ≤ mean + 2σ | 統計的外れ値は過大な責務の兆候 (正規分布の 95% 信頼区間外) |
+| LOC ≤ max(mean + 2σ, 1000) | 統計的外れ値は過大な責務の兆候 (正規分布の 95% 信頼区間外)。下限 1000 の理由は下の「LOC の外れ値」 |
 
 初期導入時は既存コードのベースライン値を記録し、段階的に目標値に近づけること。
 最初から全違反を 0 にしようとするのは逆効果。
@@ -71,6 +71,28 @@ actionable で出し、メッセージにシンボル名を並べる。
 分母が unexported の量なので、exported がすべて使われていても unexported の重複を消すと悪化し、
 private なヘルパを足すと改善する。`--max-public-ratio` (既定 0.6) を超え、シンボル数が `--min-symbols`
 (既定 10) 以上のパッケージに `high_public_ratio` を `actionable: false` で出す。
+
+---
+
+## LOC の外れ値
+
+`analyze-modularity` は LOC が `max(mean + sigma*stddev, 1000)` を超えるパッケージを外れ値とする。
+`sigma` は `--sigma` (既定 2.0) で変えられるが、下限 1000 は固定で、フラグでは変えられない。
+`summary.outlier_packages` と `loc_outlier` の警告は同じしきい値で判定する。
+
+下限を置くのは、mean + 2σ が相対的な値だから。パッケージを細かく分割すると平均が下がり、しきい値も下がる。
+すると 1 行も変わっていない無関係なパッケージが外れ値として現れる。1000 行までなら Go のパッケージとして
+普通の大きさで、統計的に外れていても指摘しない。
+
+`loc_outlier` の警告は `limit` の由来を `limit_source` に出す。
+
+| `limit_source` | 意味 |
+|----------------|------|
+| `statistical` | mean + sigma*stddev が 1000 以上で、それを `limit` にした |
+| `minimum` | mean + sigma*stddev が 1000 未満で、下限 1000 を `limit` にした |
+
+統計値そのものは `statistical_limit` に出る。`minimum` のときは統計的な外れ値ではなく、
+絶対量として 1000 行を超えたことを指す。
 
 ---
 

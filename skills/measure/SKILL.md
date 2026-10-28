@@ -76,7 +76,7 @@ Claude Code の sandbox の中でも vuln.go.dev に届く。それでも「未�
 | モジュール性 | Afferent/Efferent Coupling | analyze-modularity | 参考値 (しきい値なし) |
 | モジュール性 | 抽象度・不安定度・距離 | analyze-modularity | アクション可能 Distance ≤ 0.5 |
 | モジュール性 | 外から参照されない exported | analyze-modularity | internal パッケージで 0 |
-| モジュール性 | パッケージサイズ均一性 | analyze-modularity | LOC ≤ mean + 2σ |
+| モジュール性 | パッケージサイズ均一性 | analyze-modularity | LOC ≤ max(mean + 2σ, 1000) (下限 1000 は固定) |
 
 しきい値の根拠と、Distance の「アクション可能」の定義は `go-arch-metrics:evaluate`。
 
