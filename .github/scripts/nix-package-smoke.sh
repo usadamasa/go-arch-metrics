@@ -19,6 +19,9 @@ case "$BIN_DIR" in
         ;;
 esac
 
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+
 printf '%s\n' "--- analyze-modularity ---"
 "${BIN_DIR}/analyze-modularity" --strict . | jq -e '.summary.total_packages > 0'
 
@@ -27,15 +30,13 @@ printf '%s\n' "--- analyze-arch-lint ---"
 
 printf '%s\n' "--- arch-baseline ---"
 # ほかの 3 本も package のものを使わせる。golangci-lint・gosec・go-arch-lint は devShell のもの
-out_json=$(mktemp)
-PATH="${BIN_DIR}:${PATH}" "${BIN_DIR}/arch-baseline" . "$out_json"
-jq -e '.modularity.summary.total_packages > 0 and (.golangci_lint | has("Issues"))' "$out_json"
-rm -f "$out_json"
+PATH="${BIN_DIR}:${PATH}" "${BIN_DIR}/arch-baseline" . "${work}/baseline.json"
+jq -e '.modularity.summary.total_packages > 0 and (.golangci_lint | has("Issues"))' "${work}/baseline.json"
 
 printf '%s\n' "--- vulncheck ---"
 # fmt.Println を呼ぶモジュールを testdata の DB で測り、標準ライブラリの脆弱性 (GO-9999-0001) を拾えるかを見る
-fixture=$(mktemp -d)
-trap 'rm -rf "$fixture"' EXIT
+fixture="${work}/fixture"
+mkdir "$fixture"
 printf '%s\n' "module example.com/fixture" "" "go 1.26" >"${fixture}/go.mod"
 printf '%s\n' "package main" "" 'import "fmt"' "" 'func main() { fmt.Println("hello") }' >"${fixture}/main.go"
 

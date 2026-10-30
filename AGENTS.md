@@ -29,7 +29,7 @@ claude plugin validate --strict .    # plugin manifest
 
 - skill 間の参照は相対パスではなく skill 名 (`go-arch-metrics:evaluate`) で書く。
   plugin のインストール先はバージョンごとに変わるので、パスは書けない
-- SKILL.md からは script を `"${CLAUDE_PLUGIN_ROOT}/skills/<name>/scripts/..."` のパスで呼ぶ
+- SKILL.md から script を呼ぶなら `"${CLAUDE_PLUGIN_ROOT}/skills/<name>/scripts/..."` のパスで書く
 - `arch-baseline` が出す案内も skill 名で書く。相対パスで届く references が
   measure skill 側に無いため
 - `analyze-arch-lint` の指標一覧はドキュメントに書かない。一覧は `--metrics` の出力で見る
