@@ -10,6 +10,7 @@ skills/           setup / measure / evaluate / remediate
 cmd/              CLI (いずれも package main)。
                   vulncheck は govulncheck の組み込みで、埋め込みの roots で TLS を検証する。
                   arch-baseline は measure skill が呼ぶ、全ツールを一通り回す CLI
+internal/schema/  CLI が出す JSON の Go の型。skills/measure/references/baseline.schema.json から生成する
 flake.nix         CLI の packages.default と開発ツールの devShell (版は flake.lock が固定する)
 .claude/skills/   develop (このリポジトリ自身の開発環境と検証)
 ```
@@ -33,6 +34,8 @@ claude plugin validate --strict .    # plugin manifest
 - `arch-baseline` が出す案内も skill 名で書く。相対パスで届く references が
   measure skill 側に無いため
 - `analyze-arch-lint` の指標一覧はドキュメントに書かない。一覧は `--metrics` の出力で見る
+- arch-baseline と analyze-modularity が出す JSON のキーは `baseline.schema.json` だけで決める。
+  struct tag を手で書かず、schema を直して `task generate` で `internal/schema` を生成し直す
 
 ## 責務の分け方
 

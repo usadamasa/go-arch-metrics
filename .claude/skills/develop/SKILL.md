@@ -52,3 +52,6 @@ PR を出す前にこの全部を通す。job の定義は `.github/workflows/ci
   に追記する。追記しないと `claude plugin validate --strict skills` は通っても plugin
   からは見えない。このリポジトリ自身のための skill (`.claude/skills/`) は plugin の
   外なので追記しない
+- **`task lint` が `git diff --exit-code -- internal/schema` で落ちたとき**: `baseline.schema.json` を
+  直したのに生成し直していないか、生成したファイルを stage していない。`task generate` で生成して
+  commit する。生成器は `go run` で版を固定して取るので、初回はネットワークが要る
