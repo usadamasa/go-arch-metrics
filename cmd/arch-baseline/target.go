@@ -95,30 +95,6 @@ func (t target) filterGolangci(raw json.RawMessage) (json.RawMessage, error) {
 	return marshal(obj)
 }
 
-// filterGosec は gosec の Issues から ignore されたファイルの指摘を除き、Stats.found を残った数にそろえる。
-// Stats の files と lines は ignore されたファイルを含んだまま
-func (t target) filterGosec(raw json.RawMessage) (json.RawMessage, error) {
-	var obj map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &obj); err != nil {
-		return nil, err
-	}
-	kept, dropped, err := t.dropEntries(obj, "Issues", stringAt("file"))
-	if err != nil || dropped == 0 {
-		return raw, err
-	}
-	var stats map[string]json.RawMessage
-	if err := json.Unmarshal(obj["Stats"], &stats); err != nil {
-		return nil, err
-	}
-	if stats["found"], err = json.Marshal(kept); err != nil {
-		return nil, err
-	}
-	if obj["Stats"], err = marshal(stats); err != nil {
-		return nil, err
-	}
-	return marshal(obj)
-}
-
 // filterGoArchLint は go-arch-lint の 3 種の違反から ignore されたファイルのものを除き、ArchHasWarnings を
 // 残った違反の有無にそろえる。go-arch-lint はパッケージを引数で受けないので、ignore されたディレクトリもここで除く
 func (t target) filterGoArchLint(raw json.RawMessage) (json.RawMessage, error) {

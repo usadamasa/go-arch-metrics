@@ -199,51 +199,6 @@ func measureVulncheck(w *section, t tool, target target) (schema.VulncheckResult
 	}
 }
 
-// measureGosec は gosec を回す。指摘ありでも実行の失敗でも exit 1 を返す (cmd/gosec/main.go)。
-// 走り切れば stdout に JSON のレポートが出るので、その有無で見分ける。ログは stderr に出る
-func measureGosec(w *section, t tool, target target) (json.RawMessage, error) {
-	w.println("--- gosec (セキュリティ解析) ---")
-	out, rc, err := t.run(target.root, &w.err, append([]string{"-fmt", "json"}, target.packages()...)...)
-	if err != nil {
-		return nil, err
-	}
-	var report struct {
-		GolangErrors map[string][]struct {
-			Line   json.Number `json:"line"`
-			Column json.Number `json:"column"`
-			Error  string      `json:"error"`
-		} `json:"Golang errors"`
-		Issues []struct {
-			RuleID string `json:"rule_id"`
-		}
-	}
-	if rc > 1 || !hasKeys(out, "Issues", "Stats") || json.Unmarshal(out, &report) != nil {
-		return nil, fmt.Errorf("gosec の実行に失敗しました (exit %d)。理由は上の出力を参照", rc)
-	}
-	// コンパイルできないパッケージは "Golang errors" に入り、解析されない。指摘数が少なく見えるので止める
-	if len(report.GolangErrors) > 0 {
-		var lines []string
-		for _, file := range sortedKeys(report.GolangErrors) {
-			for _, e := range report.GolangErrors[file] {
-				lines = append(lines, fmt.Sprintf("  %s:%s:%s: %s", file, e.Line, e.Column, e.Error))
-			}
-		}
-		return nil, fmt.Errorf("gosec が対象のコードをコンパイルできませんでした。理由:\n%s", strings.Join(lines, "\n"))
-	}
-	if out, err = target.filterGosec(out); err != nil {
-		return nil, fmt.Errorf("gosec の出力から ignore されたファイルの指摘を除けません: %w", err)
-	}
-	if err := json.Unmarshal(out, &report); err != nil {
-		return nil, err
-	}
-	rules := make([]string, len(report.Issues))
-	for i, issue := range report.Issues {
-		rules[i] = issue.RuleID
-	}
-	printCounts(w, "セキュリティ指摘数", rules)
-	return out, nil
-}
-
 func sortedKeys[V any](m map[string]V) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {

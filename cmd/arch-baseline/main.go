@@ -94,7 +94,7 @@ func measureAll(tools map[string]tool, target target) (baseline, error) {
 			return err
 		},
 		func(w *section) (err error) {
-			b.Gosec, err = measureGosec(w, tools["gosec"], target)
+			b.Gosec, err = measureGosec(w, target)
 			return err
 		},
 		func(w *section) (err error) {

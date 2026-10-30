@@ -13,8 +13,8 @@ import (
 )
 
 // requiredTools は測定に使う外部ツール。analyze-arch-lint はここでは呼ばないが、
-// CI に組み込むツールとして揃っていることを確かめる
-var requiredTools = []string{"golangci-lint", "go-arch-lint", "gosec", "vulncheck", "analyze-modularity", "analyze-arch-lint"}
+// CI に組み込むツールとして揃っていることを確かめる。gosec は組み込みで回す (gosec.go)
+var requiredTools = []string{"golangci-lint", "go-arch-lint", "vulncheck", "analyze-modularity", "analyze-arch-lint"}
 
 // moduleInfo は go mod edit -json から取る測定対象のモジュールの情報。
 type moduleInfo struct {

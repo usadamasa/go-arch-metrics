@@ -9,6 +9,7 @@ go 1.26.1
 toolchain go1.26.10
 
 require (
+	github.com/securego/gosec/v2 v2.29.0
 	golang.org/x/crypto/x509roots/fallback v0.0.0-20261020153306-9f2b28d4331a
 	golang.org/x/tools v0.52.0
 	golang.org/x/vuln v1.9.0
@@ -16,6 +17,7 @@ require (
 )
 
 require (
+	github.com/ccojocar/zxcvbn-go v1.0.4 // indirect
 	golang.org/x/mod v0.42.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect

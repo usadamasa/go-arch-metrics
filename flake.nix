@@ -50,7 +50,7 @@
             version = (builtins.fromJSON (builtins.readFile ./.claude-plugin/plugin.json)).version;
             src = self;
             # go.mod / go.sum を変えたら付け直す。CI の nix build が hash mismatch の got: で正しい値を出す
-            vendorHash = "sha256-HvhNfsiDQS+D3qst8g4/WywsPgT4qMG4Zb8LjTAVCic=";
+            vendorHash = "sha256-UmgE32WyoqLX2uk47+TXphVrBRyUf0QUBMVwTDO5hxs=";
             subPackages = [
               "cmd/analyze-arch-lint"
               "cmd/analyze-modularity"
