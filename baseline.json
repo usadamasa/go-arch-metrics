@@ -415,9 +415,9 @@
     "Golang errors": {},
     "Issues": [],
     "Stats": {
-      "files": 11,
-      "lines": 2624,
-      "nosec": 5,
+      "files": 15,
+      "lines": 3280,
+      "nosec": 13,
       "found": 0
     },
     "GosecVersion": "2.29.0"
@@ -475,6 +475,31 @@
         }
       },
       {
+        "path": "cmd/arch-baseline",
+        "import_path": "github.com/usadamasa/go-arch-metrics/cmd/arch-baseline",
+        "exported_funcs": 0,
+        "unexported_funcs": 28,
+        "exported_methods": 0,
+        "unexported_methods": 3,
+        "exported_types": 0,
+        "unexported_types": 6,
+        "interface_types": 0,
+        "public_ratio": 0,
+        "loc": 656,
+        "files": 4,
+        "main_sequence": {
+          "zone": "excluded",
+          "distance": 0,
+          "structurally_constrained": false,
+          "abstractness": 0,
+          "instability": 1,
+          "afferent_coupling": 0,
+          "efferent_coupling": 0,
+          "recent_commit_count": 2,
+          "volatility": "non_volatile"
+        }
+      },
+      {
         "path": "cmd/vulncheck",
         "import_path": "github.com/usadamasa/go-arch-metrics/cmd/vulncheck",
         "exported_funcs": 0,
@@ -501,16 +526,17 @@
       }
     ],
     "summary": {
-      "mean_loc": 874.6666666666666,
-      "stddev_loc": 745.6694233297278,
-      "mean_public_ratio": 0.11665425663936461,
-      "total_packages": 3,
+      "mean_loc": 820,
+      "stddev_loc": 652.6733486208856,
+      "mean_public_ratio": 0.08749069247952346,
+      "total_packages": 4,
       "total_warnings": 0,
       "actionable_warnings": 0,
       "main_sequence": {
         "excluded_packages": [
           "cmd/analyze-arch-lint",
           "cmd/analyze-modularity",
+          "cmd/arch-baseline",
           "cmd/vulncheck"
         ],
         "structurally_constrained_count": 0,
