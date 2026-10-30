@@ -9,13 +9,16 @@ import "reflect"
 // arch-baseline が書く JSON。数値の読み方は go-arch-metrics:evaluate が持つ。Go の型は
 // internal/schema に生成する
 type Baseline struct {
-	// go-arch-lint check --json の出力そのまま。Type と Payload を必ず持つ
+	// go-arch-lint check --json の出力から、git が ignore するファイルの違反を除いたもの。Type と Payload
+	// を必ず持つ
 	GoArchLint json.RawMessage `json:"go_arch_lint"`
 
-	// golangci-lint run --output.json.path stdout の出力そのまま。Issues を必ず持つ
+	// golangci-lint run --output.json.path stdout の出力から、git が ignore
+	// するファイルの指摘を除いたもの。Issues を必ず持つ
 	GolangciLint json.RawMessage `json:"golangci_lint"`
 
-	// gosec -fmt json の出力そのまま。Issues と Stats を必ず持つ
+	// gosec -fmt json の出力から、git が ignore するファイルの指摘を除いたもの。Stats.found
+	// は残った指摘の数にそろえる。Issues と Stats を必ず持つ
 	Gosec json.RawMessage `json:"gosec"`
 
 	// Govulncheck corresponds to the JSON schema field "govulncheck".

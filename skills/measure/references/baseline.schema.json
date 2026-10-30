@@ -12,17 +12,17 @@
     },
     "golangci_lint": {
       "type": "object",
-      "description": "golangci-lint run --output.json.path stdout の出力そのまま。Issues を必ず持つ",
+      "description": "golangci-lint run --output.json.path stdout の出力から、git が ignore するファイルの指摘を除いたもの。Issues を必ず持つ",
       "goJSONSchema": { "type": "json.RawMessage", "imports": ["encoding/json"] }
     },
     "go_arch_lint": {
       "type": "object",
-      "description": "go-arch-lint check --json の出力そのまま。Type と Payload を必ず持つ",
+      "description": "go-arch-lint check --json の出力から、git が ignore するファイルの違反を除いたもの。Type と Payload を必ず持つ",
       "goJSONSchema": { "type": "json.RawMessage", "imports": ["encoding/json"] }
     },
     "gosec": {
       "type": "object",
-      "description": "gosec -fmt json の出力そのまま。Issues と Stats を必ず持つ",
+      "description": "gosec -fmt json の出力から、git が ignore するファイルの指摘を除いたもの。Stats.found は残った指摘の数にそろえる。Issues と Stats を必ず持つ",
       "goJSONSchema": { "type": "json.RawMessage", "imports": ["encoding/json"] }
     },
     "modularity": {

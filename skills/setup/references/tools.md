@@ -260,10 +260,9 @@ Ca が増えるのは、新しいパッケージが依存し始めたときだ�
 
 Zone 分類と構造的制約の扱いは `go-arch-metrics:evaluate`。
 
-対象は `go list ./...` が列挙するパッケージ (入れ子のモジュールと vendor を含まない) のうち、
-git が ignore していないもの。測るのは構成管理の対象だけで、`tmp/` のような ignore 済みの試し書きは
-一覧にも Ca/Ce の参照にも入らない。前提は `go.mod` のあるモジュールで `go list ./...` が通ること。
-git リポジトリでなければ ignore するものは無いとみなす (stderr に 1 行出る)。
+対象は git が ignore するディレクトリとファイルを除いたもので、決め方は `go-arch-metrics:measure` の
+「測定対象」にある。ignore されたファイルは LOC・シンボル数・exported にも Ca/Ce の参照にも入らない。
+前提は `go.mod` のあるモジュールで `go list ./...` が通ること。
 
 ### 実行
 
