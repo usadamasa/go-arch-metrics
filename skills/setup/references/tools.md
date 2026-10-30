@@ -48,9 +48,9 @@ nix を使うプロジェクトは flake input で参照し、devShell に足す
 | CLI | 実行時に要るコマンド |
 |-----|------------------|
 | `analyze-modularity` | `go`、`git` |
-| `analyze-arch-lint` | `go`、`go-arch-lint` |
+| `analyze-arch-lint` | `go`、`git`、`go-arch-lint` |
 | `vulncheck` | `go` |
-| `arch-baseline` | `go`、`golangci-lint`、`go-arch-lint`、`gosec` と上の 3 本 (PATH に無ければ tool directive から呼ぶ) |
+| `arch-baseline` | `go`、`git`、`golangci-lint`、`go-arch-lint` と上の 3 本 (PATH に無ければ tool directive から呼ぶ)。gosec は組み込みで回すので要らない |
 
 ### nix を使わないプロジェクト (go.mod の tool directive)
 
@@ -216,6 +216,9 @@ vulncheck -db file:///path/to/vulndb ./...
 
 Go ソースコードのセキュリティ問題を検出する静的解析ツール。
 SQL インジェクション、ハードコードされた認証情報、弱い暗号等を検出する。
+
+`arch-baseline` は gosec を組み込みで回す (版は plugin が決め、JSON の `gosec.GosecVersion` に残る)。
+単体の gosec が要るのは CI のゲートで回すときだけ。
 
 ### 実行
 

@@ -22,7 +22,7 @@
     },
     "gosec": {
       "type": "object",
-      "description": "gosec -fmt json の出力から、git が ignore するファイルの指摘を除いたもの。Stats.found は残った指摘の数にそろえる。Issues と Stats を必ず持つ",
+      "description": "arch-baseline が組み込みで回した gosec のレポート。形は gosec -fmt json と同じで、git が ignore するファイルは指摘にも Stats にも入らない。GosecVersion は組み込んだ gosec の版。Issues と Stats を必ず持つ",
       "goJSONSchema": { "type": "json.RawMessage", "imports": ["encoding/json"] }
     },
     "modularity": {

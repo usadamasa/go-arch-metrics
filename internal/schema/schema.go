@@ -17,8 +17,8 @@ type Baseline struct {
 	// するファイルの指摘を除いたもの。Issues を必ず持つ
 	GolangciLint json.RawMessage `json:"golangci_lint"`
 
-	// gosec -fmt json の出力から、git が ignore するファイルの指摘を除いたもの。Stats.found
-	// は残った指摘の数にそろえる。Issues と Stats を必ず持つ
+	// arch-baseline が組み込みで回した gosec のレポート。形は gosec -fmt json と同じで、git が ignore
+	// するファイルは指摘にも Stats にも入らない。GosecVersion は組み込んだ gosec の版。Issues と Stats を必ず持つ
 	Gosec json.RawMessage `json:"gosec"`
 
 	// Govulncheck corresponds to the JSON schema field "govulncheck".
