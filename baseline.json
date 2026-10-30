@@ -416,7 +416,7 @@
     "Issues": [],
     "Stats": {
       "files": 15,
-      "lines": 3280,
+      "lines": 3317,
       "nosec": 13,
       "found": 0
     },
@@ -480,12 +480,12 @@
         "exported_funcs": 0,
         "unexported_funcs": 28,
         "exported_methods": 0,
-        "unexported_methods": 3,
+        "unexported_methods": 7,
         "exported_types": 0,
-        "unexported_types": 6,
+        "unexported_types": 7,
         "interface_types": 0,
         "public_ratio": 0,
-        "loc": 656,
+        "loc": 693,
         "files": 4,
         "main_sequence": {
           "zone": "excluded",
@@ -495,7 +495,7 @@
           "instability": 1,
           "afferent_coupling": 0,
           "efferent_coupling": 0,
-          "recent_commit_count": 2,
+          "recent_commit_count": 4,
           "volatility": "non_volatile"
         }
       },
@@ -526,8 +526,8 @@
       }
     ],
     "summary": {
-      "mean_loc": 820,
-      "stddev_loc": 652.6733486208856,
+      "mean_loc": 829.25,
+      "stddev_loc": 650.5422257624789,
       "mean_public_ratio": 0.08749069247952346,
       "total_packages": 4,
       "total_warnings": 0,
