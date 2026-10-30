@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -30,13 +29,13 @@ type baseline struct {
 }
 
 func main() {
-	if err := run(os.Stdout, os.Args[1:]); err != nil {
+	if err := run(os.Args[1:]); err != nil {
 		fmt.Fprintf(os.Stderr, "エラー: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func run(w io.Writer, args []string) error {
+func run(args []string) error {
 	if len(args) < 1 || len(args) > 2 {
 		return errors.New(usage)
 	}
@@ -49,59 +48,59 @@ func run(w io.Writer, args []string) error {
 		return err
 	}
 
-	fmt.Fprintln(w, "=== Go アーキテクチャメトリクス ベースライン測定 ===")
-	fmt.Fprintf(w, "プロジェクト: %s\n", root)
-	fmt.Fprintf(w, "測定日時: %s\n\n", time.Now().Format("2006-01-02 15:04:05"))
+	fmt.Println("=== Go アーキテクチャメトリクス ベースライン測定 ===")
+	fmt.Printf("プロジェクト: %s\n", root)
+	fmt.Printf("測定日時: %s\n\n", time.Now().Format("2006-01-02 15:04:05"))
 
 	tools, err := resolveTools(info)
 	if err != nil {
 		return err
 	}
-	result, err := measureAll(w, tools, root)
+	result, err := measureAll(tools, root)
 	if err != nil {
 		return err
 	}
 	result.Project = info.Module.Path
-	measureReference(w, root)
-	fmt.Fprintln(w)
+	measureReference(root)
+	fmt.Println()
 
 	if err := writeJSON(output, result); err != nil {
 		return err
 	}
-	fmt.Fprintf(w, "詳細結果を保存しました: %s\n\n", output)
-	fmt.Fprintln(w, "=== 測定完了 ===")
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, "次のステップ:")
-	fmt.Fprintln(w, "  1. 数値をしきい値と照らす: go-arch-metrics:evaluate skill")
-	fmt.Fprintln(w, "  2. 違反を是正する: go-arch-metrics:remediate skill")
-	fmt.Fprintln(w, "  3. 設定ファイルの調整と CI 統合: go-arch-metrics:setup skill")
+	fmt.Printf("詳細結果を保存しました: %s\n\n", output)
+	fmt.Println("=== 測定完了 ===")
+	fmt.Println()
+	fmt.Println("次のステップ:")
+	fmt.Println("  1. 数値をしきい値と照らす: go-arch-metrics:evaluate skill")
+	fmt.Println("  2. 違反を是正する: go-arch-metrics:remediate skill")
+	fmt.Println("  3. 設定ファイルの調整と CI 統合: go-arch-metrics:setup skill")
 	return nil
 }
 
 // measureAll は JSON に残すツールを順に回す。
-func measureAll(w io.Writer, tools map[string]tool, root string) (baseline, error) {
+func measureAll(tools map[string]tool, root string) (baseline, error) {
 	var b baseline
 	var err error
-	if b.GolangciLint, err = measureGolangci(w, tools["golangci-lint"], root); err != nil {
+	if b.GolangciLint, err = measureGolangci(tools["golangci-lint"], root); err != nil {
 		return b, err
 	}
-	fmt.Fprintln(w)
-	if b.GoArchLint, err = measureGoArchLint(w, tools["go-arch-lint"], root); err != nil {
+	fmt.Println()
+	if b.GoArchLint, err = measureGoArchLint(tools["go-arch-lint"], root); err != nil {
 		return b, err
 	}
-	fmt.Fprintln(w)
-	if b.Govulncheck, err = measureVulncheck(w, tools["vulncheck"], root); err != nil {
+	fmt.Println()
+	if b.Govulncheck, err = measureVulncheck(tools["vulncheck"], root); err != nil {
 		return b, err
 	}
-	fmt.Fprintln(w)
-	if b.Gosec, err = measureGosec(w, tools["gosec"], root); err != nil {
+	fmt.Println()
+	if b.Gosec, err = measureGosec(tools["gosec"], root); err != nil {
 		return b, err
 	}
-	fmt.Fprintln(w)
-	if b.Modularity, err = measureModularity(w, tools["analyze-modularity"], root); err != nil {
+	fmt.Println()
+	if b.Modularity, err = measureModularity(tools["analyze-modularity"], root); err != nil {
 		return b, err
 	}
-	fmt.Fprintln(w)
+	fmt.Println()
 	return b, nil
 }
 
@@ -112,10 +111,10 @@ func resolvePaths(args []string) (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
-	if fi, err := os.Stat(root); err != nil || !fi.IsDir() {
+	if fi, err := os.Stat(root); err != nil || !fi.IsDir() { // #nosec G703 -- CLI ツール: パスは引数由来
 		return "", "", fmt.Errorf("ディレクトリが存在しません: %s", args[0])
 	}
-	if _, err := os.Stat(filepath.Join(root, "go.mod")); err != nil {
+	if _, err := os.Stat(filepath.Join(root, "go.mod")); err != nil { // #nosec G703 -- CLI ツール: パスは引数由来
 		return "", "", missingGoMod(root)
 	}
 	if len(args) < 2 {
@@ -125,7 +124,7 @@ func resolvePaths(args []string) (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
-	if fi, err := os.Stat(filepath.Dir(output)); err != nil || !fi.IsDir() {
+	if fi, err := os.Stat(filepath.Dir(output)); err != nil || !fi.IsDir() { // #nosec G703 -- CLI ツール: パスは引数由来
 		return "", "", fmt.Errorf("出力先のディレクトリが存在しません: %s", filepath.Dir(args[1]))
 	}
 	return root, output, nil
@@ -156,7 +155,7 @@ func writeJSON(path string, b baseline) error {
 	if err := enc.Encode(b); err != nil {
 		return fmt.Errorf("JSON を組み立てられません: %w", err)
 	}
-	if err := os.WriteFile(path, buf.Bytes(), 0o644); err != nil { // #nosec G306 -- リポジトリに commit して共有するレポート
+	if err := os.WriteFile(path, buf.Bytes(), 0o644); err != nil { // #nosec G306 G703 -- 出力先は引数で渡され、リポジトリに commit して共有するレポート
 		return fmt.Errorf("JSON を書けません: %w", err)
 	}
 	return nil

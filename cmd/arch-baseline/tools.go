@@ -29,7 +29,7 @@ type moduleInfo struct {
 
 func readModule(root string) (moduleInfo, error) {
 	var info moduleInfo
-	out, err := exec.Command("go", "mod", "edit", "-json", filepath.Join(root, "go.mod")).Output()
+	out, err := exec.Command("go", "mod", "edit", "-json", filepath.Join(root, "go.mod")).Output() // #nosec G204 G702 -- 引数で渡された測定対象の go.mod を読むだけ
 	if err != nil {
 		return info, fmt.Errorf("go mod edit -json に失敗しました: %w", withStderr(err))
 	}
@@ -101,7 +101,7 @@ func (t tool) runCombined(dir string, args ...string) ([]byte, int, error) {
 
 func (t tool) invoke(dir string, stdout, stderr io.Writer, args []string) (int, error) {
 	argv := append(append([]string{}, t.argv[1:]...), args...)
-	cmd := exec.Command(t.argv[0], argv...) // #nosec G204 -- argv は PATH か go.mod の tool directive で解決したツールと固定の引数
+	cmd := exec.Command(t.argv[0], argv...) // #nosec G204 G702 -- argv は PATH か go.mod の tool directive で解決したツールと固定の引数
 	cmd.Dir = dir
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr

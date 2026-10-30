@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"regexp"
@@ -14,31 +13,31 @@ import (
 // 失敗の理由は stderr に残す
 
 // measureReference は go list のパッケージ数と go test -cover の平均カバレッジを出す。
-func measureReference(w io.Writer, root string) {
-	fmt.Fprintln(w, "--- パッケージ統計 ---")
+func measureReference(root string) {
+	fmt.Println("--- パッケージ統計 ---")
 	if out, err := goCombined(root, "list", "./..."); err == nil {
-		fmt.Fprintf(w, "  パッケージ数: %d\n", len(nonEmptyLines(out)))
+		fmt.Printf("  パッケージ数: %d\n", len(nonEmptyLines(out)))
 	} else {
-		fmt.Fprintln(w, "  パッケージ数: 測定不可 (go list が失敗)")
+		fmt.Println("  パッケージ数: 測定不可 (go list が失敗)")
 		fmt.Fprintf(os.Stderr, "警告: go list が失敗しました。出力の末尾:\n%s\n", tailLines(out, 5))
 	}
 
-	fmt.Fprintln(w, "  テストカバレッジを測定中...")
+	fmt.Println("  テストカバレッジを測定中...")
 	out, err := goCombined(root, "test", "./...", "-cover")
 	if err != nil {
-		fmt.Fprintln(w, "  カバレッジ: テスト失敗のため測定不可")
+		fmt.Println("  カバレッジ: テスト失敗のため測定不可")
 		fmt.Fprintf(os.Stderr, "警告: go test が失敗したためカバレッジを測定できません。\n%s\n", testFailure(out))
 		return
 	}
 	if mean, ok := meanCoverage(out); ok {
-		fmt.Fprintf(w, "  平均カバレッジ: %.1f%%\n", mean)
+		fmt.Printf("  平均カバレッジ: %.1f%%\n", mean)
 	} else {
-		fmt.Fprintln(w, "  カバレッジ: 測定不可 (カバレッジ行が出力にない)")
+		fmt.Println("  カバレッジ: 測定不可 (カバレッジ行が出力にない)")
 	}
 }
 
 func goCombined(root string, args ...string) (string, error) {
-	cmd := exec.Command("go", args...)
+	cmd := exec.Command("go", args...) // #nosec G204 -- 呼び出し側は go list / go test の固定の引数だけを渡す
 	cmd.Dir = root
 	out, err := cmd.CombinedOutput()
 	return string(out), err
