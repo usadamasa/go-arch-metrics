@@ -44,7 +44,7 @@ tool directive から `go tool` で呼ぶ。どちらにも無いツールがあ
 - 標準出力のサマリ (違反件数と代表的な違反)
 - JSON (全ツールの生の結果)
 
-JSON は `go-arch-metrics:evaluate` がそのまま読む。既定の出力先は測るたびに上書きする。
+JSON は `go-arch-metrics:evaluate` がそのまま読む。キーと取りうる値は `references/baseline.schema.json`。既定の出力先は測るたびに上書きする。
 パッケージは `import_path` とモジュールルートからの相対パスで出るので、どの checkout で測っても同じ文字列になる。
 
 改善の前後を比べるときは、前の JSON を残しておくのではなく、比べたい commit を `git worktree` で取り出して
