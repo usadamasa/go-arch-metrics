@@ -47,15 +47,44 @@ D > 0.5 のパッケージ
   └─ それ以外 → アクション可能: Zone 別対処へ (remediate skill)
 ```
 
-`analyze-modularity` の警告もこの分け方にそろえてある。直す対象は `actionable: true` の警告で、
-`analyze-modularity --strict` は `summary.actionable_warnings` が 1 以上のときだけ exit 1 にする。
-構造制約のパッケージに付く `zone_of_pain` と `structurally_constrained`、非揮発の Zone of Pain に付く
-`zone_of_pain` は `actionable: false` で、JSON には残るが失敗には数えない。
-揮発性の測り方 (窓・しきい値・測れないときの扱い) は `references/thresholds.md` の「非揮発」。
-`--baseline` で base のレポートを渡したとき、D が base から悪化していないパッケージの警告も同じく
-`actionable: false` になる。規則は同じファイルの「base との比較」。
+`analyze-modularity` の警告もこの分け方にそろえてある。警告ごとの扱いは次の節の表。
 
 Zone の定義と構造的制約の根拠は `references/thresholds.md`。
+
+## `--strict` で exit 1 になる警告
+
+`analyze-modularity --strict` は、下の表で「なる」に当たる警告が 1 件でもあれば exit 1 で終わる。
+JSON ではその警告に `actionable: true` が付き、件数が `summary.actionable_warnings` に入る。
+「ならない」に当たる警告は JSON の `warnings` に載るだけで、終了コードを変えない。
+
+| type | 警告が出るとき | `--strict` で exit 1 になるか |
+|------|---------------|------------------------------|
+| `unreferenced_exported` | `internal` のパッケージに、外から参照されない exported かテストだけが参照する exported がある | なる |
+| `loc_outlier` | パッケージの LOC が `max(mean + 2σ, 1000)` を超える | なる |
+| `constrained_loc_outlier` | 構造制約のパッケージに `loc_outlier` が出る。同じパッケージに 2 件並ぶ | なる |
+| `zone_of_pain` | A < 0.5 かつ I < 0.5 | なる。ただし構造制約、非揮発、base から悪化していない、のどれかに当たればならない |
+| `zone_of_uselessness` | A > 0.5 かつ I > 0.5 | なる。ただし base から悪化していなければならない。変更の多さは見ない |
+| `high_distance` | D > 0.5 で、同じパッケージの Zone の警告が exit 1 になる | なる |
+| `structurally_constrained` | パッケージが構造制約に当たる | ならない |
+| `high_public_ratio` | public ratio が `--max-public-ratio` を超える | ならない |
+
+Zone の警告が exit 1 にならないパッケージには `high_distance` を出さない。D は Zone の警告の `value` で見る。
+
+表の「ただし」に出てくる条件は次のとおり。
+
+- **構造制約**: ほかのパッケージを import せず (Ce=0)、ほかから import される (Ca>0) パッケージ。
+  JSON では `structurally_constrained: true` になる。I が 0 に固まるので、A を上げる以外に D を動かせない。
+  根拠は `references/thresholds.md` の「構造的制約」
+- **非揮発**: 変更の少ないパッケージ。HEAD から遡った直近 200 commit (merge を除く) のうち、
+  そのパッケージのコードを変えた commit が 5 未満なら非揮発 (`volatility: "non_volatile"`)、
+  5 以上なら揮発 (`"volatile"`) になる。200 と 5 は `--volatility-window` と `--volatile-commits` で変える。
+  shallow clone などで履歴を数えられない (`"unmeasured"`) ときは揮発として扱う。
+  数え方は `references/thresholds.md` の「非揮発」
+- **base から悪化していない**: `--baseline` を渡し、base にもあるパッケージの D が base 以下。
+  `--baseline` を渡さないときと、base に無いか base で excluded のパッケージには効かない。
+  規則は `references/thresholds.md` の「base との比較」
+
+main パッケージと孤立パッケージ (`zone: "excluded"`) には Zone と Distance の警告を出さない。
 
 ## `.go-arch-lint.yml` 自体の健全性
 
@@ -76,7 +105,7 @@ analyze-arch-lint --metrics                # 指標の一覧・しきい値・�
 
 | ファイル | 内容 |
 |---------|------|
-| `references/thresholds.md` | 各しきい値の根拠、Zone 分類と構造的制約 |
+| `references/thresholds.md` | 各しきい値の根拠、Zone 分類と構造的制約、非揮発と base との比較の規則 |
 | `references/arch-lint-health.md` | 依存ルール設定の劣化の見つけ方、compiler-scoped edge |
 
 ## 次のステップ

@@ -14,9 +14,8 @@ analyze-modularity --strict .
 go test -coverprofile=coverage.out ./...
 ```
 
-`analyze-modularity --strict` が exit 1 にするのは、コードを直して消せる警告 (`actionable: true`) があるときだけ。
-構造制約のパッケージ (Ce=0, Ca>0)、非揮発の Zone of Pain、`--baseline` を渡したときに base から D が
-悪化していないパッケージに付く警告は JSON に出るが、失敗には数えない。判断の基準は `go-arch-metrics:evaluate`。
+`analyze-modularity --strict` がどの警告で exit 1 にするかは、
+`go-arch-metrics:evaluate` の「`--strict` で exit 1 になる警告」。
 
 揮発性は git の履歴から測るので、`analyze-modularity` を回す job は履歴をすべて取得する。
 付けないと shallow clone になり、揮発性の判定は効かない (すべて揮発として扱い、stderr に案内が出る)。
