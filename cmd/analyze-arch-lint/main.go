@@ -16,6 +16,8 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/usadamasa/go-arch-metrics/internal/tracked"
 )
 
 func main() {
@@ -115,11 +117,18 @@ type mappingPayload struct {
 
 // collectGraph は component とパッケージの対応を go-arch-lint mapping から、
 // 実際の import を go list から集める｡glob の解釈は go-arch-lint に任せる｡
+// git が ignore するファイルは対応から、ignore されたファイルしか持たないパッケージは import の集計から除く｡
+// import はパッケージ単位で集めるので、追跡パッケージの中で ignore されたファイルの import は残る｡
 func collectGraph(absDir, archFile string) (graph, error) {
 	g := graph{
 		componentPkgs: map[string][]string{},
 		imports:       map[string][]string{},
 		testImports:   map[string][]string{},
+	}
+
+	selected, err := tracked.List(absDir, []string{goWorkOff})
+	if err != nil {
+		return g, err
 	}
 
 	raw, err := run(absDir, "go-arch-lint", "mapping", "--json", "--output-color=false",
@@ -135,6 +144,9 @@ func collectGraph(absDir, archFile string) (graph, error) {
 	for _, grp := range m.Payload.MappingGrouped {
 		seen := map[string]bool{}
 		for _, f := range grp.FileNames {
+			if selected.Ignored(f) {
+				continue
+			}
 			rel, err := filepath.Rel(m.Payload.ProjectDirectory, filepath.Dir(f))
 			if err != nil {
 				return g, fmt.Errorf("パッケージパスを相対化できません: %w", err)
@@ -150,7 +162,7 @@ func collectGraph(absDir, archFile string) (graph, error) {
 		"{{.ImportPath}}", "{{join .Imports \",\"}}",
 		"{{join .TestImports \",\"}}", "{{join .XTestImports \",\"}}",
 	}, goListSep)
-	listed, err := run(absDir, "go", "list", "-f", format, "./...")
+	listed, err := run(absDir, "go", append([]string{"list", "-f", format}, selected.Patterns()...)...)
 	if err != nil {
 		return g, err
 	}
@@ -197,11 +209,13 @@ func parseGoList(listed, module string) (imports, testImports map[string][]strin
 	return imports, testImports
 }
 
+// goWorkOff は go.work を無視させる｡go.work があると cmd/ 単体のモジュールとして go list が通らない｡
+const goWorkOff = "GOWORK=off"
+
 func run(dir, name string, args ...string) (string, error) {
-	cmd := exec.Command(name, args...) // #nosec G204 -- 呼び出し側は "go" / "go-arch-lint" のリテラルのみ
+	cmd := exec.Command(name, args...) // #nosec G204 -- 呼び出し側は "go" / "go-arch-lint" のリテラルと go list が返したパッケージのみ
 	cmd.Dir = dir
-	// go.work があると cmd/ 単体のモジュールとして go list が通らない｡
-	cmd.Env = append(os.Environ(), "GOWORK=off")
+	cmd.Env = append(os.Environ(), goWorkOff)
 	out, err := cmd.Output()
 	if err != nil {
 		var stderr string
