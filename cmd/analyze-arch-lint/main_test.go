@@ -18,8 +18,9 @@ func TestCollectGraphIgnoresGitIgnored(t *testing.T) {
 	files := map[string]string{
 		"go.mod":     "module example.com/fx\n\ngo 1.26\n",
 		"a/a.go":     "package a\n\nimport _ \"example.com/fx/b\"\n",
-		"a/extra.go": "package a\n",
+		"a/extra.go": "package a\n\nimport _ \"example.com/fx/c\"\n",
 		"b/b.go":     "package b\n",
+		"c/c.go":     "package c\n",
 		"work/w.go":  "package work\n\nimport _ \"example.com/fx/a\"\n",
 		".gitignore": "/work/\n/a/extra.go\n",
 	}
@@ -66,7 +67,7 @@ func TestCollectGraphIgnoresGitIgnored(t *testing.T) {
 		t.Errorf("ignore された work が import の集計に入っている: %v", g.imports)
 	}
 	if !slices.Equal(g.imports["a"], []string{"b"}) {
-		t.Errorf("imports[a] = %v, want [b]", g.imports["a"])
+		t.Errorf("imports[a] = %v, want [b] (ignore された extra.go の c は数えない)", g.imports["a"])
 	}
 }
 
@@ -166,19 +167,18 @@ func TestLoadConfigMissingFile(t *testing.T) {
 	}
 }
 
-// TestParseGoListRootPackage はモジュールルート直下のパッケージを go-arch-lint mapping と
+// TestNormalizeImportsRootPackage はモジュールルート直下のパッケージを go-arch-lint mapping と
 // 同じ "." で表すことを確かめる｡キーが食い違うと、ルートの main は component に属さない
 // ことになり、その import も辺の裏付けに数えられない｡
-func TestParseGoListRootPackage(t *testing.T) {
+func TestNormalizeImportsRootPackage(t *testing.T) {
 	const module = "example.com/app"
-	line := func(fields ...string) string { return strings.Join(fields, goListSep) }
-	listed := strings.Join([]string{
-		line(module, module+"/cmd,"+module+"/internal/version,fmt", "", ""),
-		line(module+"/cmd", "github.com/spf13/cobra", module, ""),
-		line(module+"/internal/version", "", "", ""),
-	}, "\n")
+	pkgs := []packageImports{
+		{importPath: module, imports: []string{module + "/cmd", module + "/internal/version", "fmt"}},
+		{importPath: module + "/cmd", imports: []string{"github.com/spf13/cobra"}, testImports: []string{module}},
+		{importPath: module + "/internal/version"},
+	}
 
-	imports, testImports := parseGoList(listed, module)
+	imports, testImports := normalizeImports(pkgs, module)
 
 	wantImports := map[string][]string{
 		".":                {"cmd", "internal/version", "fmt"},
