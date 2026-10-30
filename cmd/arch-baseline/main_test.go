@@ -678,6 +678,16 @@ func Test測定はGitが追跡するパッケージだけをツールへ渡す(t
 	assertContains(t, out, "パッケージ数: 1", "平均カバレッジ:")
 }
 
+func Test追跡パッケージ内でignoreされたファイルはカバレッジに数えない(t *testing.T) {
+	f := ignoredFixture(t)
+
+	code, out := f.measure()
+
+	assertCode(t, code, 0, out)
+	// テストされない Extra は ignore された extra.go にあるので、追跡されるファイルは全部通る
+	assertContains(t, out, "平均カバレッジ: 100.0%")
+}
+
 func Test追跡パッケージ内でignoreされたファイルの指摘は数えずJSONからも除く(t *testing.T) {
 	f := ignoredFixture(t)
 	f.stub("golangci-lint", 1, `{"Issues":[`+
