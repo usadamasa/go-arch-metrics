@@ -681,7 +681,7 @@ func Test測定はGitが追跡するパッケージだけをツールへ渡す(t
 func Test追跡パッケージ内でignoreされたファイルの指摘は数えずJSONからも除く(t *testing.T) {
 	f := ignoredFixture(t)
 	f.stub("golangci-lint", 1, `{"Issues":[`+
-		`{"FromLinter":"gocognit","Text":"tracked","Pos":{"Filename":"fixture.go"}},`+
+		`{"FromLinter":"gocognit","Text":"cognitive complexity 31 > 20","Pos":{"Filename":"fixture.go"}},`+
 		`{"FromLinter":"funlen","Text":"ignored file","Pos":{"Filename":"extra.go"}},`+
 		`{"FromLinter":"funlen","Text":"ignored dir","Pos":{"Filename":"work/w.go"}}],"Report":{}}`, "")
 	f.stub("gosec", 1, `{"Golang errors":{},"Issues":[`+
@@ -704,6 +704,10 @@ func Test追跡パッケージ内でignoreされたファイルの指摘は数�
 
 	if issues, _ := f.result(f.defaultJSON(), "golangci_lint", "Issues").([]any); len(issues) != 1 {
 		t.Errorf("golangci_lint.Issues = %v, want 1 件", issues)
+	}
+	// 除いた後の JSON もツールのメッセージの > をエスケープせずに残す
+	if raw, _ := os.ReadFile(f.defaultJSON()); !bytes.Contains(raw, []byte("31 > 20")) {
+		t.Errorf("JSON の > がエスケープされている\n%s", raw)
 	}
 	if issues, _ := f.result(f.defaultJSON(), "gosec", "Issues").([]any); len(issues) != 1 {
 		t.Errorf("gosec.Issues = %v, want 1 件", issues)

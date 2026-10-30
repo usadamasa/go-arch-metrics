@@ -116,6 +116,23 @@ func TestList(t *testing.T) {
 		}
 	})
 
+	t.Run("追跡されるファイルは .gitignore に当たっても ignore しない", func(t *testing.T) {
+		root := fixture(t)
+		if out, err := exec.Command("git", "-C", root, "add", "-f", "a/extra.go").CombinedOutput(); err != nil {
+			t.Fatalf("git add 失敗: %v\n%s", err, out)
+		}
+		s, err := List(root, nil)
+		if err != nil {
+			t.Fatalf("List: %v", err)
+		}
+		if s.Ignored(filepath.Join(root, "a", "extra.go")) {
+			t.Error("git add -f したファイルは対象に残るはず")
+		}
+		if !slices.Equal(s.Packages[1].GoFiles, []string{"a.go", "extra.go"}) {
+			t.Errorf("a.GoFiles = %v, want [a.go extra.go]", s.Packages[1].GoFiles)
+		}
+	})
+
 	t.Run("Ignored は symlink を挟んだパスでも同じ答えを返す", func(t *testing.T) {
 		root := fixture(t)
 		link := filepath.Join(t.TempDir(), "link")
