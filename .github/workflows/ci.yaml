@@ -63,7 +63,7 @@ jobs:
       - uses: usadamasa/gh-manage/actions/setup-nix@main
 
       - name: Run shellcheck
-        run: shellcheck skills/*/scripts/*.sh .github/scripts/*.sh
+        run: shellcheck .github/scripts/*.sh
 
   # 利用側が flake input で参照する packages.default を Linux でビルドし、CLI を実際に動かす
   nix-package:
@@ -72,7 +72,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
 
-      # smoke は go と go-arch-lint を PATH に要るので devShell も入れる
+      # smoke は devShell の go と lint ツールを PATH に要るので devShell も入れる
       - uses: usadamasa/gh-manage/actions/setup-nix@main
 
       - name: Build packages.default
@@ -80,18 +80,6 @@ jobs:
 
       - name: Smoke test
         run: .github/scripts/nix-package-smoke.sh "$PWD/result/bin"
-
-  bats:
-    name: bats
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7.0.1
-
-      # baseline.sh のテストは fixture の Go module を go test で回すので、bats と一緒に devShell の go も使う
-      - uses: usadamasa/gh-manage/actions/setup-nix@main
-
-      - name: Run bats tests
-        run: bats tests/
 
   plugin-validate:
     name: plugin validate
@@ -128,7 +116,13 @@ jobs:
         run: gh actions-lock --verify
 
   ci-status-check:
-    needs: [go-test, go-lint, bats, shellcheck, nix-package, plugin-validate, actions-lock]
+    needs:
+      - actions-lock
+      - go-lint
+      - go-test
+      - nix-package
+      - plugin-validate
+      - shellcheck
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 10

@@ -3,12 +3,14 @@ version: 3
 workdir: .
 
 # この設定自体の健全性は `go run ./cmd/analyze-arch-lint --metrics` と `--strict .` で見る｡
-# cmd/ 配下の 3 つの main パッケージだけの構成なので component は役割 1 つで足りる｡
-# internal パッケージを足したら cmd_internal / shared_internal を切ること
+# cmd/ 配下の main パッケージと、それらが共有する internal の構成｡
+# cmd 専用の internal を足したら cmd_internal を切ること
 # (skills/remediate/references/arch-lint-remediation.md)｡
 components:
   cmd_main:
     in: "cmd/*"
+  shared_internal:
+    in: "internal/**"
 
 vendors:
   yaml:
@@ -23,7 +25,10 @@ vendors:
     in: golang.org/x/tools/go/packages
 
 deps:
+  # shared_internal は entry を持たない = 標準ライブラリ以外に依存できない
   cmd_main:
+    mayDependOn:
+      - shared_internal
     canUse:
       - yaml
       - vuln

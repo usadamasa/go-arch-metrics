@@ -1,0 +1,168 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Baseline",
+  "description": "arch-baseline が書く JSON。数値の読み方は go-arch-metrics:evaluate が持つ。Go の型は internal/schema に生成する",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["project", "golangci_lint", "go_arch_lint", "gosec", "modularity", "govulncheck"],
+  "properties": {
+    "project": {
+      "type": "string",
+      "description": "測定対象の module path。測った checkout の場所に依らない"
+    },
+    "golangci_lint": {
+      "type": "object",
+      "description": "golangci-lint run --output.json.path stdout の出力そのまま。Issues を必ず持つ",
+      "goJSONSchema": { "type": "json.RawMessage", "imports": ["encoding/json"] }
+    },
+    "go_arch_lint": {
+      "type": "object",
+      "description": "go-arch-lint check --json の出力そのまま。Type と Payload を必ず持つ",
+      "goJSONSchema": { "type": "json.RawMessage", "imports": ["encoding/json"] }
+    },
+    "gosec": {
+      "type": "object",
+      "description": "gosec -fmt json の出力そのまま。Issues と Stats を必ず持つ",
+      "goJSONSchema": { "type": "json.RawMessage", "imports": ["encoding/json"] }
+    },
+    "modularity": {
+      "$ref": "#/$defs/modularity"
+    },
+    "govulncheck": {
+      "$ref": "#/$defs/vulncheck_result"
+    }
+  },
+  "$defs": {
+    "vulncheck_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "exit_code"],
+      "properties": {
+        "status": {
+          "enum": ["ok", "vulnerable", "unmeasured"],
+          "description": "unmeasured は脆弱性 DB に届かず測れていない。脆弱性なしと読まない"
+        },
+        "exit_code": {
+          "type": "integer"
+        }
+      }
+    },
+    "modularity": {
+      "type": "object",
+      "description": "analyze-modularity の出力そのまま",
+      "additionalProperties": false,
+      "required": ["packages", "summary"],
+      "properties": {
+        "packages": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/package" }
+        },
+        "summary": { "$ref": "#/$defs/summary" },
+        "warnings": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/warning" }
+        }
+      }
+    },
+    "package": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path", "import_path", "exported_funcs", "unexported_funcs", "exported_methods", "unexported_methods",
+        "exported_types", "unexported_types", "interface_types", "public_ratio", "loc", "files"
+      ],
+      "properties": {
+        "path": { "type": "string", "description": "モジュールルートからの相対パス。ルートは ." },
+        "import_path": { "type": "string" },
+        "exported_funcs": { "type": "integer" },
+        "unexported_funcs": { "type": "integer" },
+        "exported_methods": { "type": "integer" },
+        "unexported_methods": { "type": "integer" },
+        "exported_types": { "type": "integer" },
+        "unexported_types": { "type": "integer" },
+        "interface_types": { "type": "integer" },
+        "public_ratio": { "type": "number" },
+        "loc": { "type": "integer" },
+        "files": { "type": "integer" },
+        "unreferenced_exported": { "type": "integer", "description": "main パッケージには付かない" },
+        "unreferenced_exported_symbols": { "type": "array", "items": { "type": "string" } },
+        "test_only_exported": { "type": "integer", "description": "main パッケージには付かない" },
+        "test_only_exported_symbols": { "type": "array", "items": { "type": "string" } },
+        "main_sequence": { "$ref": "#/$defs/main_sequence" }
+      }
+    },
+    "main_sequence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "zone", "distance", "structurally_constrained", "abstractness", "instability",
+        "afferent_coupling", "efferent_coupling", "volatility"
+      ],
+      "properties": {
+        "zone": { "enum": ["excluded", "zone_of_pain", "zone_of_uselessness", "main_sequence"] },
+        "distance": { "type": "number" },
+        "structurally_constrained": { "type": "boolean" },
+        "abstractness": { "type": "number" },
+        "instability": { "type": "number" },
+        "afferent_coupling": { "type": "integer" },
+        "efferent_coupling": { "type": "integer" },
+        "recent_commit_count": { "type": "integer", "description": "揮発性を測れなかったときは付かない" },
+        "volatility": { "enum": ["volatile", "non_volatile", "unmeasured"] },
+        "baseline_distance": { "type": "number", "description": "--baseline を渡し、base にあるパッケージにだけ付く" }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mean_loc", "stddev_loc", "mean_public_ratio", "total_packages", "total_warnings", "actionable_warnings",
+        "main_sequence"
+      ],
+      "properties": {
+        "mean_loc": { "type": "number" },
+        "stddev_loc": { "type": "number" },
+        "mean_public_ratio": { "type": "number" },
+        "outlier_packages": { "type": "array", "items": { "type": "string" } },
+        "total_packages": { "type": "integer" },
+        "total_warnings": { "type": "integer" },
+        "actionable_warnings": { "type": "integer", "description": "--strict が失敗に数える警告の数" },
+        "main_sequence": { "$ref": "#/$defs/main_sequence_summary" }
+      }
+    },
+    "main_sequence_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "excluded_packages", "structurally_constrained_count", "baseline_not_worsened_count",
+        "non_volatile_zone_of_pain_count", "actionable_count", "volatility_window_commits", "volatile_commit_threshold"
+      ],
+      "properties": {
+        "excluded_packages": { "type": ["array", "null"], "items": { "type": "string" } },
+        "structurally_constrained_count": { "type": "integer" },
+        "baseline_not_worsened_count": { "type": "integer" },
+        "non_volatile_zone_of_pain_count": { "type": "integer" },
+        "actionable_count": { "type": "integer" },
+        "actionable_max_distance": { "type": "number", "description": "actionable_count が 0 なら付かない" },
+        "actionable_mean_distance": { "type": "number", "description": "actionable_count が 0 なら付かない" },
+        "volatility_window_commits": { "type": "integer" },
+        "volatile_commit_threshold": { "type": "integer" },
+        "volatility_unmeasured_reason": { "type": "string" }
+      }
+    },
+    "warning": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "package", "value", "limit", "message", "actionable"],
+      "properties": {
+        "type": { "type": "string" },
+        "package": { "type": "string" },
+        "value": { "type": "number" },
+        "limit": { "type": "number" },
+        "limit_source": { "enum": ["statistical", "minimum"], "description": "LOC の警告にだけ付く" },
+        "statistical_limit": { "type": "number", "description": "LOC の警告にだけ付く" },
+        "message": { "type": "string" },
+        "actionable": { "type": "boolean", "description": "true だけが --strict の失敗に数えられる" }
+      }
+    }
+  }
+}

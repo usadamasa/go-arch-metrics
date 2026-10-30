@@ -12,7 +12,7 @@ internal/usecase/order.go:89:5: nestif: nesting depth 6 > 5 (nestif)
 ```
 
 exit code が 0 なら指摘なし、1 なら指摘あり、3 以上は実行できていない。
-baseline.sh は JSON (`--output.json.path stdout`) で受け、JSON が出ないとき、exit が 0 と 1 以外のとき、
+arch-baseline は JSON (`--output.json.path stdout`) で受け、JSON が出ないとき、exit が 0 と 1 以外のとき、
 対象のコードがコンパイルできず `typecheck` の指摘が出たときは測定失敗として止まる。
 
 ## go-arch-lint
@@ -37,7 +37,7 @@ these vulnerabilities.
 ```
 
 exit code が 0 なら脆弱性なし、3 なら呼んでいるシンボルに脆弱性あり、それ以外は DB に届かず未測定。
-baseline.sh はこれを `govulncheck.status` (`ok` / `vulnerable` / `unmeasured`) として JSON に残す。
+arch-baseline はこれを `govulncheck.status` (`ok` / `vulnerable` / `unmeasured`) として JSON に残す。
 
 ## gosec
 
@@ -54,7 +54,7 @@ Summary:
   Issues: 0
 ```
 
-exit code は指摘ありでも実行の失敗でも 1 なので、baseline.sh は `-fmt json` のレポートが stdout に出たかで見分ける。
+exit code は指摘ありでも実行の失敗でも 1 なので、arch-baseline は `-fmt json` のレポートが stdout に出たかで見分ける。
 レポートが出ないとき、`Golang errors` (コンパイルできず解析を飛ばしたパッケージ) があるときは測定失敗として止まる。
 
 ## analyze-modularity (JSON)

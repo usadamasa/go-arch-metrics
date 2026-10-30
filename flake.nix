@@ -54,16 +54,17 @@
             subPackages = [
               "cmd/analyze-arch-lint"
               "cmd/analyze-modularity"
+              "cmd/arch-baseline"
               "cmd/vulncheck"
             ];
             # テストはこのリポジトリの CI (go test) が持つ。利用側がこの package を参照しても
             # binary cache が無いので手元でビルドされ、checkPhase も利用側で走る。Linux の build sandbox は
             # ネットワークも git も無く、TestVulncheck と analyze-modularity の git を使うテストが落ちる
             doCheck = false;
-            # 実行時の go・git・go-arch-lint は利用側の PATH のものを使う。go を包むと、対象プロジェクトの
+            # 実行時に呼ぶ go や lint ツールは利用側の PATH のものを使う。go を包むと、対象プロジェクトの
             # go.mod とは別の版で go list が走るので包まない
             meta = {
-              description = "Go アーキテクチャメトリクスの CLI (analyze-modularity, analyze-arch-lint, vulncheck)";
+              description = "Go アーキテクチャメトリクスの CLI";
               homepage = "https://github.com/usadamasa/go-arch-metrics";
               license = pkgs.lib.licenses.mit;
             };
@@ -73,7 +74,7 @@
 
       devShells = forAllSystems (pkgs: {
         default = pkgs.mkShellNoCC {
-          # analyze-* と vulncheck はこのリポジトリ自身のソースを Taskfile が go run するので含めない
+          # この plugin の CLI はこのリポジトリ自身のソースを go run するので含めない
           packages =
             [
               # go.mod の go 行と同じ系列。ずれたら GOTOOLCHAIN=local で即座に失敗させる
@@ -84,7 +85,6 @@
               golangci-lint
               go-arch-lint
               gosec
-              bats
               shellcheck
             ]);
           env.GOTOOLCHAIN = "local";

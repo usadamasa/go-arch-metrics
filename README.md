@@ -2,7 +2,7 @@
 
 Go プロジェクトのモジュール性とテスト可能性を測り、改善するための Claude Code plugin。
 「ソフトウェアアーキテクチャメトリクス (ISBN: 9784814400607)」の観点に基づく。
-4 つの skill と、既存ツールがカバーしない領域を測る CLI 2 本、govulncheck を組み込んだ CLI 1 本を同梱する。
+skill と、既存ツールがカバーしない領域を測る CLI を同梱する。
 
 ## インストール
 
@@ -21,7 +21,7 @@ claude plugin install go-arch-metrics@usadamasa
 | Step | やること | skill |
 | ---- | -------- | ----- |
 | 1 | ツールを入れて `.golangci.yml` / `.go-arch-lint.yml` を置く | `go-arch-metrics:setup` |
-| 2 | `baseline.sh` で現状の数値を取る | `go-arch-metrics:measure` |
+| 2 | `arch-baseline` で現状の数値を取る | `go-arch-metrics:measure` |
 | 3 | 数値をしきい値と照らして違反を分類する | `go-arch-metrics:evaluate` |
 | 4 | 優先順位に従って直す | `go-arch-metrics:remediate` |
 | 5 | CI に組み込んで再発を止める | `go-arch-metrics:setup` |
@@ -36,6 +36,8 @@ claude plugin install go-arch-metrics@usadamasa
 - **`vulncheck`**: govulncheck をライブラリとして組み込んだもの。引数と exit code は govulncheck と同じ。
   違いは証明書の検証だけで、OS の証明書ストアに頼らず埋め込みの roots を使うので、trustd に届かない
   sandbox (Claude Code など) の中でも vuln.go.dev に届く
+- **`arch-baseline`**: 測定に使うツールを一通り回し、サマリと JSON を出す。
+  ツールの「指摘あり」では測定を続け、実行そのものの失敗では理由を出して非 0 で終わる
 
 フラグと使い方は `go-arch-metrics:setup` の `references/tools.md`。
 

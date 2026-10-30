@@ -15,7 +15,7 @@ Go プロジェクトの現状のメトリクスを取る。数値の解釈と�
 ## エージェント行動制約
 
 > ツールが見つからない場合 (PATH にも go.mod の tool directive にも無い)、手動計算や代替手段で回避してはならない。
-> baseline.sh のエラー出力にある足りないコマンド名をユーザーに伝え、
+> arch-baseline のエラー出力にある足りないコマンド名をユーザーに伝え、
 > 用意できてから再実行すること。
 >
 > 禁止: wc -l で LOC 判定、analyze-modularity なしで Distance や public ratio の推定、
@@ -26,20 +26,25 @@ Go プロジェクトの現状のメトリクスを取る。数値の解釈と�
 ## 実行
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/skills/measure/scripts/baseline.sh" ./ [<output-json>]
+arch-baseline ./ [<output-json>]          # PATH にあるとき (nix の devShell など)
+go tool arch-baseline ./ [<output-json>]  # 対象プロジェクトの go.mod の tool directive にあるとき
 ```
+
+`command -v arch-baseline` で PATH にあるかを見て、無ければ `go tool` の形で呼ぶ。どちらでも動かなければ
+`go-arch-metrics:setup` の `references/tools.md` の「この plugin の CLI を入れる」を案内する。
 
 1 つめの引数は Go プロジェクトのルート (`go.mod` があるディレクトリ)。2 つめは JSON の出力先で、
 省くとルートの `baseline.json` に書く。
-`go` と `jq` は PATH に要る。ほかのツールは PATH を先に見て、無ければ対象プロジェクトの go.mod の
+`go` は PATH に要る。ほかのツールは PATH を先に見て、無ければ対象プロジェクトの go.mod の
 tool directive から `go tool` で呼ぶ。どちらにも無いツールがあればエラー終了する。
+ツールの実行そのものが失敗したとき (コンパイルできない、設定の誤り) も、理由を stderr に出して非 0 で終わる。
 
 出力は 2 つ:
 
 - 標準出力のサマリ (違反件数と代表的な違反)
 - JSON (全ツールの生の結果)
 
-JSON は `go-arch-metrics:evaluate` がそのまま読む。既定の出力先は測るたびに上書きする。
+JSON は `go-arch-metrics:evaluate` がそのまま読む。キーと取りうる値は `references/baseline.schema.json`。既定の出力先は測るたびに上書きする。
 パッケージは `import_path` とモジュールルートからの相対パスで出るので、どの checkout で測っても同じ文字列になる。
 
 改善の前後を比べるときは、前の JSON を残しておくのではなく、比べたい commit を `git worktree` で取り出して
@@ -47,8 +52,8 @@ JSON は `go-arch-metrics:evaluate` がそのまま読む。既定の出力先�
 
 ```bash
 git worktree add --detach ../base origin/main
-bash "${CLAUDE_PLUGIN_ROOT}/skills/measure/scripts/baseline.sh" ../base "$TMPDIR/before.json"
-bash "${CLAUDE_PLUGIN_ROOT}/skills/measure/scripts/baseline.sh" ./ "$TMPDIR/after.json"
+arch-baseline ../base "$TMPDIR/before.json"
+arch-baseline ./ "$TMPDIR/after.json"
 ```
 
 CI で base と比べる組み方は `go-arch-metrics:setup` の `references/ci-integration.md`。
@@ -82,7 +87,7 @@ Claude Code の sandbox の中でも vuln.go.dev に届く。それでも「未�
 
 ## 個別に測る
 
-baseline.sh を通さず 1 つのツールだけ回したいときは
+arch-baseline を通さず 1 つのツールだけ回したいときは
 `go-arch-metrics:setup` の `references/tools.md` に各ツールの実行方法がある。
 出力の読み方は `references/output-examples.md`。
 

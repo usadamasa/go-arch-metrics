@@ -9,53 +9,66 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/usadamasa/go-arch-metrics/internal/schema"
 )
 
 // MainSequenceData は Martin の Package Metrics (Ca/Ce/A/I/D) と Zone 分類結果を保持する｡
 // go list に含まれないパッケージ (build constraint で外れるものなど) では nil になる｡
-type MainSequenceData struct {
-	Zone                    Zone    `json:"zone"`
-	Distance                float64 `json:"distance"`
-	StructurallyConstrained bool    `json:"structurally_constrained"`
-	Abstractness            float64 `json:"abstractness"`
-	Instability             float64 `json:"instability"`
-	AfferentCoupling        int     `json:"afferent_coupling"`
-	EfferentCoupling        int     `json:"efferent_coupling"`
-	// RecentCommitCount は揮発性の窓の中でこのパッケージのコードを変えた commit 数｡測れなければ出さない
-	RecentCommitCount *int       `json:"recent_commit_count,omitempty"`
-	Volatility        Volatility `json:"volatility"`
-	// BaselineDistance は --baseline のレポートでの D｡base に無いパッケージと --baseline なしでは出さない
-	BaselineDistance *float64 `json:"baseline_distance,omitempty"`
-}
+// RecentCommitCount は揮発性を測れなければ nil、BaselineDistance は base に無ければ nil
+type MainSequenceData = schema.MainSequence
 
 // PackageResult はパッケージごとの解析結果を保持する｡
 // Path はモジュールルートからの相対パス｡ImportPath は --baseline で base のレポートと突き合わせるキー
+// JSON のキーは schema が決めるので、出力するときは schemaPackage で詰め替える
 type PackageResult struct {
-	Path              string  `json:"path"`
-	ImportPath        string  `json:"import_path"`
-	ExportedFuncs     int     `json:"exported_funcs"`
-	UnexportedFuncs   int     `json:"unexported_funcs"`
-	ExportedMethods   int     `json:"exported_methods"`
-	UnexportedMethods int     `json:"unexported_methods"`
-	ExportedTypes     int     `json:"exported_types"`
-	UnexportedTypes   int     `json:"unexported_types"`
-	InterfaceTypes    int     `json:"interface_types"`
-	PublicRatioValue  float64 `json:"public_ratio"`
-	LOC               int     `json:"loc"`
-	Files             int     `json:"files"`
+	Path              string
+	ImportPath        string
+	ExportedFuncs     int
+	UnexportedFuncs   int
+	ExportedMethods   int
+	UnexportedMethods int
+	ExportedTypes     int
+	UnexportedTypes   int
+	InterfaceTypes    int
+	LOC               int
+	Files             int
 
-	// UnreferencedExported はパッケージの外から参照されない exported の数｡main など判定しないパッケージでは出さない
-	UnreferencedExported        *int     `json:"unreferenced_exported,omitempty"`
-	UnreferencedExportedSymbols []string `json:"unreferenced_exported_symbols,omitempty"`
+	// UnreferencedExported はパッケージの外から参照されない exported の数｡main など判定しないパッケージでは nil
+	UnreferencedExported        *int
+	UnreferencedExportedSymbols []string
 	// TestOnlyExported は他パッケージのテストと外部テストパッケージからだけ参照される exported の数
-	TestOnlyExported        *int     `json:"test_only_exported,omitempty"`
-	TestOnlyExportedSymbols []string `json:"test_only_exported_symbols,omitempty"`
+	TestOnlyExported        *int
+	TestOnlyExportedSymbols []string
 	// internal は import path に /internal/ を含むかどうか｡モジュールの外に利用者がいないと言えるのはこのときだけ
 	internal bool
 	// dir は go list が返したディレクトリ｡Ca/Ce と揮発性はこれで引く
 	dir string
 
-	MainSequence *MainSequenceData `json:"main_sequence,omitempty"`
+	MainSequence *MainSequenceData
+}
+
+// schemaPackage は出力の型に詰め替える。
+func (r PackageResult) schemaPackage() schema.Package {
+	return schema.Package{
+		Path:                        r.Path,
+		ImportPath:                  r.ImportPath,
+		ExportedFuncs:               r.ExportedFuncs,
+		UnexportedFuncs:             r.UnexportedFuncs,
+		ExportedMethods:             r.ExportedMethods,
+		UnexportedMethods:           r.UnexportedMethods,
+		ExportedTypes:               r.ExportedTypes,
+		UnexportedTypes:             r.UnexportedTypes,
+		InterfaceTypes:              r.InterfaceTypes,
+		PublicRatio:                 r.PublicRatio(),
+		LOC:                         r.LOC,
+		Files:                       r.Files,
+		UnreferencedExported:        r.UnreferencedExported,
+		UnreferencedExportedSymbols: r.UnreferencedExportedSymbols,
+		TestOnlyExported:            r.TestOnlyExported,
+		TestOnlyExportedSymbols:     r.TestOnlyExportedSymbols,
+		MainSequence:                r.MainSequence,
+	}
 }
 
 // Abstractness は A = interface 型宣言 / 全型宣言 を返す (Martin の Na / Nc)｡
@@ -86,17 +99,8 @@ type Stats struct {
 
 // Warning は閾値超過の警告を表す｡
 // Actionable はコードを直せば消せる警告かどうかで、--strict は true のものだけを失敗に数える｡
-type Warning struct {
-	Type    string  `json:"type"`
-	Package string  `json:"package"`
-	Value   float64 `json:"value"`
-	Limit   float64 `json:"limit"`
-	// LimitSource と StatisticalLimit は LOC の警告だけが持つ｡Limit が統計値と下限のどちらから来たかを示す
-	LimitSource      string   `json:"limit_source,omitempty"`
-	StatisticalLimit *float64 `json:"statistical_limit,omitempty"`
-	Message          string   `json:"message"`
-	Actionable       bool     `json:"actionable"`
-}
+// LimitSource と StatisticalLimit は LOC の警告だけが持つ｡Limit が統計値と下限のどちらから来たかを示す
+type Warning = schema.Warning
 
 // 警告タイプ定数｡
 const (
@@ -162,7 +166,6 @@ func AnalyzeDir(dir string, goFiles []string) (PackageResult, error) {
 		}
 	}
 
-	result.PublicRatioValue = result.PublicRatio()
 	return result, nil
 }
 
@@ -437,8 +440,8 @@ const minLOCLimit = 1000
 
 // LOC 外れ値のしきい値の由来｡警告の limit_source に出す
 const (
-	LOCLimitSourceStatistical = "statistical"
-	LOCLimitSourceMinimum     = "minimum"
+	LOCLimitSourceStatistical = schema.WarningLimitSourceStatistical
+	LOCLimitSourceMinimum     = schema.WarningLimitSourceMinimum
 )
 
 // LOCThreshold は LOC 外れ値のしきい値｡outlier_packages と loc_outlier の警告は同じ値で判定する
@@ -446,7 +449,7 @@ type LOCThreshold struct {
 	Sigma       float64
 	Statistical float64 // mean + sigma*stddev
 	Limit       float64 // Statistical と minLOCLimit の大きい方
-	Source      string
+	Source      schema.WarningLimitSource
 }
 
 // NewLOCThreshold は stats と sigma からしきい値を決める｡統計値が下限と同じなら statistical とする
@@ -470,14 +473,14 @@ func (t LOCThreshold) warning(pkg PackageResult) Warning {
 	message := fmt.Sprintf("パッケージが統計的外れ値です (LOC %d > %.0f = mean+%gσ)", pkg.LOC, t.Limit, t.Sigma)
 	if t.Source == LOCLimitSourceMinimum {
 		message = fmt.Sprintf("パッケージが大きすぎます (LOC %d > %.0f%s。mean+%gσ は %.0f)",
-			pkg.LOC, t.Limit, limitSourceNote(t.Source), t.Sigma, t.Statistical)
+			pkg.LOC, t.Limit, limitSourceNote(&t.Source), t.Sigma, t.Statistical)
 	}
 	return Warning{
 		Type:             WarningTypeLocOutlier,
 		Package:          pkg.Path,
 		Value:            float64(pkg.LOC),
 		Limit:            t.Limit,
-		LimitSource:      t.Source,
+		LimitSource:      new(t.Source),
 		StatisticalLimit: new(t.Statistical),
 		Message:          message,
 		Actionable:       true,
@@ -485,8 +488,8 @@ func (t LOCThreshold) warning(pkg PackageResult) Warning {
 }
 
 // limitSourceNote は下限が効いた警告の Message で limit に添える注記を返す｡
-func limitSourceNote(source string) string {
-	if source == LOCLimitSourceMinimum {
+func limitSourceNote(source *schema.WarningLimitSource) string {
+	if source != nil && *source == LOCLimitSourceMinimum {
 		return " (下限)"
 	}
 	return ""

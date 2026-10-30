@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/usadamasa/go-arch-metrics/internal/schema"
 )
 
 // strictTestDir は --strict フラグのテスト用に Go ファイルを含む一時ディレクトリを作成する｡
@@ -121,7 +123,7 @@ func TestMainSequenceIntegration(t *testing.T) {
 			t.Fatalf("JSON パース失敗: %v", err)
 		}
 
-		byBase := make(map[string]PackageResult, len(report.Packages))
+		byBase := make(map[string]schema.Package, len(report.Packages))
 		for _, p := range report.Packages {
 			byBase[filepath.Base(p.Path)] = p
 		}
@@ -155,9 +157,6 @@ func TestMainSequenceIntegration(t *testing.T) {
 			t.Errorf("iso は孤立なので excluded のはず: %+v", iso)
 		}
 
-		if report.Summary.MainSequence == nil {
-			t.Fatal("summary.main_sequence が nil")
-		}
 		if report.Summary.MainSequence.StructurallyConstrainedCount != 1 {
 			t.Errorf("structurally_constrained_count = %d, want 1 (c)", report.Summary.MainSequence.StructurallyConstrainedCount)
 		}
@@ -239,7 +238,11 @@ func TestMainSequenceIntegration(t *testing.T) {
 		if got := strings.Join(paths, ","); got != "a,b,c,d,e,iso" {
 			t.Errorf("paths = %s, want モジュールルートからの相対 (a,b,c,d,e,iso)", got)
 		}
-		if got := strings.Join(report.Summary.MainSequence.ExcludedPackages, ","); got != "iso" {
+		excluded := report.Summary.MainSequence.ExcludedPackages
+		if excluded == nil {
+			t.Fatal("excluded_packages が null")
+		}
+		if got := strings.Join(*excluded, ","); got != "iso" {
 			t.Errorf("excluded_packages = %s, want iso", got)
 		}
 	})
@@ -559,10 +562,24 @@ func TestStrictFlag_baseline(t *testing.T) {
 
 	t.Run("どのパッケージとも突き合わない baseline は stderr で知らせる", func(t *testing.T) {
 		root := committedFixtureModule(t)
-		baseline := filepath.Join(t.TempDir(), "other.json")
-		if err := os.WriteFile(baseline, []byte(`{"packages":[{"path":"x","import_path":"example.com/other/x","main_sequence":{"zone":"zone_of_pain","distance":0.67}}]}`), 0644); err != nil {
-			t.Fatalf("baseline の書き込みに失敗: %v", err)
-		}
+		// 別のモジュールを測ったレポート。x は c を import して Zone of Pain に入る
+		other := writeModule(t, map[string]string{
+			"go.mod": `module example.com/other
+
+go 1.26
+`,
+			"c/c.go": `package c
+
+func C() int { return 1 }
+`,
+			"x/x.go": `package x
+
+import "example.com/other/c"
+
+func X() int { return c.C() }
+`,
+		})
+		baseline := writeBaseline(t, other)
 
 		_, stderr := runStrictWithBaseline(t, root, baseline)
 		if !strings.Contains(stderr, "突き合いません") {
@@ -572,13 +589,29 @@ func TestStrictFlag_baseline(t *testing.T) {
 
 	t.Run("import_path の無い baseline (別の版の出力) は測る前に止める", func(t *testing.T) {
 		root := committedFixtureModule(t)
-		baseline := filepath.Join(t.TempDir(), "old.json")
-		if err := os.WriteFile(baseline, []byte(`{"packages":[{"path":"b","main_sequence":{"zone":"zone_of_pain","distance":0.67}}]}`), 0644); err != nil {
+		baseline := writeBaseline(t, root)
+		// 今のレポートから import_path だけを落とし、それを持たなかった版の出力を作る
+		var report map[string]any
+		data, err := os.ReadFile(baseline)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := json.Unmarshal(data, &report); err != nil {
+			t.Fatal(err)
+		}
+		for _, p := range report["packages"].([]any) {
+			delete(p.(map[string]any), "import_path")
+		}
+		if data, err = json.Marshal(report); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(baseline, data, 0644); err != nil {
 			t.Fatalf("baseline の書き込みに失敗: %v", err)
 		}
 
 		code, stderr := runStrictWithBaseline(t, root, baseline)
-		if code != 1 || !strings.Contains(stderr, "import_path") {
+		// テスト名が一時ディレクトリの名前に入るので、パスを除いてから見る
+		if code != 1 || !strings.Contains(strings.ReplaceAll(stderr, baseline, ""), "import_path") {
 			t.Errorf("exit code = %d, want 1 と import_path の案内\n%s", code, stderr)
 		}
 	})

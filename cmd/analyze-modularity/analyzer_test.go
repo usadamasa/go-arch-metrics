@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/usadamasa/go-arch-metrics/internal/schema"
 )
 
 // writeGoFile はテスト用の Go ソースファイルを作成する｡
@@ -817,7 +819,7 @@ func TestGenerateCrossWarnings(t *testing.T) {
 			},
 		}
 		astWarnings := []Warning{
-			{Type: "loc_outlier", Package: "pkg/big-leaf", Value: 1500, Limit: 1000, LimitSource: LOCLimitSourceMinimum, StatisticalLimit: new(200.0)},
+			{Type: "loc_outlier", Package: "pkg/big-leaf", Value: 1500, Limit: 1000, LimitSource: new(LOCLimitSourceMinimum), StatisticalLimit: new(200.0)},
 		}
 		warnings := GenerateCrossWarnings(pkg, astWarnings)
 		if len(warnings) != 1 {
@@ -827,8 +829,8 @@ func TestGenerateCrossWarnings(t *testing.T) {
 			t.Errorf("Type: got %q, want %q", warnings[0].Type, "constrained_loc_outlier")
 		}
 		// 元の loc_outlier と limit の由来を食い違わせない
-		if warnings[0].LimitSource != LOCLimitSourceMinimum || warnings[0].StatisticalLimit == nil || *warnings[0].StatisticalLimit != 200 {
-			t.Errorf("limit の由来が引き継がれていない: source=%q statistical=%v", warnings[0].LimitSource, warnings[0].StatisticalLimit)
+		if limitSourceOf(warnings[0]) != LOCLimitSourceMinimum || warnings[0].StatisticalLimit == nil || *warnings[0].StatisticalLimit != 200 {
+			t.Errorf("limit の由来が引き継がれていない: source=%q statistical=%v", limitSourceOf(warnings[0]), warnings[0].StatisticalLimit)
 		}
 		if !strings.Contains(warnings[0].Message, "(下限)") {
 			t.Errorf("message が下限による警告を示していない: %q", warnings[0].Message)
@@ -911,8 +913,8 @@ func TestGenerateWarnings_LOC閾値には下限がある(t *testing.T) {
 				if w.Limit != minLOCLimit {
 					t.Errorf("limit = %v, want %d (統計値より下限が優先される)", w.Limit, minLOCLimit)
 				}
-				if w.LimitSource != LOCLimitSourceMinimum {
-					t.Errorf("limit_source = %q, want %q", w.LimitSource, LOCLimitSourceMinimum)
+				if limitSourceOf(w) != LOCLimitSourceMinimum {
+					t.Errorf("limit_source = %q, want %q", limitSourceOf(w), LOCLimitSourceMinimum)
 				}
 				if w.StatisticalLimit == nil || *w.StatisticalLimit != 200 {
 					t.Errorf("statistical_limit = %v, want 200", w.StatisticalLimit)
@@ -948,8 +950,8 @@ func TestGenerateWarnings_LOC閾値には下限がある(t *testing.T) {
 				continue
 			}
 			found = true
-			if w.Limit != 3000 || w.LimitSource != LOCLimitSourceStatistical {
-				t.Errorf("limit = %v (%q), want 3000 (%q)", w.Limit, w.LimitSource, LOCLimitSourceStatistical)
+			if w.Limit != 3000 || limitSourceOf(w) != LOCLimitSourceStatistical {
+				t.Errorf("limit = %v (%q), want 3000 (%q)", w.Limit, limitSourceOf(w), LOCLimitSourceStatistical)
 			}
 			if w.StatisticalLimit == nil || *w.StatisticalLimit != 3000 {
 				t.Errorf("statistical_limit = %v, want 3000", w.StatisticalLimit)
@@ -964,13 +966,21 @@ func TestGenerateWarnings_LOC閾値には下限がある(t *testing.T) {
 	})
 }
 
+// limitSourceOf は w の limit_source を返す。付いていなければ空
+func limitSourceOf(w Warning) schema.WarningLimitSource {
+	if w.LimitSource == nil {
+		return ""
+	}
+	return *w.LimitSource
+}
+
 func TestNewLOCThreshold(t *testing.T) {
 	tests := []struct {
 		name            string
 		stats           Stats
 		wantStatistical float64
 		wantLimit       float64
-		wantSource      string
+		wantSource      schema.WarningLimitSource
 	}{
 		{"統計値が下限より小さい", Stats{Mean: 100, Stddev: 50}, 200, minLOCLimit, LOCLimitSourceMinimum},
 		{"統計値が下限より大きい", Stats{Mean: 2000, Stddev: 500}, 3000, 3000, LOCLimitSourceStatistical},

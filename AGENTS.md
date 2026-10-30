@@ -1,22 +1,24 @@
 # AGENTS.md
 
-Go アーキテクチャメトリクスの Claude Code plugin。skill 4 本と CLI 3 本を持つ。
+Go アーキテクチャメトリクスの Claude Code plugin。skill と CLI を持つ。
 
 ## レイアウト
 
 ```
 .claude-plugin/   plugin.json (version の実体はここ 1 箇所)。marketplace.json は usadamasa/agents-marketplace が持つ
 skills/           setup / measure / evaluate / remediate
-cmd/              analyze-arch-lint, analyze-modularity, vulncheck (いずれも package main)。
-                  vulncheck は govulncheck の組み込みで、埋め込みの roots で TLS を検証する
-flake.nix         CLI 3 本の packages.default と開発ツールの devShell (版は flake.lock が固定する)
+cmd/              CLI (いずれも package main)。
+                  vulncheck は govulncheck の組み込みで、埋め込みの roots で TLS を検証する。
+                  arch-baseline は measure skill が呼ぶ、全ツールを一通り回す CLI
+internal/schema/  CLI が出す JSON の Go の型。skills/measure/references/baseline.schema.json から生成する
+flake.nix         CLI の packages.default と開発ツールの devShell (版は flake.lock が固定する)
 .claude/skills/   develop (このリポジトリ自身の開発環境と検証)
 ```
 
 ## 検証
 
 ```sh
-task test                            # go test ./... と bats tests/
+task test                            # go test ./...
 task lint                            # 全静的解析。devShell のツールが要る
 claude plugin validate --strict .    # plugin manifest
 ```
@@ -28,10 +30,12 @@ claude plugin validate --strict .    # plugin manifest
 
 - skill 間の参照は相対パスではなく skill 名 (`go-arch-metrics:evaluate`) で書く。
   plugin のインストール先はバージョンごとに変わるので、パスは書けない
-- SKILL.md からは script を `"${CLAUDE_PLUGIN_ROOT}/skills/<name>/scripts/..."` のパスで呼ぶ
-- `baseline.sh` が出す案内も skill 名で書く。相対パスで届く references が
+- SKILL.md から script を呼ぶなら `"${CLAUDE_PLUGIN_ROOT}/skills/<name>/scripts/..."` のパスで書く
+- `arch-baseline` が出す案内も skill 名で書く。相対パスで届く references が
   measure skill 側に無いため
 - `analyze-arch-lint` の指標一覧はドキュメントに書かない。一覧は `--metrics` の出力で見る
+- arch-baseline と analyze-modularity が出す JSON のキーは `baseline.schema.json` だけで決める。
+  struct tag を手で書かず、schema を直して `task generate` で `internal/schema` を生成し直す
 
 ## 責務の分け方
 

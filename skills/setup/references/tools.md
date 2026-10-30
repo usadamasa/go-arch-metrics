@@ -7,7 +7,7 @@
 
 ## この plugin の CLI を入れる
 
-`analyze-modularity`・`analyze-arch-lint`・`vulncheck` は、この plugin のリポジトリの flake が
+この plugin の CLI は、この plugin のリポジトリの flake が
 `packages.<system>.default` として出す (x86_64-linux、aarch64-linux、aarch64-darwin)。
 nix を使うプロジェクトは flake input で参照し、devShell に足す。
 
@@ -42,7 +42,7 @@ nix を使うプロジェクトは flake input で参照し、devShell に足す
 ビルドとテストは本体のリポジトリの CI が持つ。利用側で `buildGoModule` を書いて自前でビルドしない。
 入れた直後の flake.lock は default branch の HEAD を指すので、下の「版を plugin にそろえる」で tag の commit に合わせる。
 
-3 本とも実行時に PATH のコマンドを呼ぶ。package はこれらを包まないので、利用側の devShell に並べる。
+どの CLI も実行時に PATH のコマンドを呼ぶ。package はこれらを包まないので、利用側の devShell に並べる。
 `go` を包まないのは、対象プロジェクトの `go.mod` に合った版で `go list` を走らせるため。
 
 | CLI | 実行時に要るコマンド |
@@ -50,10 +50,11 @@ nix を使うプロジェクトは flake input で参照し、devShell に足す
 | `analyze-modularity` | `go`、`git` |
 | `analyze-arch-lint` | `go`、`go-arch-lint` |
 | `vulncheck` | `go` |
+| `arch-baseline` | `go`、`golangci-lint`、`go-arch-lint`、`gosec` と上の 3 本 (PATH に無ければ tool directive から呼ぶ) |
 
 ### nix を使わないプロジェクト (go.mod の tool directive)
 
-go.mod の tool directive に足し、`go tool <name>` で呼ぶ。`baseline.sh` は PATH に無いツールを
+go.mod の tool directive に足し、`go tool <name>` で呼ぶ。`arch-baseline` は PATH に無いツールを
 tool directive から探すので、PATH に載せなくてよい。
 
 ```bash
@@ -61,6 +62,7 @@ tool directive から探すので、PATH に載せなくてよい。
 go get -tool github.com/usadamasa/go-arch-metrics/cmd/analyze-modularity@"$VERSION"
 go get -tool github.com/usadamasa/go-arch-metrics/cmd/analyze-arch-lint@"$VERSION"
 go get -tool github.com/usadamasa/go-arch-metrics/cmd/vulncheck@"$VERSION"
+go get -tool github.com/usadamasa/go-arch-metrics/cmd/arch-baseline@"$VERSION"
 ```
 
 この plugin の tag は Go の semver tag ではない (`v` を付けない CalVer)。tag 名を指定すると、その tag の commit の
@@ -69,14 +71,14 @@ CI のコマンドは `go tool vulncheck ./...` のように `go tool` を前に
 
 - 対象プロジェクトの go.mod の `go` 行は 1.26.1 以上が要る (この plugin のモジュールの要求)。
   `golang.org/x/vuln` などの依存も indirect の require として入る
-- 3 本は対象プロジェクトの go でビルドされる (この plugin の go.mod の `toolchain` 行は依存側では効かない)。
+- CLI は対象プロジェクトの go でビルドされる (この plugin の go.mod の `toolchain` 行は依存側では効かない)。
   crypto/x509 の GO-2026-6809 が直った go1.26.10 / go1.27.3 以上で動かす
 - `go-arch-lint` は PATH に置く。`analyze-arch-lint` が PATH から呼ぶので、tool directive に入れると
-  `baseline.sh` は動いても `analyze-arch-lint` が見つけられない
+  `arch-baseline` は動いても `analyze-arch-lint` が見つけられない
 
 ### 版を plugin にそろえる
 
-plugin と CLI 3 本は、同じ release の tag の commit にそろえる。tag 名は plugin の版
+plugin と CLI は、同じ release の tag の commit にそろえる。tag 名は plugin の版
 (`claude plugin list` の `go-arch-metrics@usadamasa` の `version`) と同じ。取った後の照合は、上げるときと、初めて入れた直後
 (Go は上の `go get -tool`、nix は flake input を足した直後) の両方で行う。
 
@@ -94,7 +96,7 @@ tag 名で問い合わせると、どちらもその時点の tag の commit に
 ```bash
 VERSION=2026.1018.3   # plugin の版
 
-# go.mod の tool directive に入れている (3 本は同じモジュールなので 1 回で全部上がる)
+# go.mod の tool directive に入れている (CLI は同じモジュールなので 1 回で全部上がる)
 go get github.com/usadamasa/go-arch-metrics@"$VERSION"
 
 # flake input で参照している (flake.nix の url はそのまま。flake.lock の locked だけが動く)
@@ -319,3 +321,30 @@ analyze-arch-lint --json <project-dir> | jq '.findings'
 ```
 
 `go-arch-lint mapping --json` と `go list` を呼ぶので、どちらも PATH に要る。
+
+---
+
+## arch-baseline
+
+### 概要
+
+測定に使うツールを一通り回し、標準出力にサマリ、
+JSON に各ツールの生の結果を書く CLI。`go list` のパッケージ数と `go test -cover` の平均カバレッジも
+参考値として出す (失敗しても測定は止めない)。
+
+各ツールの「指摘あり」では測定を続け、実行そのものが失敗したとき (コンパイルできない、設定の誤り、
+ツールのビルドの失敗) は理由を stderr に出して exit 1 で終わる。vulncheck が脆弱性 DB に届かないときは
+止めず、JSON の `govulncheck.status` を `unmeasured` にする。
+
+### 実行
+
+```bash
+# プロジェクトのルートの baseline.json に書く (測るたびに上書き)
+arch-baseline <project-root>
+
+# 出力先を指定する (相対パスは呼び出したディレクトリから解決する)
+arch-baseline <project-root> <output-json>
+```
+
+ほかのツールは PATH を先に見て、無ければ対象プロジェクトの go.mod の tool directive から `go tool` で呼ぶ。
+どちらにも無いツールがあれば、測る前に名前を挙げて止まる。

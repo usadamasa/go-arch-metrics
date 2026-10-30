@@ -15,6 +15,8 @@ import (
 	"strings"
 
 	"golang.org/x/tools/go/packages"
+
+	"github.com/usadamasa/go-arch-metrics/internal/schema"
 )
 
 // PackageMetrics は Robert C. Martin の Package Metrics (Ca/Ce/A/I/D) の 1 パッケージ分｡
@@ -28,14 +30,14 @@ type PackageMetrics struct {
 	Distance         float64
 }
 
-// Zone は Martin の Main Sequence に基づくパッケージの Zone 分類｡
-type Zone string
+// Zone は Martin の Main Sequence に基づくパッケージの Zone 分類。値は出力の schema が決める
+type Zone = schema.MainSequenceZone
 
 const (
-	ZoneExcluded      Zone = "excluded"
-	ZoneOfPain        Zone = "zone_of_pain"
-	ZoneOfUselessness Zone = "zone_of_uselessness"
-	ZoneMainSequence  Zone = "main_sequence"
+	ZoneExcluded      = schema.MainSequenceZoneExcluded
+	ZoneOfPain        = schema.MainSequenceZoneZoneOfPain
+	ZoneOfUselessness = schema.MainSequenceZoneZoneOfUselessness
+	ZoneMainSequence  = schema.MainSequenceZoneMainSequence
 )
 
 // classifyZone はパッケージの Zone を分類する｡
