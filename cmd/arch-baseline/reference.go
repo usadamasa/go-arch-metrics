@@ -37,7 +37,7 @@ func measureReference(w *section, target target) {
 }
 
 func goCombined(root string, args ...string) (string, error) {
-	cmd := exec.Command("go", args...) // #nosec G204 -- 呼び出し側は go list / go test の固定の引数と go list が返したパッケージだけを渡す
+	cmd := exec.Command("go", args...) // #nosec G204 G702 -- 呼び出し側は go list / go test の固定の引数と go list が返したパッケージだけを渡す
 	cmd.Dir = root
 	out, err := cmd.CombinedOutput()
 	return string(out), err
