@@ -8,43 +8,21 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/usadamasa/go-arch-metrics/internal/schema"
 )
 
-// Report はレポートの最上位構造｡
-type Report struct {
-	Packages []PackageResult `json:"packages"`
-	Summary  Summary         `json:"summary"`
-	Warnings []Warning       `json:"warnings,omitempty"`
-}
+// Report はレポートの最上位構造｡キーは schema が決める
+type Report = schema.Modularity
 
 // MainSequenceSummary は Ca/Ce/A/I/D の全パッケージ集計｡
 // actionable_* は構造制約、base から D が悪化していないもの、非揮発の Zone of Pain を除いて数える
 // (isMainSequenceActionable と同じ基準)｡
-type MainSequenceSummary struct {
-	ExcludedPackages             []string `json:"excluded_packages"`
-	StructurallyConstrainedCount int      `json:"structurally_constrained_count"`
-	BaselineNotWorsenedCount     int      `json:"baseline_not_worsened_count"`
-	NonVolatileZoneOfPainCount   int      `json:"non_volatile_zone_of_pain_count"`
-	ActionableCount              int      `json:"actionable_count"`
-	ActionableMaxDistance        *float64 `json:"actionable_max_distance,omitempty"`
-	ActionableMeanDistance       *float64 `json:"actionable_mean_distance,omitempty"`
-	VolatilityWindowCommits      int      `json:"volatility_window_commits"`
-	VolatileCommitThreshold      int      `json:"volatile_commit_threshold"`
-	VolatilityUnmeasuredReason   string   `json:"volatility_unmeasured_reason,omitempty"`
-}
+type MainSequenceSummary = schema.MainSequenceSummary
 
 // Summary は全パッケージのサマリ統計｡
 // ActionableWarnings は warnings のうち actionable なものの件数で、--strict はこれを見る｡
-type Summary struct {
-	MeanLOC            float64              `json:"mean_loc"`
-	StddevLOC          float64              `json:"stddev_loc"`
-	MeanPublicRatio    float64              `json:"mean_public_ratio"`
-	OutlierPackages    []string             `json:"outlier_packages,omitempty"`
-	TotalPackages      int                  `json:"total_packages"`
-	TotalWarnings      int                  `json:"total_warnings"`
-	ActionableWarnings int                  `json:"actionable_warnings"`
-	MainSequence       *MainSequenceSummary `json:"main_sequence"`
-}
+type Summary = schema.Summary
 
 // inferModuleRoot は引数ディレクトリから親方向に go.mod を探索してモジュールルートを返す｡
 func inferModuleRoot(args []string) string {
@@ -146,13 +124,16 @@ func main() {
 		TotalPackages:      len(packages),
 		TotalWarnings:      len(allWarnings),
 		ActionableWarnings: actionableWarnings,
-		MainSequence:       buildMainSequenceSummary(packages, history, *volatilityWindow, *volatileCommits),
+		MainSequence:       *buildMainSequenceSummary(packages, history, *volatilityWindow, *volatileCommits),
 	}
 
 	report := Report{
-		Packages: packages,
+		Packages: make([]schema.Package, len(packages)),
 		Summary:  summary,
 		Warnings: allWarnings,
+	}
+	for i, p := range packages {
+		report.Packages[i] = p.schemaPackage()
 	}
 
 	enc := json.NewEncoder(os.Stdout)
@@ -275,19 +256,22 @@ func enrichMainSequence(coupling map[string]PackageMetrics, packages []PackageRe
 // 揮発性を決めた窓・しきい値・測れなかった理由も、actionable_* の前提として一緒に載せる｡
 func buildMainSequenceSummary(packages []PackageResult, history commitHistory, volatilityWindow, volatileCommits int) *MainSequenceSummary {
 	summary := &MainSequenceSummary{
-		VolatilityWindowCommits:    volatilityWindow,
-		VolatileCommitThreshold:    volatileCommits,
-		VolatilityUnmeasuredReason: history.unmeasuredReason,
+		VolatilityWindowCommits: volatilityWindow,
+		VolatileCommitThreshold: volatileCommits,
+	}
+	if history.unmeasuredReason != "" {
+		summary.VolatilityUnmeasuredReason = new(history.unmeasuredReason)
 	}
 	var maxDist, sumDist float64
 	firstActionable := true
+	var excluded schema.MainSequenceSummaryExcludedPackages
 
 	for _, p := range packages {
 		if p.MainSequence == nil {
 			continue
 		}
 		if p.MainSequence.Zone == ZoneExcluded {
-			summary.ExcludedPackages = append(summary.ExcludedPackages, p.Path)
+			excluded = append(excluded, p.Path)
 			continue
 		}
 		if p.MainSequence.StructurallyConstrained {
@@ -319,6 +303,10 @@ func buildMainSequenceSummary(packages []PackageResult, history commitHistory, v
 		meanDist := sumDist / float64(summary.ActionableCount)
 		summary.ActionableMaxDistance = &maxDist
 		summary.ActionableMeanDistance = &meanDist
+	}
+	// 1 つも無ければ excluded_packages は null で出す
+	if excluded != nil {
+		summary.ExcludedPackages = &excluded
 	}
 
 	return summary

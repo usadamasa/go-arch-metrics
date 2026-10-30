@@ -14,19 +14,14 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/usadamasa/go-arch-metrics/internal/schema"
 )
 
 const usage = "使用方法: arch-baseline <project-root> [<output-json>]"
 
-// baseline は出力の JSON。キーは evaluate / remediate の references が読む
-type baseline struct {
-	Project      string          `json:"project"`
-	GolangciLint json.RawMessage `json:"golangci_lint"`
-	GoArchLint   json.RawMessage `json:"go_arch_lint"`
-	Gosec        json.RawMessage `json:"gosec"`
-	Modularity   json.RawMessage `json:"modularity"`
-	Govulncheck  vulnResult      `json:"govulncheck"`
-}
+// baseline は出力の JSON。キーは measure skill の baseline.schema.json が決める
+type baseline = schema.Baseline
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {

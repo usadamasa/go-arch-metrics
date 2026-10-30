@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/usadamasa/go-arch-metrics/internal/schema"
 )
 
 // 各 measure は JSON に残すツールの生の出力を返す。指摘があっても測定は続け、実行そのものが
@@ -149,31 +151,26 @@ func measureGoArchLint(w *section, t tool, root string) (json.RawMessage, error)
 	return out, nil
 }
 
-// vulnResult は govulncheck の結果。未測定を「なし」に見せないよう、3 つの状態を分けて残す
-type vulnResult struct {
-	Status   string `json:"status"`
-	ExitCode int    `json:"exit_code"`
-}
-
 // measureVulncheck は vulncheck (この plugin が govulncheck を組み込んだ CLI) を回す。exit 0 は脆弱性なし、
-// 3 は脆弱性あり、それ以外は実行できていない (脆弱性 DB に届かなかった等)。未測定でも測定は続ける
-func measureVulncheck(w *section, t tool, root string) (vulnResult, error) {
+// 3 は脆弱性あり、それ以外は実行できていない (脆弱性 DB に届かなかった等)。未測定を「なし」に見せないよう、
+// 3 つの状態を分けて残す。未測定でも測定は続ける
+func measureVulncheck(w *section, t tool, root string) (schema.VulncheckResult, error) {
 	w.println("--- govulncheck (脆弱性スキャン) ---")
 	out, rc, err := t.runCombined(root, "./...")
 	if err != nil {
-		return vulnResult{}, err
+		return schema.VulncheckResult{}, err
 	}
 	switch rc {
 	case 0:
 		w.println("govulncheck: 脆弱性なし")
-		return vulnResult{"ok", rc}, nil
+		return schema.VulncheckResult{Status: schema.VulncheckResultStatusOk, ExitCode: rc}, nil
 	case 3:
 		w.println("govulncheck: 脆弱性あり")
 		w.println(strings.TrimRight(string(out), "\n"))
-		return vulnResult{"vulnerable", rc}, nil
+		return schema.VulncheckResult{Status: schema.VulncheckResultStatusVulnerable, ExitCode: rc}, nil
 	default:
 		w.errorf("govulncheck: 未測定 (exit %d)。実行に失敗しているので脆弱性の有無は分からない。理由:\n%s\n", rc, tailLines(string(out), 5))
-		return vulnResult{"unmeasured", rc}, nil
+		return schema.VulncheckResult{Status: schema.VulncheckResultStatusUnmeasured, ExitCode: rc}, nil
 	}
 }
 
@@ -225,45 +222,23 @@ func sortedKeys[V any](m map[string]V) []string {
 	return keys
 }
 
-// modularitySummary は analyze-modularity の summary のうち、サマリに出すもの。
-type modularitySummary struct {
-	TotalPackages      int      `json:"total_packages"`
-	MeanLOC            float64  `json:"mean_loc"`
-	MeanPublicRatio    float64  `json:"mean_public_ratio"`
-	TotalWarnings      int      `json:"total_warnings"`
-	ActionableWarnings int      `json:"actionable_warnings"`
-	OutlierPackages    []string `json:"outlier_packages"`
-	MainSequence       struct {
-		ActionableCount              int      `json:"actionable_count"`
-		StructurallyConstrainedCount int      `json:"structurally_constrained_count"`
-		NonVolatileZoneOfPainCount   int      `json:"non_volatile_zone_of_pain_count"`
-		VolatilityWindowCommits      int      `json:"volatility_window_commits"`
-		VolatileCommitThreshold      int      `json:"volatile_commit_threshold"`
-		VolatilityUnmeasuredReason   string   `json:"volatility_unmeasured_reason"`
-		ActionableMaxDistance        *float64 `json:"actionable_max_distance"`
-		ActionableMeanDistance       *float64 `json:"actionable_mean_distance"`
-	} `json:"main_sequence"`
-}
-
 // measureModularity は analyze-modularity を回す。Ca/Ce の算出は go list に頼る。失敗すると stdout は空で
-// 理由が stderr に出るので、summary の有無で見分ける
-func measureModularity(w *section, t tool, root string) (json.RawMessage, error) {
+// 理由が stderr に出る。schema が required にするキーが欠けたレポートも失敗として扱う
+func measureModularity(w *section, t tool, root string) (schema.Modularity, error) {
 	w.println("--- analyze-modularity (モジュール性) ---")
-	out, rc, err := t.run(root, &w.err,root)
+	out, rc, err := t.run(root, &w.err, root)
 	if err != nil {
-		return nil, err
+		return schema.Modularity{}, err
 	}
-	var report struct {
-		Summary *modularitySummary `json:"summary"`
+	var report schema.Modularity
+	if err := json.Unmarshal(out, &report); err != nil {
+		return schema.Modularity{}, fmt.Errorf("analyze-modularity の実行に失敗しました (exit %d)。理由は上の出力を参照 (%v)", rc, err)
 	}
-	if json.Unmarshal(out, &report) != nil || report.Summary == nil {
-		return nil, fmt.Errorf("analyze-modularity の実行に失敗しました (exit %d)。理由は上の出力を参照", rc)
-	}
-	printModularity(w, report.Summary)
-	return out, nil
+	printModularity(w, &report.Summary)
+	return report, nil
 }
 
-func printModularity(w *section, s *modularitySummary) {
+func printModularity(w *section, s *schema.Summary) {
 	ms := s.MainSequence
 	w.printf("パッケージ数: %d\n", s.TotalPackages)
 	w.printf("平均 LOC: %d\n", int(s.MeanLOC))
@@ -277,8 +252,8 @@ func printModularity(w *section, s *modularitySummary) {
 	w.printf("  構造制約パッケージ数: %d\n", ms.StructurallyConstrainedCount)
 	w.printf("  非揮発の Zone of Pain (直近 %d commit で %d 回未満): %d 件\n",
 		ms.VolatilityWindowCommits, ms.VolatileCommitThreshold, ms.NonVolatileZoneOfPainCount)
-	if ms.VolatilityUnmeasuredReason != "" {
-		w.printf("  揮発性は未測定: %s\n", ms.VolatilityUnmeasuredReason)
+	if ms.VolatilityUnmeasuredReason != nil {
+		w.printf("  揮発性は未測定: %s\n", *ms.VolatilityUnmeasuredReason)
 	}
 	w.printf("  最大 Distance (アクション可能): %s\n", formatDistance(ms.ActionableMaxDistance))
 	w.printf("  平均 Distance (アクション可能): %s\n", formatDistance(ms.ActionableMeanDistance))

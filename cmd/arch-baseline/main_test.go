@@ -39,7 +39,7 @@ const (
 
 // modularityReport は analyze-modularity の警告なしのレポートで、total_packages だけを差し替える。
 func modularityReport(totalPackages int) string {
-	return fmt.Sprintf(`{"packages":[],"summary":{"mean_loc":0,"stddev_loc":0,"mean_public_ratio":0,"total_packages":%d,"total_warnings":0,"actionable_warnings":0,"main_sequence":{"excluded_packages":null,"structurally_constrained_count":0,"non_volatile_zone_of_pain_count":0,"actionable_count":0,"volatility_window_commits":200,"volatile_commit_threshold":5}}}`, totalPackages)
+	return fmt.Sprintf(`{"packages":[],"summary":{"mean_loc":0,"stddev_loc":0,"mean_public_ratio":0,"total_packages":%d,"total_warnings":0,"actionable_warnings":0,"main_sequence":{"excluded_packages":null,"structurally_constrained_count":0,"baseline_not_worsened_count":0,"non_volatile_zone_of_pain_count":0,"actionable_count":0,"volatility_window_commits":200,"volatile_commit_threshold":5}}}`, totalPackages)
 }
 
 // fixture は測定対象のモジュールと、外部ツールを差し替えるスタブの置き場。
@@ -632,7 +632,7 @@ func TestPATHにもToolDirectiveにも無いツールは両方を挙げて止ま
 func TestAnalyzeModularityのMainSequence集計をサマリに出す(t *testing.T) {
 	f := newFixture(t)
 	f.writePassingTest()
-	f.stub("analyze-modularity", 0, `{"packages":[],"summary":{"mean_loc":0,"stddev_loc":0,"mean_public_ratio":0,"total_packages":3,"total_warnings":3,"actionable_warnings":1,"main_sequence":{"excluded_packages":["cmd/app"],"structurally_constrained_count":1,"non_volatile_zone_of_pain_count":2,"actionable_count":1,"actionable_max_distance":0.7,"actionable_mean_distance":0.7,"volatility_window_commits":200,"volatile_commit_threshold":5}}}`, "")
+	f.stub("analyze-modularity", 0, `{"packages":[],"summary":{"mean_loc":0,"stddev_loc":0,"mean_public_ratio":0,"total_packages":3,"total_warnings":3,"actionable_warnings":1,"main_sequence":{"excluded_packages":["cmd/app"],"structurally_constrained_count":1,"baseline_not_worsened_count":0,"non_volatile_zone_of_pain_count":2,"actionable_count":1,"actionable_max_distance":0.7,"actionable_mean_distance":0.7,"volatility_window_commits":200,"volatile_commit_threshold":5}}}`, "")
 
 	code, out := f.measure()
 

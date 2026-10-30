@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "arch-baseline の出力",
-  "description": "arch-baseline が書く JSON。数値の読み方は go-arch-metrics:evaluate が持つ",
+  "title": "Baseline",
+  "description": "arch-baseline が書く JSON。数値の読み方は go-arch-metrics:evaluate が持つ。Go の型は internal/schema に生成する",
   "type": "object",
   "additionalProperties": false,
   "required": ["project", "golangci_lint", "go_arch_lint", "gosec", "modularity", "govulncheck"],
@@ -12,23 +12,28 @@
     },
     "golangci_lint": {
       "type": "object",
-      "description": "golangci-lint run --output.json.path stdout の出力そのまま",
-      "required": ["Issues"]
+      "description": "golangci-lint run --output.json.path stdout の出力そのまま。Issues を必ず持つ",
+      "goJSONSchema": { "type": "json.RawMessage", "imports": ["encoding/json"] }
     },
     "go_arch_lint": {
       "type": "object",
-      "description": "go-arch-lint check --json の出力そのまま",
-      "required": ["Type", "Payload"]
+      "description": "go-arch-lint check --json の出力そのまま。Type と Payload を必ず持つ",
+      "goJSONSchema": { "type": "json.RawMessage", "imports": ["encoding/json"] }
     },
     "gosec": {
       "type": "object",
-      "description": "gosec -fmt json の出力そのまま",
-      "required": ["Issues", "Stats"]
+      "description": "gosec -fmt json の出力そのまま。Issues と Stats を必ず持つ",
+      "goJSONSchema": { "type": "json.RawMessage", "imports": ["encoding/json"] }
     },
     "modularity": {
       "$ref": "#/$defs/modularity"
     },
     "govulncheck": {
+      "$ref": "#/$defs/vulncheck_result"
+    }
+  },
+  "$defs": {
+    "vulncheck_result": {
       "type": "object",
       "additionalProperties": false,
       "required": ["status", "exit_code"],
@@ -41,9 +46,7 @@
           "type": "integer"
         }
       }
-    }
-  },
-  "$defs": {
+    },
     "modularity": {
       "type": "object",
       "description": "analyze-modularity の出力そのまま",

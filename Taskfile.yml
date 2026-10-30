@@ -17,9 +17,17 @@ tasks:
       - go test -coverprofile=coverage.out ./...
       - go tool cover -func=coverage.out
 
+  generate:
+    desc: 出力の JSON schema から internal/schema の Go の型を生成し直す
+    cmds:
+      - go generate ./...
+
   lint:
     desc: Go の全静的解析を実行
     cmds:
+      # 生成した型が schema に追いついているか｡schema だけ直して生成し忘れると差分が出る
+      - task: generate
+      - git diff --exit-code -- internal/schema
       - golangci-lint run --timeout 5m ./...
       - go-arch-lint check
       # go-arch-lint はコードが設定に違反していないかしか見ない｡設定そのものが

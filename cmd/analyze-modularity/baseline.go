@@ -34,9 +34,10 @@ func loadBaseline(path string) (map[string]float64, error) {
 	if err != nil {
 		return nil, fmt.Errorf("baseline を読めません: %w", err)
 	}
+	// schema が required にするキーが無いと Unmarshal が落ちる。版の違うレポートを渡したときもここに来る
 	var report Report
 	if err := json.Unmarshal(data, &report); err != nil {
-		return nil, fmt.Errorf("baseline の JSON を読めません (%s): %w", path, err)
+		return nil, fmt.Errorf("baseline の JSON を読めません (%s)。base も同じ版の analyze-modularity で測る: %w", path, err)
 	}
 
 	distances := make(map[string]float64, len(report.Packages))

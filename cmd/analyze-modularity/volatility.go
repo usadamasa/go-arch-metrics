@@ -11,15 +11,17 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/usadamasa/go-arch-metrics/internal/schema"
 )
 
-// Volatility はパッケージの変更頻度の分類｡
-type Volatility string
+// Volatility はパッケージの変更頻度の分類。値は出力の schema が決める
+type Volatility = schema.MainSequenceVolatility
 
 const (
-	VolatilityVolatile    Volatility = "volatile"
-	VolatilityNonVolatile Volatility = "non_volatile"
-	VolatilityUnmeasured  Volatility = "unmeasured"
+	VolatilityVolatile    = schema.MainSequenceVolatilityVolatile
+	VolatilityNonVolatile = schema.MainSequenceVolatilityNonVolatile
+	VolatilityUnmeasured  = schema.MainSequenceVolatilityUnmeasured
 )
 
 // 揮発性の既定値｡Martin (Agile PPP ch.28) は「非揮発」の数値を示していないので目安｡
