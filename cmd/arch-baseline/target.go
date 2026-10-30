@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"path/filepath"
 
@@ -46,10 +47,22 @@ func (t target) dropEntries(obj map[string]json.RawMessage, key string, file fun
 	if dropped == 0 {
 		return len(remaining), 0, nil
 	}
-	if obj[key], err = json.Marshal(remaining); err != nil {
+	if obj[key], err = marshal(remaining); err != nil {
 		return 0, 0, err
 	}
 	return len(remaining), dropped, nil
+}
+
+// marshal は writeJSON と同じく HTML の文字をエスケープせずに書く。json.Marshal は RawMessage の中身まで
+// エスケープし直すので使わない
+func marshal(v any) (json.RawMessage, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		return nil, err
+	}
+	return bytes.TrimSuffix(buf.Bytes(), []byte("\n")), nil
 }
 
 // stringAt は JSON object を keys の順にたどった文字列を返す。たどれなければ空
@@ -79,7 +92,7 @@ func (t target) filterGolangci(raw json.RawMessage) (json.RawMessage, error) {
 	if _, dropped, err := t.dropEntries(obj, "Issues", stringAt("Pos", "Filename")); err != nil || dropped == 0 {
 		return raw, err
 	}
-	return json.Marshal(obj)
+	return marshal(obj)
 }
 
 // filterGosec は gosec の Issues から ignore されたファイルの指摘を除き、Stats.found を残った数にそろえる。
@@ -100,10 +113,10 @@ func (t target) filterGosec(raw json.RawMessage) (json.RawMessage, error) {
 	if stats["found"], err = json.Marshal(kept); err != nil {
 		return nil, err
 	}
-	if obj["Stats"], err = json.Marshal(stats); err != nil {
+	if obj["Stats"], err = marshal(stats); err != nil {
 		return nil, err
 	}
-	return json.Marshal(obj)
+	return marshal(obj)
 }
 
 // filterGoArchLint は go-arch-lint の 3 種の違反から ignore されたファイルのものを除き、ArchHasWarnings を
@@ -141,8 +154,8 @@ func (t target) filterGoArchLint(raw json.RawMessage) (json.RawMessage, error) {
 	if payload["ArchHasWarnings"], err = json.Marshal(totalKept > 0); err != nil {
 		return nil, err
 	}
-	if obj["Payload"], err = json.Marshal(payload); err != nil {
+	if obj["Payload"], err = marshal(payload); err != nil {
 		return nil, err
 	}
-	return json.Marshal(obj)
+	return marshal(obj)
 }
