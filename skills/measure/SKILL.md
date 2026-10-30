@@ -35,7 +35,7 @@ go tool arch-baseline ./ [<output-json>]  # 対象プロジェクトの go.mod �
 
 1 つめの引数は Go プロジェクトのルート (`go.mod` があるディレクトリ)。2 つめは JSON の出力先で、
 省くとルートの `baseline.json` に書く。
-`go` は PATH に要る。ほかのツールは PATH を先に見て、無ければ対象プロジェクトの go.mod の
+`go` と `git` は PATH に要る。ほかのツールは PATH を先に見て、無ければ対象プロジェクトの go.mod の
 tool directive から `go tool` で呼ぶ。どちらにも無いツールがあればエラー終了する。
 ツールの実行そのものが失敗したとき (コンパイルできない、設定の誤り) も、理由を stderr に出して非 0 で終わる。
 
@@ -61,6 +61,17 @@ CI で base と比べる組み方は `go-arch-metrics:setup` の `references/ci-
 govulncheck は plugin が組み込んだ `vulncheck` で回す。埋め込みの roots で TLS を検証するので、
 Claude Code の sandbox の中でも vuln.go.dev に届く。それでも「未測定」になったら DB に届いていない
 (ネットワークが無い等) ので、JSON の `govulncheck.status` が `unmeasured` のものを「脆弱性なし」と読まない。
+
+gosec も plugin に組み込んで回す。版は plugin が決め、JSON の `gosec.GosecVersion` に残る。
+
+## 測定対象
+
+測定の結果には、git が ignore するディレクトリとファイルは入らない。
+ただし脆弱性 (vulncheck) は、追跡されるパッケージの中にある ignore されたファイルの分も数える。
+`go build` はそのファイルもバイナリに入れるため。
+
+型検査は ignore されたファイルも含めて行う。そこがコンパイルできないと、ほかのコンパイルエラーと同じく測定を止める。
+git リポジトリの外では何も除かずに測り、その旨を stderr に 1 行出す。
 
 ## 対象メトリクス早見表
 

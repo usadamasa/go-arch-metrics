@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -202,6 +203,53 @@ func TestMainSequenceIntegration(t *testing.T) {
 			if filepath.Base(p.Path) == "c" && p.MainSequence.AfferentCoupling != 3 {
 				t.Errorf("c.Ca = %d, want 3 (a, b, d。gitignore 済みの tmp/x は数えない)", p.MainSequence.AfferentCoupling)
 			}
+		}
+	})
+
+	t.Run("追跡パッケージの中で gitignore 済みのファイルは数えない", func(t *testing.T) {
+		report := func(withExtra bool) map[string]schema.Package {
+			root := writeFixtureModule(t)
+			initGitRepo(t, root, "/b/extra.go\n")
+			if withExtra {
+				// コンパイルはされるが構成管理の外。b から iso への参照も、exported の Extra も数えない
+				extra := "package b\n\nimport \"example.com/fx/iso\"\n\nfunc Extra() { iso.Iso() }\n\nfunc helper() {}\n"
+				if err := os.WriteFile(filepath.Join(root, "b", "extra.go"), []byte(extra), 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			out, err := exec.Command("go", "run", ".", root).Output()
+			if err != nil {
+				t.Fatalf("実行失敗: %v", err)
+			}
+			var r Report
+			if err := json.Unmarshal(out, &r); err != nil {
+				t.Fatalf("JSON パース失敗: %v", err)
+			}
+			byPath := make(map[string]schema.Package, len(r.Packages))
+			for _, p := range r.Packages {
+				byPath[p.Path] = p
+			}
+			return byPath
+		}
+		without, with := report(false), report(true)
+
+		b, bWant := with["b"], without["b"]
+		if b.Files != bWant.Files || b.LOC != bWant.LOC || b.ExportedFuncs != bWant.ExportedFuncs || b.UnexportedFuncs != bWant.UnexportedFuncs {
+			t.Errorf("b の数が ignore されたファイルの分だけ増えている: got files=%d loc=%d exported=%d unexported=%d, want %d %d %d %d",
+				b.Files, b.LOC, b.ExportedFuncs, b.UnexportedFuncs, bWant.Files, bWant.LOC, bWant.ExportedFuncs, bWant.UnexportedFuncs)
+		}
+		if slices.Contains(b.UnreferencedExportedSymbols, "Extra") {
+			t.Errorf("ignore されたファイルの Extra が未参照の exported に出ている: %v", b.UnreferencedExportedSymbols)
+		}
+		if b.MainSequence.EfferentCoupling != 1 {
+			t.Errorf("b.Ce = %d, want 1 (ignore されたファイルの iso への参照は数えない)", b.MainSequence.EfferentCoupling)
+		}
+		iso := with["iso"]
+		if iso.MainSequence.AfferentCoupling != 0 || iso.MainSequence.Zone != ZoneExcluded {
+			t.Errorf("iso: Ca=%d zone=%s, want Ca=0 excluded", iso.MainSequence.AfferentCoupling, iso.MainSequence.Zone)
+		}
+		if !slices.Contains(iso.UnreferencedExportedSymbols, "Iso") {
+			t.Errorf("ignore されたファイルからしか参照されない Iso は未参照のはず: %v", iso.UnreferencedExportedSymbols)
 		}
 	})
 

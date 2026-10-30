@@ -1,13 +1,75 @@
 package main
 
 import (
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
 	"testing"
 )
+
+// TestCollectGraphIgnoresGitIgnored は git が ignore するディレクトリとファイルを component の対応にも
+// import の集計にも入れないことを確かめる。go-arch-lint mapping はスタブで、ignore されたファイルも返す。
+func TestCollectGraphIgnoresGitIgnored(t *testing.T) {
+	root := t.TempDir()
+	files := map[string]string{
+		"go.mod":     "module example.com/fx\n\ngo 1.26\n",
+		"a/a.go":     "package a\n\nimport _ \"example.com/fx/b\"\n",
+		"a/extra.go": "package a\n\nimport _ \"example.com/fx/c\"\n",
+		"b/b.go":     "package b\n",
+		"c/c.go":     "package c\n",
+		"work/w.go":  "package work\n\nimport _ \"example.com/fx/a\"\n",
+		".gitignore": "/work/\n/a/extra.go\n",
+	}
+	for name, content := range files {
+		path := filepath.Join(root, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if out, err := exec.Command("git", "-C", root, "init", "-q").CombinedOutput(); err != nil {
+		t.Fatalf("git init 失敗: %v\n%s", err, out)
+	}
+
+	mapping := fmt.Sprintf(`{"Payload":{"ProjectDirectory":%q,"ModuleName":"example.com/fx","MappingGrouped":[`+
+		`{"ComponentName":"app","FileNames":[%q,%q]},`+
+		`{"ComponentName":"lib","FileNames":[%q]},`+
+		`{"ComponentName":"work","FileNames":[%q]},`+
+		`{"ComponentName":"extra","FileNames":[%q]}]}}`,
+		root, filepath.Join(root, "a", "extra.go"), filepath.Join(root, "a", "a.go"),
+		filepath.Join(root, "b", "b.go"), filepath.Join(root, "work", "w.go"), filepath.Join(root, "a", "extra.go"))
+	bin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, "mapping.json"), []byte(mapping), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stub := "#!/bin/sh\ncat '" + filepath.Join(bin, "mapping.json") + "'\n"
+	if err := os.WriteFile(filepath.Join(bin, "go-arch-lint"), []byte(stub), 0o700); err != nil { // #nosec G306 -- テストのスタブは実行権限が要る
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	g, err := collectGraph(root, ".go-arch-lint.yml")
+	if err != nil {
+		t.Fatalf("collectGraph: %v", err)
+	}
+
+	want := map[string][]string{"app": {"a"}, "lib": {"b"}}
+	if !reflect.DeepEqual(g.componentPkgs, want) {
+		t.Errorf("componentPkgs = %v, want %v (ignore されたファイルだけの component は空)", g.componentPkgs, want)
+	}
+	if _, ok := g.imports["work"]; ok {
+		t.Errorf("ignore された work が import の集計に入っている: %v", g.imports)
+	}
+	if !slices.Equal(g.imports["a"], []string{"b"}) {
+		t.Errorf("imports[a] = %v, want [b] (ignore された extra.go の c は数えない)", g.imports["a"])
+	}
+}
 
 func writeArchFile(t *testing.T, body string) string {
 	t.Helper()
@@ -105,19 +167,18 @@ func TestLoadConfigMissingFile(t *testing.T) {
 	}
 }
 
-// TestParseGoListRootPackage はモジュールルート直下のパッケージを go-arch-lint mapping と
+// TestNormalizeImportsRootPackage はモジュールルート直下のパッケージを go-arch-lint mapping と
 // 同じ "." で表すことを確かめる｡キーが食い違うと、ルートの main は component に属さない
 // ことになり、その import も辺の裏付けに数えられない｡
-func TestParseGoListRootPackage(t *testing.T) {
+func TestNormalizeImportsRootPackage(t *testing.T) {
 	const module = "example.com/app"
-	line := func(fields ...string) string { return strings.Join(fields, goListSep) }
-	listed := strings.Join([]string{
-		line(module, module+"/cmd,"+module+"/internal/version,fmt", "", ""),
-		line(module+"/cmd", "github.com/spf13/cobra", module, ""),
-		line(module+"/internal/version", "", "", ""),
-	}, "\n")
+	pkgs := []packageImports{
+		{importPath: module, imports: []string{module + "/cmd", module + "/internal/version", "fmt"}},
+		{importPath: module + "/cmd", imports: []string{"github.com/spf13/cobra"}, testImports: []string{module}},
+		{importPath: module + "/internal/version"},
+	}
 
-	imports, testImports := parseGoList(listed, module)
+	imports, testImports := normalizeImports(pkgs, module)
 
 	wantImports := map[string][]string{
 		".":                {"cmd", "internal/version", "fmt"},

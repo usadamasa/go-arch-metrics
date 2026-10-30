@@ -23,6 +23,11 @@ vendors:
   # cmd/analyze-modularity が外からの参照を型情報で解くため
   packages:
     in: golang.org/x/tools/go/packages
+  # cmd/arch-baseline が gosec を組み込みで回すため
+  gosec:
+    in:
+      - github.com/securego/gosec/v2
+      - github.com/securego/gosec/v2/**
 
 deps:
   # shared_internal は entry を持たない = 標準ライブラリ以外に依存できない
@@ -34,3 +39,4 @@ deps:
       - vuln
       - x509roots
       - packages
+      - gosec

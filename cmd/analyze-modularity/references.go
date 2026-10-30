@@ -2,11 +2,14 @@ package main
 
 import (
 	"fmt"
+	"go/token"
 	"go/types"
 	"slices"
 	"strings"
 
 	"golang.org/x/tools/go/packages"
+
+	"github.com/usadamasa/go-arch-metrics/internal/tracked"
 )
 
 // exportedUsage はパッケージの exported のうち、外から参照されないものの名前｡
@@ -31,11 +34,11 @@ const (
 // analyzeExportedReferences は listed の main でないパッケージごとに、外から参照されない exported を返す｡
 // 判定の軸は「unexport しても他の挙動が変わらないか」で、規則とその理由は
 // go-arch-metrics:evaluate の references/thresholds.md に置く｡
-// loaded は loadTypedPackages の結果｡
-func analyzeExportedReferences(loaded []*packages.Package, listed []listedPackage) map[string]exportedUsage {
-	tracked := make(map[string]bool, len(listed))
-	for _, p := range listed {
-		tracked[p.ImportPath] = true
+// loaded は loadTypedPackages の結果｡git が ignore するファイルにある参照と exported は数えない｡
+func analyzeExportedReferences(loaded []*packages.Package, sel tracked.Selection) map[string]exportedUsage {
+	inSelection := make(map[string]bool, len(sel.Packages))
+	for _, p := range sel.Packages {
+		inSelection[p.ImportPath] = true
 	}
 
 	c := referenceCollector{
@@ -44,20 +47,31 @@ func analyzeExportedReferences(loaded []*packages.Package, listed []listedPackag
 	}
 	for _, p := range loaded {
 		// p.test は go test が生成する main で、利用者のコードではない
-		if strings.HasSuffix(p.ID, ".test") || !tracked[strings.TrimSuffix(p.PkgPath, "_test")] {
+		if strings.HasSuffix(p.ID, ".test") || !inSelection[strings.TrimSuffix(p.PkgPath, "_test")] {
 			continue
 		}
-		c.collect(p)
+		c.collect(p, ignoredPositions(p, sel))
 	}
 
 	result := make(map[string]exportedUsage)
 	for _, p := range loaded {
-		if p.ID != p.PkgPath || p.Name == "main" || !tracked[p.PkgPath] {
+		if p.ID != p.PkgPath || p.Name == "main" || !inSelection[p.PkgPath] {
 			continue
 		}
-		result[p.PkgPath] = c.usageOf(p.Types)
+		result[p.PkgPath] = c.usageOf(p.Types, ignoredPositions(p, sel))
 	}
 	return result
+}
+
+// ignoredPositions は p の位置が git が ignore するファイルの中かを返す関数を作る｡
+func ignoredPositions(p *packages.Package, sel tracked.Selection) func(token.Pos) bool {
+	ignored := make(map[*token.File]bool)
+	for _, file := range p.Syntax {
+		if f := p.Fset.File(file.Pos()); sel.Ignored(f.Name()) {
+			ignored[f] = true
+		}
+	}
+	return func(pos token.Pos) bool { return ignored[p.Fset.File(pos)] }
 }
 
 // loadTypedPackages は moduleRoot のパッケージをテストを含めて型検査して返す｡
@@ -88,14 +102,14 @@ type referenceCollector struct {
 	references map[string]map[string]referenceKind
 }
 
-// collect は p の識別子が指す、他パッケージのオブジェクトを参照として記録する｡
-func (c *referenceCollector) collect(p *packages.Package) {
+// collect は p の識別子が指す、他パッケージのオブジェクトを参照として記録する｡ignored な位置の識別子は除く｡
+func (c *referenceCollector) collect(p *packages.Package, ignored func(token.Pos) bool) {
 	kind := referencedFromOutside
 	if p.ID != p.PkgPath && strings.HasSuffix(p.PkgPath, "_test") {
 		kind = referencedFromOwnXTest
 	}
-	for _, obj := range p.TypesInfo.Uses {
-		if obj.Pkg() == nil || obj.Pkg().Path() == p.PkgPath {
+	for id, obj := range p.TypesInfo.Uses {
+		if ignored(id.Pos()) || obj.Pkg() == nil || obj.Pkg().Path() == p.PkgPath {
 			continue
 		}
 		// 外部テストが参照する自パッケージ以外のものは、他パッケージのテストからの参照になる
@@ -223,10 +237,11 @@ func (c *referenceCollector) markIfIn(path string, obj *types.TypeName, kind ref
 	}
 }
 
-// usageOf は pkg の exported を、集めた参照の強さで分類する｡interface のために残すメソッドは数えない｡
-func (c *referenceCollector) usageOf(pkg *types.Package) exportedUsage {
+// usageOf は pkg の exported を、集めた参照の強さで分類する｡interface のために残すメソッドと、
+// ignored な位置で宣言されたものは数えない｡
+func (c *referenceCollector) usageOf(pkg *types.Package, ignored func(token.Pos) bool) exportedUsage {
 	var usage exportedUsage
-	for key, method := range exportedSymbols(pkg) {
+	for key, method := range exportedSymbols(pkg, ignored) {
 		if method != nil && c.needed[methodSignature(method)] {
 			continue
 		}
@@ -245,11 +260,16 @@ func (c *referenceCollector) usageOf(pkg *types.Package) exportedUsage {
 
 // exportedSymbols は pkg の package scope にある exported な func と type、および exported なメソッドを返す｡
 // 値はメソッドならその *types.Func で、func と type なら nil｡const と var と struct のフィールドは数えない｡
-func exportedSymbols(pkg *types.Package) map[string]*types.Func {
+// ignored な位置で宣言されたものは返さない｡
+func exportedSymbols(pkg *types.Package, ignored func(token.Pos) bool) map[string]*types.Func {
 	symbols := make(map[string]*types.Func)
 	scope := pkg.Scope()
 	for _, name := range scope.Names() {
-		switch obj := scope.Lookup(name).(type) {
+		obj := scope.Lookup(name)
+		if ignored(obj.Pos()) {
+			continue
+		}
+		switch obj := obj.(type) {
 		case *types.Func:
 			if obj.Exported() {
 				symbols[name] = nil
@@ -264,7 +284,7 @@ func exportedSymbols(pkg *types.Package) map[string]*types.Func {
 			}
 			// unexported な型の exported メソッドも、外へ返した値から呼べるので数える
 			for method := range named.Methods() {
-				if method.Exported() {
+				if method.Exported() && !ignored(method.Pos()) {
 					symbols[name+"."+method.Name()] = method
 				}
 			}

@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -33,7 +34,6 @@ func TestMain(m *testing.M) {
 
 const (
 	emptyGolangci   = `{"Issues":[],"Report":{}}`
-	emptyGosec      = `{"Golang errors":{},"Issues":[],"Stats":{"files":1,"lines":3,"nosec":0,"found":0}}`
 	emptyGoArchLint = `{"Type":"models.Check","Payload":{"ArchHasWarnings":false,"ArchWarningsDeps":[],"ArchWarningsNotMatched":[],"ArchWarningsDeepScan":[]}}`
 )
 
@@ -49,7 +49,7 @@ type fixture struct {
 	project string
 }
 
-// newFixture は全ツールのスタブを「指摘なし」で置き、測定対象のモジュールを作る。
+// newFixture は外部ツールのスタブを「指摘なし」で置き、測定対象のモジュールを作る。
 // PATH はスタブと go と標準コマンドだけに絞る。開発機の PATH にある本物の vulncheck などを拾わないため。
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
@@ -61,7 +61,6 @@ func newFixture(t *testing.T) *fixture {
 		}
 	}
 	f.stub("golangci-lint", 0, emptyGolangci, "")
-	f.stub("gosec", 0, emptyGosec, "")
 	f.stubGoArchLint(0, emptyGoArchLint, "")
 	f.stub("vulncheck", 0, "", "")
 	f.stub("analyze-modularity", 0, modularityReport(0), "")
@@ -114,13 +113,33 @@ func (f *fixture) writeStub(name, guard string, rc int, stdout, stderr string) {
 		}
 	}
 	script := fmt.Sprintf(`#!/bin/sh
+printf '%%s\n' "$@" > '%s.args'
 %scat '%s.out'
 cat '%s.err' >&2
 exit %d
-`, guard, base, base, rc)
+`, base, guard, base, base, rc)
 	if err := os.WriteFile(base, []byte(script), 0o755); err != nil { // #nosec G306 -- テストのスタブは実行権限が要る
 		f.t.Fatal(err)
 	}
+}
+
+// args は name のスタブが最後に受けた引数を返す。
+func (f *fixture) args(name string) []string {
+	f.t.Helper()
+	data, err := os.ReadFile(filepath.Join(f.stubBin, name+".args"))
+	if err != nil {
+		f.t.Fatalf("%s が呼ばれていない: %v", name, err)
+	}
+	return strings.Split(strings.TrimSuffix(string(data), "\n"), "\n")
+}
+
+// initGit は project を git リポジトリにし、.gitignore を置く。
+func (f *fixture) initGit(gitignore string) {
+	f.t.Helper()
+	if out, err := exec.Command("git", "-C", f.project, "init", "-q").CombinedOutput(); err != nil {
+		f.t.Fatalf("git init 失敗: %v\n%s", err, out)
+	}
+	f.write(".gitignore", gitignore)
 }
 
 // removeStub は PATH からスタブを消す。
@@ -546,43 +565,43 @@ func TestGolangciLintが対象コードをコンパイルできなければ理�
 func TestGosecが対象コードをコンパイルできなければ理由を出して止まる(t *testing.T) {
 	f := newFixture(t)
 	f.writePassingTest()
-	// コンパイルできないと "Golang errors" に理由を入れて exit 1 する。そのパッケージは解析しない
-	f.stub("gosec", 1, `{"Golang errors":{"/p/a.go":[{"line":2,"column":23,"error":"undefined: undefinedThing"}]},"Issues":[],"Stats":{"files":1,"lines":2,"nosec":0,"found":0}}`, "")
+	// コンパイルできないパッケージは解析されず、指摘が少なく見える
+	f.write("broken.go", "package fixture\n\nfunc Broken() { undefinedThing() }\n")
 
 	code, out := f.measure()
 
 	assertFailed(t, code, out)
-	assertContains(t, out, "gosec が対象のコードをコンパイルできませんでした", "/p/a.go:2:23: undefined: undefinedThing")
+	assertContains(t, out, "gosec が対象のコードをコンパイルできませんでした", "broken.go:3:17: undefined: undefinedThing")
 	f.assertNoDefaultJSON()
 }
 
 func TestGosecの指摘は件数で出しJSONに残して測定を続ける(t *testing.T) {
 	f := newFixture(t)
 	f.writePassingTest()
-	// 指摘があると gosec は JSON を出したうえで exit 1 する
-	f.stub("gosec", 1, `{"Golang errors":{},"Issues":[{"rule_id":"G204","details":"Subprocess launched with variable"}],"Stats":{"files":1,"lines":3,"nosec":0,"found":1}}`, "")
+	f.write("sec.go", "package fixture\n\nimport \"crypto/md5\"\n\nfunc Sum() [16]byte { return md5.Sum(nil) }\n")
 
 	code, out := f.measure()
 
 	assertCode(t, code, 0, out)
-	assertContains(t, out, "セキュリティ指摘数: 1", "G204: 1")
+	assertContains(t, out, "セキュリティ指摘数: 2", "G401: 1", "G501: 1")
 	issues, _ := f.result(f.defaultJSON(), "gosec", "Issues").([]any)
-	if len(issues) != 1 {
-		t.Errorf("gosec.Issues = %v, want 1 件", issues)
+	if len(issues) != 2 {
+		t.Errorf("gosec.Issues = %v, want 2 件", issues)
+	}
+	// gosec は plugin に組み込んだ版で回すので、その版を JSON に残す
+	if version, _ := f.result(f.defaultJSON(), "gosec", "GosecVersion").(string); !strings.HasPrefix(version, "v2.") {
+		t.Errorf("gosec.GosecVersion = %q, want v2.x", version)
 	}
 }
 
-func TestGosecが実行に失敗したら理由を出して止まる(t *testing.T) {
+func TestGosecはPATHに無くても組み込みで回す(t *testing.T) {
 	f := newFixture(t)
 	f.writePassingTest()
-	// 指摘ありと同じ exit 1 だが、stdout にレポートが出ず理由は stderr に出る
-	f.stub("gosec", 1, "", "[gosec] No packages found")
 
 	code, out := f.measure()
 
-	assertFailed(t, code, out)
-	assertContains(t, out, "gosec の実行に失敗しました (exit 1)", "No packages found")
-	f.assertNoDefaultJSON()
+	assertCode(t, code, 0, out)
+	assertContains(t, out, "セキュリティ指摘数: 0")
 }
 
 func TestGoToolで呼ぶツールのビルドが失敗したら理由を出して止まる(t *testing.T) {
@@ -627,6 +646,123 @@ func TestPATHにもToolDirectiveにも無いツールは両方を挙げて止ま
 
 	assertFailed(t, code, out)
 	assertContains(t, out, "vulncheck が PATH にも go.mod の tool directive にも見つかりません")
+}
+
+// ignoredFixture は git が ignore するディレクトリ work とファイル extra.go を持つ測定対象を作る。
+// work のテストは落ちるので、go test の対象に入るとカバレッジが測れなくなる。
+func ignoredFixture(t *testing.T) *fixture {
+	t.Helper()
+	f := newFixture(t)
+	f.writePassingTest()
+	f.initGit("/work/\n/extra.go\n")
+	f.write("work/w.go", "package work\n\nimport \"crypto/md5\"\n\nfunc W() [16]byte { return md5.Sum(nil) }\n")
+	f.write("work/w_test.go", "package work\n\nimport \"testing\"\n\nfunc TestW(t *testing.T) { t.Fatal(\"ignored\") }\n")
+	f.write("extra.go", "package fixture\n\nimport \"crypto/sha1\"\n\nfunc Extra() [20]byte { _ = Answer(); return sha1.Sum(nil) }\n")
+	return f
+}
+
+func Test測定はGitが追跡するパッケージだけをツールへ渡す(t *testing.T) {
+	f := ignoredFixture(t)
+
+	code, out := f.measure()
+
+	assertCode(t, code, 0, out)
+	for _, name := range []string{"golangci-lint", "vulncheck"} {
+		args := f.args(name)
+		if !slices.Contains(args, ".") || slices.Contains(args, "./...") || slices.Contains(args, "./work") {
+			t.Errorf("%s の引数 = %v, want 追跡するパッケージ (.) だけ", name, args)
+		}
+	}
+	assertContains(t, out, "パッケージ数: 1", "平均カバレッジ:")
+}
+
+func Test追跡パッケージ内でignoreされたファイルはカバレッジに数えない(t *testing.T) {
+	f := ignoredFixture(t)
+
+	code, out := f.measure()
+
+	assertCode(t, code, 0, out)
+	// テストされない Extra は ignore された extra.go にあるので、追跡されるファイルは全部通る
+	assertContains(t, out, "平均カバレッジ: 100.0%")
+}
+
+func Test追跡パッケージ内でignoreされたファイルの指摘は数えずJSONからも除く(t *testing.T) {
+	f := ignoredFixture(t)
+	f.stub("golangci-lint", 1, `{"Issues":[`+
+		`{"FromLinter":"gocognit","Text":"cognitive complexity 31 > 20","Pos":{"Filename":"fixture.go"}},`+
+		`{"FromLinter":"funlen","Text":"ignored file","Pos":{"Filename":"extra.go"}},`+
+		`{"FromLinter":"funlen","Text":"ignored dir","Pos":{"Filename":"work/w.go"}}],"Report":{}}`, "")
+	// gosec は組み込みで、追跡される sec.go の md5 (G401、G501) だけを数える。
+	// ignore された extra.go の sha1 (G401、G505) と work/w.go の md5 は数えない
+	f.write("sec.go", "package fixture\n\nimport \"crypto/md5\"\n\nfunc Sum() [16]byte { return md5.Sum(nil) }\n")
+	f.stubGoArchLint(1, `{"Type":"models.Check","Payload":{"ArchHasWarnings":true,"ArchWarningsDeps":[`+
+		`{"ComponentName":"domain","FileAbsolutePath":"`+filepath.Join(f.project, "fixture.go")+`","ResolvedImportName":"example.com/infra"},`+
+		`{"ComponentName":"domain","FileAbsolutePath":"`+filepath.Join(f.project, "extra.go")+`","ResolvedImportName":"example.com/ignored"}],`+
+		`"ArchWarningsNotMatched":[{"FileAbsolutePath":"`+filepath.Join(f.project, "work", "w.go")+`"}],`+
+		`"ArchWarningsDeepScan":[{"Dependency":{"Injection":{"File":"`+filepath.Join(f.project, "extra.go")+`"}}}]}}`, "")
+
+	code, out := f.measure()
+
+	assertCode(t, code, 0, out)
+	assertContains(t, out, "合計違反数: 1", "gocognit: 1", "セキュリティ指摘数: 2", "G401: 1", "G501: 1",
+		"依存方向違反数: 1", "どの component にも属さないファイル: 0", "deepScan 違反数: 0")
+	assertNotContains(t, out, "funlen")
+	assertNotContains(t, out, "example.com/ignored")
+	assertNotContains(t, out, "G505")
+
+	if issues, _ := f.result(f.defaultJSON(), "golangci_lint", "Issues").([]any); len(issues) != 1 {
+		t.Errorf("golangci_lint.Issues = %v, want 1 件", issues)
+	}
+	// 除いた後の JSON もツールのメッセージの > をエスケープせずに残す
+	if raw, _ := os.ReadFile(f.defaultJSON()); !bytes.Contains(raw, []byte("31 > 20")) {
+		t.Errorf("JSON の > がエスケープされている\n%s", raw)
+	}
+	if issues, _ := f.result(f.defaultJSON(), "gosec", "Issues").([]any); len(issues) != 2 {
+		t.Errorf("gosec.Issues = %v, want 2 件", issues)
+	}
+	if found := f.result(f.defaultJSON(), "gosec", "Stats", "found"); found != 2.0 {
+		t.Errorf("gosec.Stats.found = %v, want 2 (Issues の件数とそろえる)", found)
+	}
+	// 解析したファイルは追跡される fixture.go と sec.go だけ。テストファイルは CLI の既定どおり解析しない
+	if files := f.result(f.defaultJSON(), "gosec", "Stats", "files"); files != 2.0 {
+		t.Errorf("gosec.Stats.files = %v, want 2 (ignore された extra.go を数えない)", files)
+	}
+	payload := []string{"go_arch_lint", "Payload"}
+	if deps, _ := f.result(f.defaultJSON(), append(payload, "ArchWarningsDeps")...).([]any); len(deps) != 1 {
+		t.Errorf("ArchWarningsDeps = %v, want 1 件", deps)
+	}
+	if notMatched, _ := f.result(f.defaultJSON(), append(payload, "ArchWarningsNotMatched")...).([]any); len(notMatched) != 0 {
+		t.Errorf("ArchWarningsNotMatched = %v, want 0 件", notMatched)
+	}
+	if deepScan, _ := f.result(f.defaultJSON(), append(payload, "ArchWarningsDeepScan")...).([]any); len(deepScan) != 0 {
+		t.Errorf("ArchWarningsDeepScan = %v, want 0 件", deepScan)
+	}
+}
+
+func Test残る指摘が無ければGoArchLintのArchHasWarningsをfalseにする(t *testing.T) {
+	f := ignoredFixture(t)
+	f.stubGoArchLint(1, `{"Type":"models.Check","Payload":{"ArchHasWarnings":true,"ArchWarningsDeps":[],`+
+		`"ArchWarningsNotMatched":[{"FileAbsolutePath":"`+filepath.Join(f.project, "work", "w.go")+`"}],"ArchWarningsDeepScan":[]}}`, "")
+
+	code, out := f.measure()
+
+	assertCode(t, code, 0, out)
+	if got := f.result(f.defaultJSON(), "go_arch_lint", "Payload", "ArchHasWarnings"); got != false {
+		t.Errorf("ArchHasWarnings = %v, want false", got)
+	}
+}
+
+func TestGitリポジトリでなければその旨を出してモジュール全体を測る(t *testing.T) {
+	f := newFixture(t)
+	f.writePassingTest()
+
+	code, out := f.measure()
+
+	assertCode(t, code, 0, out)
+	assertContains(t, out, "git リポジトリではないので .gitignore は見ません")
+	if args := f.args("golangci-lint"); !slices.Contains(args, ".") {
+		t.Errorf("golangci-lint の引数 = %v, want .", args)
+	}
 }
 
 func TestAnalyzeModularityのMainSequence集計をサマリに出す(t *testing.T) {

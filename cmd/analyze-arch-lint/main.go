@@ -10,12 +10,19 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"go/parser"
+	"go/token"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/usadamasa/go-arch-metrics/internal/tracked"
 )
 
 func main() {
@@ -114,12 +121,18 @@ type mappingPayload struct {
 }
 
 // collectGraph は component とパッケージの対応を go-arch-lint mapping から、
-// 実際の import を go list から集める｡glob の解釈は go-arch-lint に任せる｡
+// 実際の import を git が追跡するファイルの import 文から集める｡glob の解釈は go-arch-lint に任せる｡
+// git が ignore するファイルは、対応にも import の集計にも入れない｡
 func collectGraph(absDir, archFile string) (graph, error) {
 	g := graph{
 		componentPkgs: map[string][]string{},
 		imports:       map[string][]string{},
 		testImports:   map[string][]string{},
+	}
+
+	selected, err := tracked.List(absDir, []string{goWorkOff})
+	if err != nil {
+		return g, err
 	}
 
 	raw, err := run(absDir, "go-arch-lint", "mapping", "--json", "--output-color=false",
@@ -135,6 +148,9 @@ func collectGraph(absDir, archFile string) (graph, error) {
 	for _, grp := range m.Payload.MappingGrouped {
 		seen := map[string]bool{}
 		for _, f := range grp.FileNames {
+			if selected.Ignored(f) {
+				continue
+			}
 			rel, err := filepath.Rel(m.Payload.ProjectDirectory, filepath.Dir(f))
 			if err != nil {
 				return g, fmt.Errorf("パッケージパスを相対化できません: %w", err)
@@ -146,27 +162,62 @@ func collectGraph(absDir, archFile string) (graph, error) {
 		}
 	}
 
-	format := strings.Join([]string{
-		"{{.ImportPath}}", "{{join .Imports \",\"}}",
-		"{{join .TestImports \",\"}}", "{{join .XTestImports \",\"}}",
-	}, goListSep)
-	listed, err := run(absDir, "go", "list", "-f", format, "./...")
-	if err != nil {
-		return g, err
+	pkgs := make([]packageImports, 0, len(selected.Packages))
+	for _, p := range selected.Packages {
+		pi := packageImports{importPath: p.ImportPath}
+		var err error
+		if pi.imports, err = fileImports(p.Dir, p.GoFiles, p.CgoFiles); err != nil {
+			return g, err
+		}
+		if pi.testImports, err = fileImports(p.Dir, p.TestGoFiles); err != nil {
+			return g, err
+		}
+		if pi.xTestImports, err = fileImports(p.Dir, p.XTestGoFiles); err != nil {
+			return g, err
+		}
+		pkgs = append(pkgs, pi)
 	}
 
-	g.imports, g.testImports = parseGoList(listed, m.Payload.ModuleName)
+	g.imports, g.testImports = normalizeImports(pkgs, m.Payload.ModuleName)
 	if len(g.imports) == 0 {
 		return g, fmt.Errorf("%s に Go パッケージが見つかりません", absDir)
 	}
 	return g, nil
 }
 
-const goListSep = "\x1f"
+// packageImports は 1 パッケージの import を、go list の Imports・TestImports・XTestImports と同じ区分で持つ｡
+type packageImports struct {
+	importPath   string
+	imports      []string
+	testImports  []string
+	xTestImports []string
+}
 
-// parseGoList は go list の出力をモジュール相対のパッケージ名で引ける形にする｡
+// fileImports は dir の files (go list が build constraint で選んだもの) の import を重複なく並べて返す｡
+func fileImports(dir string, fileLists ...[]string) ([]string, error) {
+	fset := token.NewFileSet()
+	seen := map[string]bool{}
+	for _, files := range fileLists {
+		for _, name := range files {
+			f, err := parser.ParseFile(fset, filepath.Join(dir, name), nil, parser.ImportsOnly)
+			if err != nil {
+				return nil, fmt.Errorf("import を読めません: %w", err)
+			}
+			for _, spec := range f.Imports {
+				path, err := strconv.Unquote(spec.Path.Value)
+				if err != nil {
+					return nil, fmt.Errorf("%s の import を解釈できません: %w", name, err)
+				}
+				seen[path] = true
+			}
+		}
+	}
+	return slices.Sorted(maps.Keys(seen)), nil
+}
+
+// normalizeImports は pkgs をモジュール相対のパッケージ名で引ける形にする｡
 // ルート直下のパッケージは go-arch-lint mapping 側の filepath.Rel に合わせて "." にする｡
-func parseGoList(listed, module string) (imports, testImports map[string][]string) {
+func normalizeImports(pkgs []packageImports, module string) (imports, testImports map[string][]string) {
 	imports = map[string][]string{}
 	testImports = map[string][]string{}
 	prefix := module + "/"
@@ -176,32 +227,28 @@ func parseGoList(listed, module string) (imports, testImports map[string][]strin
 		}
 		return strings.TrimPrefix(path, prefix)
 	}
-	trim := func(csv string) []string {
+	trim := func(paths []string) []string {
 		var out []string
-		for _, imp := range strings.Split(csv, ",") {
-			if imp != "" {
-				out = append(out, rel(imp))
-			}
+		for _, imp := range paths {
+			out = append(out, rel(imp))
 		}
 		return out
 	}
-	for _, line := range strings.Split(strings.TrimSpace(listed), "\n") {
-		fields := strings.Split(line, goListSep)
-		if len(fields) != 4 {
-			continue
-		}
-		pkg := rel(fields[0])
-		imports[pkg] = trim(fields[1])
-		testImports[pkg] = append(trim(fields[2]), trim(fields[3])...)
+	for _, p := range pkgs {
+		pkg := rel(p.importPath)
+		imports[pkg] = trim(p.imports)
+		testImports[pkg] = append(trim(p.testImports), trim(p.xTestImports)...)
 	}
 	return imports, testImports
 }
 
+// goWorkOff は go.work を無視させる｡go.work があると cmd/ 単体のモジュールとして go list が通らない｡
+const goWorkOff = "GOWORK=off"
+
 func run(dir, name string, args ...string) (string, error) {
-	cmd := exec.Command(name, args...) // #nosec G204 -- 呼び出し側は "go" / "go-arch-lint" のリテラルのみ
+	cmd := exec.Command(name, args...) // #nosec G204 -- 呼び出し側は "go-arch-lint" のリテラルのみ
 	cmd.Dir = dir
-	// go.work があると cmd/ 単体のモジュールとして go list が通らない｡
-	cmd.Env = append(os.Environ(), "GOWORK=off")
+	cmd.Env = append(os.Environ(), goWorkOff)
 	out, err := cmd.Output()
 	if err != nil {
 		var stderr string

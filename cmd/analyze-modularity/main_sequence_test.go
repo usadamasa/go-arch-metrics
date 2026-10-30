@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/usadamasa/go-arch-metrics/internal/tracked"
 )
 
 // writeFixtureModule は a → b, c / b → c / d → c / e → b の依存を持つモジュールを作り、ルートを返す｡
@@ -157,14 +159,18 @@ func Test_distance(t *testing.T) {
 }
 
 // couplingOf は root のモジュールを読み、import path の末尾をキーにした Ca/Ce を返す｡
-func couplingOf(t *testing.T, root string, listed []listedPackage) map[string]PackageMetrics {
+func couplingOf(t *testing.T, root string) map[string]PackageMetrics {
 	t.Helper()
+	sel, err := tracked.List(root, nil)
+	if err != nil {
+		t.Fatalf("tracked.List 失敗: %v", err)
+	}
 	loaded, err := loadTypedPackages(root)
 	if err != nil {
 		t.Fatalf("loadTypedPackages 失敗: %v", err)
 	}
 	byBase := make(map[string]PackageMetrics)
-	for _, m := range computeCoupling(loaded, listed) {
+	for _, m := range computeCoupling(loaded, sel) {
 		byBase[filepath.Base(m.Path)] = m
 	}
 	return byBase
@@ -173,12 +179,8 @@ func couplingOf(t *testing.T, root string, listed []listedPackage) map[string]Pa
 func Test_computeCoupling(t *testing.T) {
 	t.Run("Ce は自分の宣言、Ca は依存元のパッケージを数える", func(t *testing.T) {
 		root := writeFixtureModule(t)
-		listed, err := listModulePackages(root)
-		if err != nil {
-			t.Fatalf("listModulePackages 失敗: %v", err)
-		}
 
-		got := couplingOf(t, root, listed)
+		got := couplingOf(t, root)
 
 		// a は b と c を参照するが、参照する宣言は A の 1 つなので Ce=1
 		want := map[string]struct{ ca, ce int }{
@@ -217,12 +219,8 @@ func Test_computeCoupling(t *testing.T) {
 				"var (\n\tV = c.C()\n\tW = c.D()\n)\n\nfunc F() { fmt.Println() }\n",
 			"p/p_test.go": "package p\n\nimport (\n\t\"testing\"\n\n\t\"example.com/unit/c\"\n)\n\nfunc TestP(t *testing.T) { _ = c.C() }\n",
 		})
-		listed, err := listModulePackages(root)
-		if err != nil {
-			t.Fatalf("listModulePackages 失敗: %v", err)
-		}
 
-		got := couplingOf(t, root, listed)
+		got := couplingOf(t, root)
 
 		if ce := got["p"].EfferentCoupling; ce != 3 {
 			t.Errorf("p.Ce = %d, want 3 (S, V, W)", ce)
@@ -230,6 +228,21 @@ func Test_computeCoupling(t *testing.T) {
 		// p の宣言 3 つが c を参照しても、c に依存するパッケージは p の 1 つ
 		if ca := got["c"].AfferentCoupling; ca != 1 {
 			t.Errorf("c.Ca = %d, want 1 (p)", ca)
+		}
+	})
+
+	t.Run("gitignore 済みのパッケージは数えず、そこへの辺もそこからの辺も数えない", func(t *testing.T) {
+		root := writeFixtureModule(t)
+		initGitRepo(t, root, "c/\n")
+
+		got := couplingOf(t, root)
+
+		if _, ok := got["c"]; ok || len(got) != 5 {
+			t.Errorf("c を除いた 5 件のはず: %v", got)
+		}
+		// b の Ce は c への参照が落ちて 0 になる
+		if ce := got["b"].EfferentCoupling; ce != 0 {
+			t.Errorf("b.Ce = %d, want 0 (ignore された c への辺は数えない)", ce)
 		}
 	})
 }
@@ -243,15 +256,15 @@ func Test_enrichMainSequence(t *testing.T) {
 			{Path: "c", dir: filepath.Join(root, "c"), ExportedTypes: 1, InterfaceTypes: 1},
 		}
 
-		listed, err := listModulePackages(".")
+		sel, err := tracked.List(".", nil)
 		if err != nil {
-			t.Fatalf("listModulePackages 失敗: %v", err)
+			t.Fatalf("tracked.List 失敗: %v", err)
 		}
 		loaded, err := loadTypedPackages(".")
 		if err != nil {
 			t.Fatalf("loadTypedPackages 失敗: %v", err)
 		}
-		if err := enrichMainSequence(computeCoupling(loaded, listed), packages, commitHistory{unmeasuredReason: "test"}, defaultVolatileCommits, nil); err != nil {
+		if err := enrichMainSequence(computeCoupling(loaded, sel), packages, commitHistory{unmeasuredReason: "test"}, defaultVolatileCommits, nil); err != nil {
 			t.Fatalf("enrichMainSequence 失敗: %v", err)
 		}
 
@@ -276,112 +289,13 @@ func initGitRepo(t *testing.T, dir, gitignore string) {
 	}
 }
 
-func Test_gitIgnoredDirs(t *testing.T) {
-	t.Run(".gitignore に当たるディレクトリを返す", func(t *testing.T) {
-		root := t.TempDir()
-		initGitRepo(t, root, "tmp/\n")
-		for _, d := range []string{"a", "tmp/x"} {
-			if err := os.MkdirAll(filepath.Join(root, d), 0755); err != nil {
-				t.Fatalf("mkdir 失敗: %v", err)
-			}
-		}
-
-		ignored, err := gitIgnoredDirs(root, []string{filepath.Join(root, "a"), filepath.Join(root, "tmp", "x")})
-		if err != nil {
-			t.Fatalf("gitIgnoredDirs 失敗: %v", err)
-		}
-
-		tmpX, _ := canonicalDir(filepath.Join(root, "tmp", "x"))
-		a, _ := canonicalDir(filepath.Join(root, "a"))
-		if !ignored[tmpX] {
-			t.Errorf("tmp/x は ignore されるはず: %v", ignored)
-		}
-		if ignored[a] {
-			t.Errorf("a は ignore されないはず: %v", ignored)
-		}
-	})
-
-	t.Run("何も当たらなければ空", func(t *testing.T) {
-		root := t.TempDir()
-		initGitRepo(t, root, "")
-		if err := os.MkdirAll(filepath.Join(root, "a"), 0755); err != nil {
-			t.Fatalf("mkdir 失敗: %v", err)
-		}
-
-		ignored, err := gitIgnoredDirs(root, []string{filepath.Join(root, "a")})
-		if err != nil {
-			t.Fatalf("gitIgnoredDirs 失敗: %v", err)
-		}
-		if len(ignored) != 0 {
-			t.Errorf("ignore は空のはず: %v", ignored)
-		}
-	})
-
-	t.Run("git が PATH に無ければエラー (リポジトリでないのとは区別する)", func(t *testing.T) {
-		root := t.TempDir()
-		if err := os.MkdirAll(filepath.Join(root, "a"), 0755); err != nil {
-			t.Fatalf("mkdir 失敗: %v", err)
-		}
-		t.Setenv("PATH", t.TempDir())
-
-		_, err := gitIgnoredDirs(root, []string{filepath.Join(root, "a")})
-		if err == nil {
-			t.Fatal("git が無ければエラーを返すべき")
-		}
-		if !strings.Contains(err.Error(), "git が PATH に見つかりません") {
-			t.Errorf("エラー文: %v", err)
-		}
-	})
-
-	t.Run("git リポジトリでなければ空", func(t *testing.T) {
-		root := t.TempDir()
-		if err := os.MkdirAll(filepath.Join(root, "tmp", "x"), 0755); err != nil {
-			t.Fatalf("mkdir 失敗: %v", err)
-		}
-
-		ignored, err := gitIgnoredDirs(root, []string{filepath.Join(root, "tmp", "x")})
-		if err != nil {
-			t.Fatalf("git リポジトリでなくてもエラーにしない: %v", err)
-		}
-		if len(ignored) != 0 {
-			t.Errorf("ignore は空のはず: %v", ignored)
-		}
-	})
-}
-
-func Test_dropIgnored(t *testing.T) {
-	root := writeFixtureModule(t)
-	initGitRepo(t, root, "c/\n")
-	listed, err := listModulePackages(root)
-	if err != nil {
-		t.Fatalf("listModulePackages 失敗: %v", err)
-	}
-
-	tracked, err := dropIgnored(root, listed)
-	if err != nil {
-		t.Fatalf("dropIgnored 失敗: %v", err)
-	}
-
-	if len(tracked) != 5 {
-		t.Fatalf("tracked = %d 件, want 5 (c を除く)", len(tracked))
-	}
-	for _, p := range tracked {
-		if p.Name == "c" {
-			t.Errorf("ignore された c が残っている")
-		}
-	}
-	// 参照の数え上げも tracked だけで行うので、b の Ce は c への参照が落ちて 0 になる
-	if ce := couplingOf(t, root, tracked)["b"].EfferentCoupling; ce != 0 {
-		t.Errorf("b.Ce = %d, want 0 (ignore された c への辺は数えない)", ce)
-	}
-}
-
 func Test_selectPackages(t *testing.T) {
 	root := writeFixtureModule(t)
-	listed, err := listModulePackages(root)
+	sel, err := tracked.List(root, nil)
 	if err != nil {
-		t.Fatalf("listModulePackages 失敗: %v", err)
+		t.Fatalf("tracked.List 失敗: %v", err)
 	}
+	listed := sel.Packages
 
 	wantAll := "a,b,c,d,e,iso"
 	pathsOf := func(selected []selectedPackage) string {
@@ -434,42 +348,6 @@ func Test_selectPackages(t *testing.T) {
 		}
 		if got := pathsOf(selected); got != "b" {
 			t.Errorf("paths = %v, want b", got)
-		}
-	})
-}
-
-func Test_listModulePackages(t *testing.T) {
-	t.Run("fixture モジュールのパッケージを返す", func(t *testing.T) {
-		root := writeFixtureModule(t)
-
-		pkgs, err := listModulePackages(root)
-		if err != nil {
-			t.Fatalf("listModulePackages 失敗: %v", err)
-		}
-
-		byPath := make(map[string]listedPackage, len(pkgs))
-		for _, p := range pkgs {
-			byPath[p.ImportPath] = p
-		}
-		if len(byPath) != 6 {
-			t.Fatalf("パッケージ数: got %d, want 6 (%v)", len(byPath), pkgs)
-		}
-		a := byPath["example.com/fx/a"]
-		if a.Name != "a" || len(a.GoFiles) != 1 {
-			t.Errorf("a: %+v", a)
-		}
-		if filepath.Base(a.Dir) != "a" {
-			t.Errorf("a.Dir: %q", a.Dir)
-		}
-	})
-
-	t.Run("go.mod が無いディレクトリ → エラー", func(t *testing.T) {
-		dir := t.TempDir()
-		writeGoFile(t, dir, "x.go", "package x\n")
-
-		_, err := listModulePackages(dir)
-		if err == nil {
-			t.Fatal("go.mod が無ければエラーを返すべき")
 		}
 	})
 }

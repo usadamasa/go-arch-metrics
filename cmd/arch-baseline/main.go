@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/usadamasa/go-arch-metrics/internal/schema"
+	"github.com/usadamasa/go-arch-metrics/internal/tracked"
 )
 
 const usage = "使用方法: arch-baseline <project-root> [<output-json>]"
@@ -51,7 +52,11 @@ func run(args []string) error {
 	if err != nil {
 		return err
 	}
-	result, err := measureAll(tools, root)
+	target, err := resolveTarget(root)
+	if err != nil {
+		return err
+	}
+	result, err := measureAll(tools, target)
 	if err != nil {
 		return err
 	}
@@ -72,32 +77,32 @@ func run(args []string) error {
 
 // measureAll は各ツールと参考値の測定を並列に回し、出力を決まった順に書き出す。
 // 最初に失敗した measure の出力までを書いて、その error を返す
-func measureAll(tools map[string]tool, root string) (baseline, error) {
+func measureAll(tools map[string]tool, target target) (baseline, error) {
 	var b baseline
 	// 各 step は b の別のフィールドだけに書くので、ロックは要らない
 	steps := []func(*section) error{
 		func(w *section) (err error) {
-			b.GolangciLint, err = measureGolangci(w, tools["golangci-lint"], root)
+			b.GolangciLint, err = measureGolangci(w, tools["golangci-lint"], target)
 			return err
 		},
 		func(w *section) (err error) {
-			b.GoArchLint, err = measureGoArchLint(w, tools["go-arch-lint"], root)
+			b.GoArchLint, err = measureGoArchLint(w, tools["go-arch-lint"], target)
 			return err
 		},
 		func(w *section) (err error) {
-			b.Govulncheck, err = measureVulncheck(w, tools["vulncheck"], root)
+			b.Govulncheck, err = measureVulncheck(w, tools["vulncheck"], target)
 			return err
 		},
 		func(w *section) (err error) {
-			b.Gosec, err = measureGosec(w, tools["gosec"], root)
+			b.Gosec, err = measureGosec(w, target)
 			return err
 		},
 		func(w *section) (err error) {
-			b.Modularity, err = measureModularity(w, tools["analyze-modularity"], root)
+			b.Modularity, err = measureModularity(w, tools["analyze-modularity"], target.root)
 			return err
 		},
 		func(w *section) error {
-			measureReference(w, root)
+			measureReference(w, target)
 			return nil
 		},
 	}
@@ -118,6 +123,21 @@ func measureAll(tools map[string]tool, root string) (baseline, error) {
 		fmt.Println()
 	}
 	return b, nil
+}
+
+// resolveTarget は測定の対象を決める。git リポジトリの外なら何も除かずに測り、その旨を stderr に出す
+func resolveTarget(root string) (target, error) {
+	selected, err := tracked.List(root, nil)
+	if err != nil {
+		return target{}, err
+	}
+	if selected.NotRepository {
+		fmt.Fprintf(os.Stderr, "注意: %s は git リポジトリではないので .gitignore は見ません\n\n", root)
+	}
+	if len(selected.Packages) == 0 {
+		return target{}, fmt.Errorf("測定する Go パッケージがありません (git が ignore するものを除いています): %s", root)
+	}
+	return target{root: root, selected: selected}, nil
 }
 
 // resolvePaths はプロジェクトのルートと出力先を絶対パスにする。出力先の相対パスは呼び出したディレクトリから

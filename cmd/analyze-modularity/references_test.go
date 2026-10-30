@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"slices"
 	"testing"
+
+	"github.com/usadamasa/go-arch-metrics/internal/tracked"
 )
 
 // writeReferenceFixtureModule は exported の参照のされ方を一通り持つモジュールを作り、ルートを返す｡
@@ -118,16 +120,16 @@ func Run() int {
 
 func Test_analyzeExportedReferences(t *testing.T) {
 	root := writeReferenceFixtureModule(t)
-	listed, err := listModulePackages(root)
+	sel, err := tracked.List(root, nil)
 	if err != nil {
-		t.Fatalf("listModulePackages: %v", err)
+		t.Fatalf("tracked.List: %v", err)
 	}
 
 	loaded, err := loadTypedPackages(root)
 	if err != nil {
 		t.Fatalf("loadTypedPackages: %v", err)
 	}
-	got := analyzeExportedReferences(loaded, listed)
+	got := analyzeExportedReferences(loaded, sel)
 
 	t.Run("lib", func(t *testing.T) {
 		lib, ok := got["example.com/ref/internal/lib"]
