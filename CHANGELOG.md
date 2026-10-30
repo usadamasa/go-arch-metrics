@@ -1,5 +1,11 @@
 # Changelog
 
+## [2026.1030.0](https://github.com/usadamasa/go-arch-metrics/compare/2026.1028.0...2026.1030.0) - 2026-10-30
+
+### Other Changes
+- baseline.sh を Go の CLI (arch-baseline) で実装し直す by @usadamasa in https://github.com/usadamasa/go-arch-metrics/pull/85
+- --strict が失敗に数える警告を evaluate skill の 1 つの表にまとめる by @usadamasa in https://github.com/usadamasa/go-arch-metrics/pull/87
+
 ## [2026.1028.0](https://github.com/usadamasa/go-arch-metrics/compare/2026.1027.0...2026.1028.0) - 2026-10-28
 
 ### Other Changes
