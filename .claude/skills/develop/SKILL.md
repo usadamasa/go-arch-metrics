@@ -2,7 +2,7 @@
 name: develop
 description: >-
   Use when working on the go-arch-metrics repository itself: preparing the local toolchain
-  and running the checks that CI runs (task test / task lint / claude plugin validate).
+  and running the checks that CI runs.
   Triggers for requests like "task lint が落ちる", "CI と同じチェックをローカルで回したい",
   "このリポジトリの開発環境を用意して", "PR を出す前に検証して".
 ---
@@ -23,7 +23,7 @@ Go と lint のツール (`shellcheck` を含む) は `flake.nix` の devShell �
 `flake.lock`・`go.mod`・GitHub Actions の更新 PR は Dependabot が週次で出す (`.github/dependabot.yml`)。
 devShell の go は `go.mod` の `go` 行と同じ系列 (`go_1_26`) にし、`GOTOOLCHAIN=local` でずれを即座に落とす。
 
-`analyze-modularity` / `analyze-arch-lint` / `arch-baseline` は devShell に入れない。`task lint` が `go run ./cmd/...` で
+この plugin の CLI (`cmd/` 配下) は devShell に入れない。`task lint` が `go run ./cmd/...` で
 このリポジトリのソースから動かす。
 
 ## 検証

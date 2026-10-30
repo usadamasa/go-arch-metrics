@@ -1,16 +1,16 @@
 # AGENTS.md
 
-Go アーキテクチャメトリクスの Claude Code plugin。skill 4 本と CLI 4 本を持つ。
+Go アーキテクチャメトリクスの Claude Code plugin。skill と CLI を持つ。
 
 ## レイアウト
 
 ```
 .claude-plugin/   plugin.json (version の実体はここ 1 箇所)。marketplace.json は usadamasa/agents-marketplace が持つ
 skills/           setup / measure / evaluate / remediate
-cmd/              analyze-arch-lint, analyze-modularity, vulncheck, arch-baseline (いずれも package main)。
+cmd/              CLI (いずれも package main)。
                   vulncheck は govulncheck の組み込みで、埋め込みの roots で TLS を検証する。
                   arch-baseline は measure skill が呼ぶ、全ツールを一通り回す CLI
-flake.nix         CLI 4 本の packages.default と開発ツールの devShell (版は flake.lock が固定する)
+flake.nix         CLI の packages.default と開発ツールの devShell (版は flake.lock が固定する)
 .claude/skills/   develop (このリポジトリ自身の開発環境と検証)
 ```
 

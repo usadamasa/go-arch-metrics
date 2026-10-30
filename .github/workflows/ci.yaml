@@ -72,7 +72,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
 
-      # smoke は go・go-arch-lint・golangci-lint・gosec を PATH に要るので devShell も入れる
+      # smoke は devShell の go と lint ツールを PATH に要るので devShell も入れる
       - uses: usadamasa/gh-manage/actions/setup-nix@main
 
       - name: Build packages.default
@@ -116,7 +116,13 @@ jobs:
         run: gh actions-lock --verify
 
   ci-status-check:
-    needs: [go-test, go-lint, shellcheck, nix-package, plugin-validate, actions-lock]
+    needs:
+      - actions-lock
+      - go-lint
+      - go-test
+      - nix-package
+      - plugin-validate
+      - shellcheck
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 10

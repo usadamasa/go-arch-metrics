@@ -37,7 +37,7 @@ description: >-
 入れ方はプロジェクトに任せる。`arch-baseline` はほかのツールを PATH から先に探し、無ければ tool directive から
 `go tool` で呼ぶ。
 
-`analyze-modularity`・`analyze-arch-lint`・`vulncheck`・`arch-baseline` の 4 本は、この plugin のリポジトリの flake が
+この plugin の CLI は、この plugin のリポジトリの flake が
 `packages.<system>.default` として出す。nix を使うプロジェクトは flake input で参照するだけにする。
 nix を使わないプロジェクトは go.mod の tool directive に足せる
 (どちらの書き方も `references/tools.md` の「この plugin の CLI を入れる」)。
@@ -103,7 +103,7 @@ CI で回すコマンドは `references/ci-integration.md`。
 
 ## バージョンを上げる
 
-plugin (skill) と CLI 4 本は同じリポジトリから出ていて、JSON のキーや警告の判定は
+plugin (skill) と CLI は同じリポジトリから出ていて、JSON のキーや警告の判定は
 両方がそろっている前提で書いてある。片方だけ上げない。
 
 1. GitHub Release (または CHANGELOG.md) で、上げる範囲の変更を読む。JSON のキー、しきい値、

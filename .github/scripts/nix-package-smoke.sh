@@ -3,7 +3,7 @@
 # buildGoModule は -trimpath でビルドするので、標準ライブラリを読む処理が空の結果を exit 0 で
 # 返す壊れ方をしうる。exit code だけでなく出力の中身まで確かめる。
 # 使い方: nix-package-smoke.sh <bin ディレクトリの絶対パス>
-# 前提: go・go-arch-lint・golangci-lint・gosec (devShell) と jq が PATH にある。カレントディレクトリはリポジトリのルート
+# 前提: devShell の go と lint ツール、jq が PATH にある。カレントディレクトリはリポジトリのルート
 set -euo pipefail
 
 if [ $# -ne 1 ]; then
@@ -29,7 +29,7 @@ printf '%s\n' "--- analyze-arch-lint ---"
 "${BIN_DIR}/analyze-arch-lint" --strict .
 
 printf '%s\n' "--- arch-baseline ---"
-# ほかの 3 本も package のものを使わせる。golangci-lint・gosec・go-arch-lint は devShell のもの
+# arch-baseline が呼ぶこの plugin の CLI も package のものを使わせる。lint ツールは devShell のもの
 PATH="${BIN_DIR}:${PATH}" "${BIN_DIR}/arch-baseline" . "${work}/baseline.json"
 jq -e '.modularity.summary.total_packages > 0 and (.golangci_lint | has("Issues"))' "${work}/baseline.json"
 
