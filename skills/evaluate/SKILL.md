@@ -55,7 +55,7 @@ Zone の定義と構造的制約の根拠は `references/thresholds.md`。
 
 `analyze-modularity --strict` は `actionable: true` の警告 (`summary.actionable_warnings`) が
 1 件以上あるときだけ exit 1 にする。`actionable: false` の警告は JSON に残るが失敗には数えず、
-Message の末尾に `(情報のみ。--strict の失敗には数えない)` が付く。
+`message` の末尾に `(情報のみ。--strict の失敗には数えない)` が付く。
 
 | type | 出る条件 | `--strict` で失敗に数えるか |
 |------|---------|---------------------------|
@@ -68,7 +68,7 @@ Message の末尾に `(情報のみ。--strict の失敗には数えない)` が
 | `structurally_constrained` | 構造制約のパッケージであることの報告 | 数えない |
 | `high_public_ratio` | public ratio が `--max-public-ratio` を超える (参考値) | 数えない |
 
-数えない条件の中身:
+数えない条件の中身は次のとおり。
 
 - **構造制約**: Ce=0 かつ Ca>0 の葉パッケージ (`structurally_constrained: true`)。
   根拠は `references/thresholds.md` の「構造的制約」
