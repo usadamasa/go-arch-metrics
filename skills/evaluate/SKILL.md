@@ -47,15 +47,39 @@ D > 0.5 のパッケージ
   └─ それ以外 → アクション可能: Zone 別対処へ (remediate skill)
 ```
 
-`analyze-modularity` の警告もこの分け方にそろえてある。直す対象は `actionable: true` の警告で、
-`analyze-modularity --strict` は `summary.actionable_warnings` が 1 以上のときだけ exit 1 にする。
-構造制約のパッケージに付く `zone_of_pain` と `structurally_constrained`、非揮発の Zone of Pain に付く
-`zone_of_pain` は `actionable: false` で、JSON には残るが失敗には数えない。
-揮発性の測り方 (窓・しきい値・測れないときの扱い) は `references/thresholds.md` の「非揮発」。
-`--baseline` で base のレポートを渡したとき、D が base から悪化していないパッケージの警告も同じく
-`actionable: false` になる。規則は同じファイルの「base との比較」。
+`analyze-modularity` の警告もこの分け方にそろえてある。警告ごとの扱いは次の節の表。
 
 Zone の定義と構造的制約の根拠は `references/thresholds.md`。
+
+## `--strict` が失敗に数える警告
+
+`analyze-modularity --strict` は `actionable: true` の警告 (`summary.actionable_warnings`) が
+1 件以上あるときだけ exit 1 にする。`actionable: false` の警告は JSON に残るが失敗には数えず、
+Message の末尾に `(情報のみ。--strict の失敗には数えない)` が付く。
+
+| type | 出る条件 | `--strict` で失敗に数えるか |
+|------|---------|---------------------------|
+| `unreferenced_exported` | `internal` のパッケージに、外から参照されない exported かテストだけが参照する exported がある | 数える |
+| `loc_outlier` | LOC が `max(mean + 2σ, 1000)` を超える | 数える |
+| `constrained_loc_outlier` | 構造制約のパッケージが LOC の外れ値でもある。`loc_outlier` と並んで出る | 数える |
+| `zone_of_pain` | A < 0.5 かつ I < 0.5 | 数える。ただし構造制約、非揮発、base から悪化していない、のどれかなら数えない |
+| `zone_of_uselessness` | A > 0.5 かつ I > 0.5 | 数える。ただし base から悪化していなければ数えない。非揮発でも数える |
+| `high_distance` | D > 0.5 で、同じパッケージの Zone の警告が上の行で数えられる | 数える。Zone の警告が数えられないパッケージには出さず、D は Zone の警告の `value` に出る |
+| `structurally_constrained` | 構造制約のパッケージであることの報告 | 数えない |
+| `high_public_ratio` | public ratio が `--max-public-ratio` を超える (参考値) | 数えない |
+
+数えない条件の中身:
+
+- **構造制約**: Ce=0 かつ Ca>0 の葉パッケージ (`structurally_constrained: true`)。
+  根拠は `references/thresholds.md` の「構造的制約」
+- **非揮発**: 直近の窓で触った commit がしきい値未満 (`volatility: "non_volatile"`)。
+  shallow clone などで測れない (`unmeasured`) ときは揮発として扱い、数える。
+  窓としきい値は `references/thresholds.md` の「非揮発」
+- **base から悪化していない**: `--baseline` を渡し、base にもあるパッケージの D が base 以下。
+  `--baseline` を渡さないときと、base に無いか base で excluded のパッケージには効かない。
+  規則は `references/thresholds.md` の「base との比較」
+
+main パッケージと孤立パッケージ (`zone: "excluded"`) には Zone と Distance の警告を出さない。
 
 ## `.go-arch-lint.yml` 自体の健全性
 
@@ -76,7 +100,7 @@ analyze-arch-lint --metrics                # 指標の一覧・しきい値・�
 
 | ファイル | 内容 |
 |---------|------|
-| `references/thresholds.md` | 各しきい値の根拠、Zone 分類と構造的制約 |
+| `references/thresholds.md` | 各しきい値の根拠、Zone 分類と構造的制約、非揮発と base との比較の規則 |
 | `references/arch-lint-health.md` | 依存ルール設定の劣化の見つけ方、compiler-scoped edge |
 
 ## 次のステップ

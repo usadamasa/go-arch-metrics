@@ -120,8 +120,8 @@ Zone of Pain にあっても **harmless** だと述べている。`internal/cach
 のようなユーティリティパッケージがこれに該当する。
 
 analyze-modularity はこれらのパッケージを `structurally_constrained: true` としてマークし、
-D 集計 (`actionable_*`) から除外する。同じ基準で、構造制約のパッケージに付く `zone_of_pain` と
-`structurally_constrained` の警告は `actionable: false` になり、`analyze-modularity --strict` の失敗に数えない。
+D 集計 (`actionable_*`) から除外する。警告を `--strict` の失敗に数えるかは
+`go-arch-metrics:evaluate` の「`--strict` が失敗に数える警告」。
 
 構造制約パッケージでもリファクタリングを検討すべきケースの判断基準は
 `go-arch-metrics:remediate`。
@@ -149,10 +149,10 @@ Martin は数値を示していないので、200 と 5 は目安。agents-daemo
 日数ではなく commit 数で窓を切るのは、HEAD が同じなら結果も同じにするため。日数で切ると、コードが同じでも
 日がたつだけで CI の判定が変わる。
 
-非揮発の Zone of Pain に付く `zone_of_pain` は `actionable: false` になり、`high_distance` は出さない
-(D は `zone_of_pain` の `value` が持つ)。`summary.main_sequence.non_volatile_zone_of_pain_count` に数え、`actionable_*` からは除く。
+非揮発の Zone of Pain は `summary.main_sequence.non_volatile_zone_of_pain_count` に数え、`actionable_*` からは除く。
 このため、この扱いが入る前と比べて `actionable_count` の値が下がることがある。
 Zone of Uselessness は使われていない抽象で、変更頻度と関係ないので外さない。
+警告を `--strict` の失敗に数えるかは `go-arch-metrics:evaluate` の「`--strict` が失敗に数える警告」。
 
 ### base との比較 (`--baseline`)
 

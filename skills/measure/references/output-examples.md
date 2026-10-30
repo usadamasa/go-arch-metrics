@@ -121,6 +121,9 @@ exit code は指摘ありでも実行の失敗でも 1 なので、arch-baseline
 }
 ```
 
+どの警告が `actionable: true` になり `--strict` の失敗に数えられるかは、`go-arch-metrics:evaluate` の
+「`--strict` が失敗に数える警告」。
+
 `path` (と `excluded_packages`・`outlier_packages`・警告の `package`) はモジュールルートからの相対パスで、
 測った checkout の場所や引数の渡し方 (絶対・相対) に依らない。ルートのパッケージは `.` になる。
 
@@ -129,13 +132,11 @@ exit code は指摘ありでも実行の失敗でも 1 なので、arch-baseline
 `statistical_limit` は mean + 2σ の値。読み方は `go-arch-metrics:evaluate` の `references/thresholds.md`。
 
 `structurally_constrained: true` (Ce=0 の葉パッケージ) の D=1.0 は構造的制約で、設計上の問題とは限らない。
-このパッケージに付く `zone_of_pain` と `structurally_constrained` の警告は `actionable: false` で、
-`summary.actionable_warnings` と `--strict` の判定に入らない。
 
 `volatility` は直近の窓 (`volatility_window_commits`) でパッケージのコードを変えた commit 数 (`recent_commit_count`。
 コメントと空白だけの変更は数えない) から決まる
-(`volatile` / `non_volatile` / `unmeasured`)。非揮発の Zone of Pain の `zone_of_pain` も `actionable: false` で、
-`high_distance` は出ない。shallow clone などで測れなければ `volatility` は `unmeasured`、`recent_commit_count` は出ず、
+(`volatile` / `non_volatile` / `unmeasured`)。
+shallow clone などで測れなければ `volatility` は `unmeasured`、`recent_commit_count` は出ず、
 `summary.main_sequence.volatility_unmeasured_reason` に理由が入る。判定は `go-arch-metrics:evaluate` の
 `references/thresholds.md`。
 
