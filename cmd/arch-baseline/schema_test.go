@@ -15,9 +15,10 @@ import (
 // schemaPath は measure skill が持つ出力の JSON schema。evaluate / remediate の references はこれを指す
 const schemaPath = "../../skills/measure/references/baseline.schema.json"
 
-// TestSchemaに出力が従う は、本物の analyze-modularity の出力を入れた JSON が schema に従うかを確かめる。
-// schema にないキーを出したり、required のキーを落としたりしたら落ちる
-func TestSchemaに出力が従う(t *testing.T) {
+// schema は手で書くので、analyze-modularity や arch-baseline の出力のキーを変えても schema は古いまま残る。
+// skill は schema を読んで JSON を解釈するので、ずれたまま配布しないよう、実際の出力を schema で検証する。
+// 出力に schema に無いキーがある、required のキーが無い、型や enum が合わないときに落ちる
+func Test出力のJSONがschemaからずれていない(t *testing.T) {
 	schema := loadJSON(t, schemaPath)
 
 	root := t.TempDir()
