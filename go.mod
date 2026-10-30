@@ -25,5 +25,6 @@ require (
 tool (
 	github.com/usadamasa/go-arch-metrics/cmd/analyze-arch-lint
 	github.com/usadamasa/go-arch-metrics/cmd/analyze-modularity
+	github.com/usadamasa/go-arch-metrics/cmd/arch-baseline
 	github.com/usadamasa/go-arch-metrics/cmd/vulncheck
 )

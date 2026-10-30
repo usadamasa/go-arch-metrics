@@ -367,7 +367,7 @@ func NewConfig(host string, port int) *Config {
 
 #### 1. まず zone と structurally_constrained を確認する
 
-baseline.sh の出力 JSON で各パッケージの `zone` と `structurally_constrained` を確認し、以下のフローで対処を判断する:
+arch-baseline の出力 JSON (`modularity.packages[].main_sequence`) で各パッケージの `zone` と `structurally_constrained` を確認し、以下のフローで対処を判断する:
 
 ```
 D > 0.5 のパッケージ

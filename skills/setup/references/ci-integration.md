@@ -60,9 +60,9 @@ merge した ref) を前提に、`base.sha` と比べる。`pull_request.head.sh
 
 base の commit を checkout するので、この job も `fetch-depth: 0` が要る。
 
-ベースライン測定 (`baseline.sh`) はプラグインのディレクトリに置かれ、パスが
-プラグインのバージョンによって変わるため CI には書かない。
-`go-arch-metrics:measure` から実行する。
+ベースライン測定 (`arch-baseline`) は上のコマンドを一通り回してサマリと JSON を出すもので、
+CI のゲートには使わない。ゲートは各ツールの終了コードで個別に掛ける。
+数値を見たいときは `go-arch-metrics:measure` から実行する。
 
 ---
 

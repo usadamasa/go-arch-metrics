@@ -3,7 +3,7 @@
 # buildGoModule は -trimpath でビルドするので、標準ライブラリを読む処理が空の結果を exit 0 で
 # 返す壊れ方をしうる。exit code だけでなく出力の中身まで確かめる。
 # 使い方: nix-package-smoke.sh <bin ディレクトリの絶対パス>
-# 前提: go と go-arch-lint が PATH にある (devShell)。カレントディレクトリはリポジトリのルート
+# 前提: go・go-arch-lint・golangci-lint・gosec (devShell) と jq が PATH にある。カレントディレクトリはリポジトリのルート
 set -euo pipefail
 
 if [ $# -ne 1 ]; then
@@ -24,6 +24,13 @@ printf '%s\n' "--- analyze-modularity ---"
 
 printf '%s\n' "--- analyze-arch-lint ---"
 "${BIN_DIR}/analyze-arch-lint" --strict .
+
+printf '%s\n' "--- arch-baseline ---"
+# ほかの 3 本も package のものを使わせる。golangci-lint・gosec・go-arch-lint は devShell のもの
+out_json=$(mktemp)
+PATH="${BIN_DIR}:${PATH}" "${BIN_DIR}/arch-baseline" . "$out_json"
+jq -e '.modularity.summary.total_packages > 0 and (.golangci_lint | has("Issues"))' "$out_json"
+rm -f "$out_json"
 
 printf '%s\n' "--- vulncheck ---"
 # fmt.Println を呼ぶモジュールを testdata の DB で測り、標準ライブラリの脆弱性 (GO-9999-0001) を拾えるかを見る

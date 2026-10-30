@@ -2,7 +2,7 @@
 name: develop
 description: >-
   Use when working on the go-arch-metrics repository itself: preparing the local toolchain
-  and running the checks that CI runs (task test / task lint / bats / claude plugin validate).
+  and running the checks that CI runs (task test / task lint / claude plugin validate).
   Triggers for requests like "task lint が落ちる", "CI と同じチェックをローカルで回したい",
   "このリポジトリの開発環境を用意して", "PR を出す前に検証して".
 ---
@@ -17,13 +17,13 @@ skill を書くときの決めごと、リリース手順はリポジトリル�
 
 ## 環境
 
-Go と lint・テストのツール (`bats`、`shellcheck` を含む) は `flake.nix` の devShell が揃え、
+Go と lint のツール (`shellcheck` を含む) は `flake.nix` の devShell が揃え、
 `.envrc` (nix-direnv の `use flake`) が読み込む。
 版は `flake.lock` が固定する nixpkgs で決まり、上げるときは `nix flake update`。
 `flake.lock`・`go.mod`・GitHub Actions の更新 PR は Dependabot が週次で出す (`.github/dependabot.yml`)。
 devShell の go は `go.mod` の `go` 行と同じ系列 (`go_1_26`) にし、`GOTOOLCHAIN=local` でずれを即座に落とす。
 
-`analyze-modularity` / `analyze-arch-lint` は devShell に入れない。`task lint` が `go run ./cmd/...` で
+`analyze-modularity` / `analyze-arch-lint` / `arch-baseline` は devShell に入れない。`task lint` が `go run ./cmd/...` で
 このリポジトリのソースから動かす。
 
 ## 検証
@@ -33,11 +33,11 @@ task が何を回すかは `task --list` を見る (各 task の説明は `Taskf
 
 | コマンド | CI job |
 |---------|--------|
-| `task test` | go-test / bats |
+| `task test` | go-test |
 | `task lint` | go-lint |
 | `task vulncheck` | go-lint (`task lint` が呼ぶ) / vulncheck.yaml (週次と手動実行) |
 | `task build` | — |
-| `shellcheck skills/*/scripts/*.sh` | shellcheck |
+| `shellcheck .github/scripts/*.sh` | shellcheck |
 | `claude plugin validate --strict .` | plugin-validate |
 
 PR を出す前にこの全部を通す。job の定義は `.github/workflows/ci.yaml`。
