@@ -82,47 +82,71 @@ func printCounts(w *section, title string, keys []string) {
 // 3 以上は実行できていない (pkg/exitcodes/exitcodes.go)。go tool 経由のツールのビルド失敗も 1 で stdout が
 // 空なので、JSON の有無でも見分ける。v2 では --out-format json は廃止。--show-stats=false で JSON の後ろに
 // 件数の行を出させない
-func measureGolangci(w *section, t tool, root string) (json.RawMessage, error) {
+func measureGolangci(w *section, t tool, target target) (json.RawMessage, error) {
 	w.println("--- golangci-lint (テスト可能性・保守性) ---")
-	out, rc, err := t.run(root, &w.err,"run", "--output.json.path", "stdout", "--show-stats=false", "--timeout", "5m", "./...")
+	args := append([]string{"run", "--output.json.path", "stdout", "--show-stats=false", "--timeout", "5m"}, target.packages()...)
+	out, rc, err := t.run(target.root, &w.err, args...)
 	if err != nil {
 		return nil, err
 	}
-	var report struct {
-		Issues []struct {
-			FromLinter string
-			Text       string
-		}
-	}
-	if rc > 1 || !hasKeys(out, "Issues") || json.Unmarshal(out, &report) != nil {
+	issues, ok := golangciIssues(out)
+	if rc > 1 || !ok {
 		return nil, fmt.Errorf("golangci-lint の実行に失敗しました (exit %d)。理由は上の出力を参照", rc)
 	}
-	// コンパイルできないパッケージは typecheck の指摘になり、ほかの linter は解析しない。違反数が少なく見えるので止める
-	var typecheck, linters []string
-	for _, issue := range report.Issues {
+	// コンパイルできないパッケージは typecheck の指摘になり、ほかの linter は解析しない。違反数が少なく見えるので止める。
+	// ignore されたファイルがコンパイルできなくても、同じパッケージの追跡されるファイルが解析されないので止める
+	var typecheck []string
+	for _, issue := range issues {
 		if issue.FromLinter == "typecheck" {
 			typecheck = append(typecheck, "  "+issue.Text)
 		}
-		linters = append(linters, issue.FromLinter)
 	}
 	if len(typecheck) > 0 {
 		return nil, fmt.Errorf("golangci-lint が対象のコードをコンパイルできませんでした。理由:\n%s", strings.Join(typecheck, "\n"))
+	}
+	if out, err = target.filterGolangci(out); err != nil {
+		return nil, fmt.Errorf("golangci-lint の出力から ignore されたファイルの指摘を除けません: %w", err)
+	}
+	issues, _ = golangciIssues(out)
+	linters := make([]string, len(issues))
+	for i, issue := range issues {
+		linters[i] = issue.FromLinter
 	}
 	printCounts(w, "合計違反数", linters)
 	return out, nil
 }
 
+type golangciIssue struct {
+	FromLinter string
+	Text       string
+}
+
+// golangciIssues は golangci-lint の JSON の Issues を読む。Issues を持つ JSON でなければ ok は false
+func golangciIssues(out []byte) (issues []golangciIssue, ok bool) {
+	var report struct{ Issues []golangciIssue }
+	if !hasKeys(out, "Issues") || json.Unmarshal(out, &report) != nil {
+		return nil, false
+	}
+	return report.Issues, true
+}
+
 // measureGoArchLint は go-arch-lint を回す。違反があっても実行エラーでも exit 1 するので、終了コードでは
-// 見分けられない。違反なら stdout に check の JSON が出て、実行エラーなら stdout は空で理由が stderr に出る
-func measureGoArchLint(w *section, t tool, root string) (json.RawMessage, error) {
+// 見分けられない。違反なら stdout に check の JSON が出て、実行エラーなら stdout は空で理由が stderr に出る。
+// パッケージを引数で受けないので、ignore されたディレクトリとファイルの違反は出力から除く
+func measureGoArchLint(w *section, t tool, target target) (json.RawMessage, error) {
 	w.println("--- go-arch-lint (モジュール性・依存方向) ---")
-	if _, err := os.Stat(filepath.Join(root, ".go-arch-lint.yml")); err != nil { // #nosec G703 -- CLI ツール: root は引数で渡された測定対象
+	if _, err := os.Stat(filepath.Join(target.root, ".go-arch-lint.yml")); err != nil { // #nosec G703 -- CLI ツール: root は引数で渡された測定対象
 		return nil, errors.New(`.go-arch-lint.yml が見つかりません
   テンプレート: go-arch-metrics:setup skill の references/arch-lint-config.md`)
 	}
-	out, rc, err := t.run(root, &w.err,"check", "--json")
+	out, rc, err := t.run(target.root, &w.err, "check", "--json")
 	if err != nil {
 		return nil, err
+	}
+	if hasKeys(out, "Type", "Payload") {
+		if out, err = target.filterGoArchLint(out); err != nil {
+			return nil, fmt.Errorf("go-arch-lint の出力から ignore されたファイルの違反を除けません: %w", err)
+		}
 	}
 	var report struct {
 		Type    string
@@ -153,10 +177,11 @@ func measureGoArchLint(w *section, t tool, root string) (json.RawMessage, error)
 
 // measureVulncheck は vulncheck (この plugin が govulncheck を組み込んだ CLI) を回す。exit 0 は脆弱性なし、
 // 3 は脆弱性あり、それ以外は実行できていない (脆弱性 DB に届かなかった等)。未測定を「なし」に見せないよう、
-// 3 つの状態を分けて残す。未測定でも測定は続ける
-func measureVulncheck(w *section, t tool, root string) (schema.VulncheckResult, error) {
+// 3 つの状態を分けて残す。未測定でも測定は続ける。
+// 結果は呼び出し経路なのでファイル単位では除けず、追跡パッケージの中で ignore されたファイルも対象に入る
+func measureVulncheck(w *section, t tool, target target) (schema.VulncheckResult, error) {
 	w.println("--- govulncheck (脆弱性スキャン) ---")
-	out, rc, err := t.runCombined(root, "./...")
+	out, rc, err := t.runCombined(target.root, target.packages()...)
 	if err != nil {
 		return schema.VulncheckResult{}, err
 	}
@@ -176,9 +201,9 @@ func measureVulncheck(w *section, t tool, root string) (schema.VulncheckResult, 
 
 // measureGosec は gosec を回す。指摘ありでも実行の失敗でも exit 1 を返す (cmd/gosec/main.go)。
 // 走り切れば stdout に JSON のレポートが出るので、その有無で見分ける。ログは stderr に出る
-func measureGosec(w *section, t tool, root string) (json.RawMessage, error) {
+func measureGosec(w *section, t tool, target target) (json.RawMessage, error) {
 	w.println("--- gosec (セキュリティ解析) ---")
-	out, rc, err := t.run(root, &w.err,"-fmt", "json", "./...")
+	out, rc, err := t.run(target.root, &w.err, append([]string{"-fmt", "json"}, target.packages()...)...)
 	if err != nil {
 		return nil, err
 	}
@@ -205,6 +230,12 @@ func measureGosec(w *section, t tool, root string) (json.RawMessage, error) {
 		}
 		return nil, fmt.Errorf("gosec が対象のコードをコンパイルできませんでした。理由:\n%s", strings.Join(lines, "\n"))
 	}
+	if out, err = target.filterGosec(out); err != nil {
+		return nil, fmt.Errorf("gosec の出力から ignore されたファイルの指摘を除けません: %w", err)
+	}
+	if err := json.Unmarshal(out, &report); err != nil {
+		return nil, err
+	}
 	rules := make([]string, len(report.Issues))
 	for i, issue := range report.Issues {
 		rules[i] = issue.RuleID
@@ -223,7 +254,8 @@ func sortedKeys[V any](m map[string]V) []string {
 }
 
 // measureModularity は analyze-modularity を回す。Ca/Ce の算出は go list に頼る。失敗すると stdout は空で
-// 理由が stderr に出る。schema が required にするキーが欠けたレポートも失敗として扱う
+// 理由が stderr に出る。schema が required にするキーが欠けたレポートも失敗として扱う。
+// 対象は analyze-modularity が同じ internal/tracked で決める
 func measureModularity(w *section, t tool, root string) (schema.Modularity, error) {
 	w.println("--- analyze-modularity (モジュール性) ---")
 	out, rc, err := t.run(root, &w.err, root)

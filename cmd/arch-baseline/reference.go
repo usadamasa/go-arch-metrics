@@ -11,9 +11,11 @@ import (
 // 失敗の理由は stderr に残す
 
 // measureReference は go list のパッケージ数と go test -cover の平均カバレッジを出す。
-func measureReference(w *section, root string) {
+// カバレッジはパッケージごとの値なので、追跡パッケージの中で ignore されたファイルも含む
+func measureReference(w *section, target target) {
 	w.println("--- パッケージ統計 ---")
-	if out, err := goCombined(root, "list", "./..."); err == nil {
+	root := target.root
+	if out, err := goCombined(root, append([]string{"list"}, target.packages()...)...); err == nil {
 		w.printf("  パッケージ数: %d\n", len(nonEmptyLines(out)))
 	} else {
 		w.println("  パッケージ数: 測定不可 (go list が失敗)")
@@ -21,7 +23,7 @@ func measureReference(w *section, root string) {
 	}
 
 	w.println("  テストカバレッジを測定中...")
-	out, err := goCombined(root, "test", "./...", "-cover")
+	out, err := goCombined(root, append([]string{"test", "-cover"}, target.packages()...)...)
 	if err != nil {
 		w.println("  カバレッジ: テスト失敗のため測定不可")
 		w.errorf("警告: go test が失敗したためカバレッジを測定できません。\n%s\n", testFailure(out))
@@ -35,7 +37,7 @@ func measureReference(w *section, root string) {
 }
 
 func goCombined(root string, args ...string) (string, error) {
-	cmd := exec.Command("go", args...) // #nosec G204 -- 呼び出し側は go list / go test の固定の引数だけを渡す
+	cmd := exec.Command("go", args...) // #nosec G204 -- 呼び出し側は go list / go test の固定の引数と go list が返したパッケージだけを渡す
 	cmd.Dir = root
 	out, err := cmd.CombinedOutput()
 	return string(out), err
