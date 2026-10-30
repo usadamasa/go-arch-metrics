@@ -121,8 +121,8 @@ exit code は指摘ありでも実行の失敗でも 1 なので、arch-baseline
 }
 ```
 
-どの警告が `actionable: true` になり `--strict` の失敗に数えられるかは、`go-arch-metrics:evaluate` の
-「`--strict` が失敗に数える警告」。
+どの警告が `actionable: true` になり `--strict` で exit 1 になるかは、`go-arch-metrics:evaluate` の
+「`--strict` で exit 1 になる警告」。
 
 `path` (と `excluded_packages`・`outlier_packages`・警告の `package`) はモジュールルートからの相対パスで、
 測った checkout の場所や引数の渡し方 (絶対・相対) に依らない。ルートのパッケージは `.` になる。

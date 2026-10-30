@@ -15,7 +15,7 @@ go test -coverprofile=coverage.out ./...
 ```
 
 `analyze-modularity --strict` がどの警告で exit 1 にするかは、
-`go-arch-metrics:evaluate` の「`--strict` が失敗に数える警告」。
+`go-arch-metrics:evaluate` の「`--strict` で exit 1 になる警告」。
 
 揮発性は git の履歴から測るので、`analyze-modularity` を回す job は履歴をすべて取得する。
 付けないと shallow clone になり、揮発性の判定は効かない (すべて揮発として扱い、stderr に案内が出る)。

@@ -51,30 +51,35 @@ D > 0.5 のパッケージ
 
 Zone の定義と構造的制約の根拠は `references/thresholds.md`。
 
-## `--strict` が失敗に数える警告
+## `--strict` で exit 1 になる警告
 
-`analyze-modularity --strict` は `actionable: true` の警告 (`summary.actionable_warnings`) が
-1 件以上あるときだけ exit 1 にする。`actionable: false` の警告は JSON に残るが失敗には数えず、
-`message` の末尾に `(情報のみ。--strict の失敗には数えない)` が付く。
+`analyze-modularity --strict` は、下の表で「なる」に当たる警告が 1 件でもあれば exit 1 で終わる。
+JSON ではその警告に `actionable: true` が付き、件数が `summary.actionable_warnings` に入る。
+「ならない」に当たる警告は JSON の `warnings` に載るだけで、終了コードを変えない。
 
-| type | 出る条件 | `--strict` で失敗に数えるか |
-|------|---------|---------------------------|
-| `unreferenced_exported` | `internal` のパッケージに、外から参照されない exported かテストだけが参照する exported がある | 数える |
-| `loc_outlier` | LOC が `max(mean + 2σ, 1000)` を超える | 数える |
-| `constrained_loc_outlier` | 構造制約のパッケージが LOC の外れ値でもある。`loc_outlier` と並んで出る | 数える |
-| `zone_of_pain` | A < 0.5 かつ I < 0.5 | 数える。ただし構造制約、非揮発、base から悪化していない、のどれかなら数えない |
-| `zone_of_uselessness` | A > 0.5 かつ I > 0.5 | 数える。ただし base から悪化していなければ数えない。非揮発でも数える |
-| `high_distance` | D > 0.5 で、同じパッケージの Zone の警告が上の行で数えられる | 数える。Zone の警告が数えられないパッケージには出さず、D は Zone の警告の `value` に出る |
-| `structurally_constrained` | 構造制約のパッケージであることの報告 | 数えない |
-| `high_public_ratio` | public ratio が `--max-public-ratio` を超える (参考値) | 数えない |
+| type | 警告が出るとき | `--strict` で exit 1 になるか |
+|------|---------------|------------------------------|
+| `unreferenced_exported` | `internal` のパッケージに、外から参照されない exported かテストだけが参照する exported がある | なる |
+| `loc_outlier` | パッケージの LOC が `max(mean + 2σ, 1000)` を超える | なる |
+| `constrained_loc_outlier` | 構造制約のパッケージに `loc_outlier` が出る。同じパッケージに 2 件並ぶ | なる |
+| `zone_of_pain` | A < 0.5 かつ I < 0.5 | なる。ただし構造制約、非揮発、base から悪化していない、のどれかに当たればならない |
+| `zone_of_uselessness` | A > 0.5 かつ I > 0.5 | なる。ただし base から悪化していなければならない。変更の多さは見ない |
+| `high_distance` | D > 0.5 で、同じパッケージの Zone の警告が exit 1 になる | なる |
+| `structurally_constrained` | パッケージが構造制約に当たる | ならない |
+| `high_public_ratio` | public ratio が `--max-public-ratio` を超える | ならない |
 
-数えない条件の中身は次のとおり。
+Zone の警告が exit 1 にならないパッケージには `high_distance` を出さない。D は Zone の警告の `value` で見る。
 
-- **構造制約**: Ce=0 かつ Ca>0 の葉パッケージ (`structurally_constrained: true`)。
+表の「ただし」に出てくる条件は次のとおり。
+
+- **構造制約**: ほかのパッケージを import せず (Ce=0)、ほかから import される (Ca>0) パッケージ。
+  JSON では `structurally_constrained: true` になる。I が 0 に固まるので、A を上げる以外に D を動かせない。
   根拠は `references/thresholds.md` の「構造的制約」
-- **非揮発**: 直近の窓で触った commit がしきい値未満 (`volatility: "non_volatile"`)。
-  shallow clone などで測れない (`unmeasured`) ときは揮発として扱い、数える。
-  窓としきい値は `references/thresholds.md` の「非揮発」
+- **非揮発**: 変更の少ないパッケージ。HEAD から遡った直近 200 commit (merge を除く) のうち、
+  そのパッケージのコードを変えた commit が 5 未満なら非揮発 (`volatility: "non_volatile"`)、
+  5 以上なら揮発 (`"volatile"`) になる。200 と 5 は `--volatility-window` と `--volatile-commits` で変える。
+  shallow clone などで履歴を数えられない (`"unmeasured"`) ときは揮発として扱う。
+  数え方は `references/thresholds.md` の「非揮発」
 - **base から悪化していない**: `--baseline` を渡し、base にもあるパッケージの D が base 以下。
   `--baseline` を渡さないときと、base に無いか base で excluded のパッケージには効かない。
   規則は `references/thresholds.md` の「base との比較」
