@@ -12,7 +12,7 @@ import (
 	"testing"
 )
 
-// binary は TestMain がビルドした arch-baseline のパス｡go run は子の exit code を 1 に潰すので、直接叩く｡
+// binary は TestMain がビルドした arch-baseline のパス。go run は子の exit code を 1 に潰すので、直接叩く。
 var binary string
 
 func TestMain(m *testing.M) {
@@ -36,20 +36,20 @@ const (
 	emptyGoArchLint = `{"Type":"models.Check","Payload":{"ArchHasWarnings":false,"ArchWarningsDeps":[],"ArchWarningsNotMatched":[],"ArchWarningsDeepScan":[]}}`
 )
 
-// modularityReport は analyze-modularity の警告なしのレポートで、total_packages だけを差し替える｡
+// modularityReport は analyze-modularity の警告なしのレポートで、total_packages だけを差し替える。
 func modularityReport(totalPackages int) string {
 	return fmt.Sprintf(`{"packages":[],"summary":{"mean_loc":0,"stddev_loc":0,"mean_public_ratio":0,"total_packages":%d,"total_warnings":0,"actionable_warnings":0,"main_sequence":{"excluded_packages":null,"structurally_constrained_count":0,"non_volatile_zone_of_pain_count":0,"actionable_count":0,"volatility_window_commits":200,"volatile_commit_threshold":5}}}`, totalPackages)
 }
 
-// fixture は測定対象のモジュールと、外部ツールを差し替えるスタブの置き場｡
+// fixture は測定対象のモジュールと、外部ツールを差し替えるスタブの置き場。
 type fixture struct {
 	t       *testing.T
 	stubBin string
 	project string
 }
 
-// newFixture は全ツールのスタブを「指摘なし」で置き、測定対象のモジュールを作る｡
-// PATH はスタブと go と標準コマンドだけに絞る｡開発機の PATH にある本物の vulncheck などを拾わないため｡
+// newFixture は全ツールのスタブを「指摘なし」で置き、測定対象のモジュールを作る。
+// PATH はスタブと go と標準コマンドだけに絞る。開発機の PATH にある本物の vulncheck などを拾わないため。
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
 	root := t.TempDir()
@@ -83,13 +83,13 @@ func (f *fixture) write(rel, content string) {
 	}
 }
 
-// stub は name のスタブを置く｡stdout と stderr の中身はファイルに書き、スタブはそれを cat する｡
-// 引用符のエスケープを考えずに任意の JSON を返せる｡
+// stub は name のスタブを置く。stdout と stderr の中身はファイルに書き、スタブはそれを cat する。
+// 引用符のエスケープを考えずに任意の JSON を返せる。
 func (f *fixture) stub(name string, rc int, stdout, stderr string) {
 	f.writeStub(name, "", rc, stdout, stderr)
 }
 
-// stubGoArchLint は引数に --json があるときだけ stdout を出す｡実物の v1.19.0 は --json-output を知らない｡
+// stubGoArchLint は引数に --json があるときだけ stdout を出す。実物の v1.19.0 は --json-output を知らない。
 func (f *fixture) stubGoArchLint(rc int, stdout, stderr string) {
 	guard := `json=; for a in "$@"; do [ "$a" = --json ] && json=1; done
 [ -n "$json" ] || { echo "unknown flag" >&2; exit 1; }
@@ -111,7 +111,7 @@ func (f *fixture) writeStub(name, guard string, rc int, stdout, stderr string) {
 	}
 }
 
-// removeStub は PATH からスタブを消す｡
+// removeStub は PATH からスタブを消す。
 func (f *fixture) removeStub(name string) {
 	f.t.Helper()
 	if err := os.Remove(filepath.Join(f.stubBin, name)); err != nil {
@@ -119,7 +119,7 @@ func (f *fixture) removeStub(name string) {
 	}
 }
 
-// addModuleTool は測定対象のモジュールに cmd/<name> を作って go.mod の tool directive に足し、PATH のスタブは消す｡
+// addModuleTool は測定対象のモジュールに cmd/<name> を作って go.mod の tool directive に足し、PATH のスタブは消す。
 func (f *fixture) addModuleTool(name, body string) {
 	f.t.Helper()
 	f.removeStub(name)
@@ -153,13 +153,13 @@ func TestAnswer(t *testing.T) {
 	t.Fatal("deliberate failure")
 }
 `)
-	// go test は失敗したパッケージの後も ok 行を出し続ける｡パッケージ順で後ろに
-	// 並ぶ成功パッケージを置き、FAIL 行が出力の末尾に来ない状況を作る｡
+	// go test は失敗したパッケージの後も ok 行を出し続ける。パッケージ順で後ろに
+	// 並ぶ成功パッケージを置き、FAIL 行が出力の末尾に来ない状況を作る。
 	f.write("zzlast/zzlast.go", "package zzlast\n\nfunc Noop() {}\n")
 	f.write("zzlast/zzlast_test.go", "package zzlast\n\nimport \"testing\"\n\nfunc TestNoop(t *testing.T) { Noop() }\n")
 }
 
-// run は cwd でビルド済みの arch-baseline に引数を渡し、exit code と stdout+stderr を返す｡
+// run は cwd でビルド済みの arch-baseline に引数を渡し、exit code と stdout+stderr を返す。
 func (f *fixture) run(cwd string, args ...string) (int, string) {
 	f.t.Helper()
 	goBin, err := exec.LookPath("go")
@@ -180,13 +180,13 @@ func (f *fixture) run(cwd string, args ...string) (int, string) {
 	return exitErr.ExitCode(), string(out)
 }
 
-// measure は出力先を省いて project を測る｡
+// measure は出力先を省いて project を測る。
 func (f *fixture) measure() (int, string) {
 	f.t.Helper()
 	return f.run(f.project, f.project)
 }
 
-// result は path の JSON を読み、dotted の key をたどった値を返す｡
+// result は path の JSON を読み、dotted の key をたどった値を返す。
 func (f *fixture) result(path string, keys ...string) any {
 	f.t.Helper()
 	data, err := os.ReadFile(path)
@@ -510,7 +510,7 @@ func TestGolangciLintがJSONを出してもexit0と1以外なら止まる(t *tes
 func TestGolangciLintが対象コードをコンパイルできなければ理由を出して止まる(t *testing.T) {
 	f := newFixture(t)
 	f.writePassingTest()
-	// コンパイルできないと typecheck の Issue を出して exit 1 する｡ほかの linter はそのパッケージを解析しない
+	// コンパイルできないと typecheck の Issue を出して exit 1 する。ほかの linter はそのパッケージを解析しない
 	f.stub("golangci-lint", 1, `{"Issues":[{"FromLinter":"typecheck","Text":"./a.go:2:23: undefined: undefinedThing"}],"Report":{}}`, "")
 
 	code, out := f.measure()
@@ -523,7 +523,7 @@ func TestGolangciLintが対象コードをコンパイルできなければ理�
 func TestGosecが対象コードをコンパイルできなければ理由を出して止まる(t *testing.T) {
 	f := newFixture(t)
 	f.writePassingTest()
-	// コンパイルできないと "Golang errors" に理由を入れて exit 1 する｡そのパッケージは解析しない
+	// コンパイルできないと "Golang errors" に理由を入れて exit 1 する。そのパッケージは解析しない
 	f.stub("gosec", 1, `{"Golang errors":{"/p/a.go":[{"line":2,"column":23,"error":"undefined: undefinedThing"}]},"Issues":[],"Stats":{"files":1,"lines":2,"nosec":0,"found":0}}`, "")
 
 	code, out := f.measure()
