@@ -1,5 +1,30 @@
 {
-  "project": "github.com/usadamasa/go-arch-metrics",
+  "go_arch_lint": {
+    "Type": "models.Check",
+    "Payload": {
+      "ExecutionWarnings": [],
+      "ArchHasWarnings": false,
+      "ArchWarningsDeps": [],
+      "ArchWarningsNotMatched": [],
+      "ArchWarningsDeepScan": [],
+      "OmittedCount": 0,
+      "ModuleName": "github.com/usadamasa/go-arch-metrics",
+      "Qualities": [
+        {
+          "ID": "component_imports",
+          "Used": true
+        },
+        {
+          "ID": "vendor_imports",
+          "Used": true
+        },
+        {
+          "ID": "deepscan",
+          "Used": true
+        }
+      ]
+    }
+  },
   "golangci_lint": {
     "Issues": [],
     "Report": {
@@ -385,171 +410,199 @@
       ]
     }
   },
-  "go_arch_lint": {
-    "Type": "models.Check",
-    "Payload": {
-      "ExecutionWarnings": [],
-      "ArchHasWarnings": false,
-      "ArchWarningsDeps": [],
-      "ArchWarningsNotMatched": [],
-      "ArchWarningsDeepScan": [],
-      "OmittedCount": 0,
-      "ModuleName": "github.com/usadamasa/go-arch-metrics",
-      "Qualities": [
-        {
-          "ID": "component_imports",
-          "Used": true
-        },
-        {
-          "ID": "vendor_imports",
-          "Used": true
-        },
-        {
-          "ID": "deepscan",
-          "Used": true
-        }
-      ]
-    }
-  },
   "gosec": {
     "Golang errors": {},
     "Issues": [],
     "Stats": {
-      "files": 15,
-      "lines": 3317,
+      "files": 17,
+      "lines": 3916,
       "nosec": 13,
       "found": 0
     },
     "GosecVersion": "2.29.0"
   },
+  "govulncheck": {
+    "exit_code": 0,
+    "status": "ok"
+  },
   "modularity": {
     "packages": [
       {
-        "path": "cmd/analyze-arch-lint",
-        "import_path": "github.com/usadamasa/go-arch-metrics/cmd/analyze-arch-lint",
         "exported_funcs": 0,
-        "unexported_funcs": 17,
         "exported_methods": 2,
-        "unexported_methods": 2,
         "exported_types": 0,
-        "unexported_types": 13,
+        "files": 4,
+        "import_path": "github.com/usadamasa/go-arch-metrics/cmd/analyze-arch-lint",
         "interface_types": 0,
-        "public_ratio": 0.058823529411764705,
         "loc": 729,
-        "files": 4,
         "main_sequence": {
-          "zone": "excluded",
-          "distance": 0,
-          "structurally_constrained": false,
           "abstractness": 0,
-          "instability": 1,
           "afferent_coupling": 0,
+          "distance": 0,
           "efferent_coupling": 0,
+          "instability": 1,
           "recent_commit_count": 5,
-          "volatility": "volatile"
-        }
+          "structurally_constrained": false,
+          "volatility": "volatile",
+          "zone": "excluded"
+        },
+        "path": "cmd/analyze-arch-lint",
+        "public_ratio": 0.058823529411764705,
+        "unexported_funcs": 17,
+        "unexported_methods": 2,
+        "unexported_types": 13
       },
       {
-        "path": "cmd/analyze-modularity",
-        "import_path": "github.com/usadamasa/go-arch-metrics/cmd/analyze-modularity",
         "exported_funcs": 8,
-        "unexported_funcs": 39,
         "exported_methods": 4,
-        "unexported_methods": 10,
         "exported_types": 11,
-        "unexported_types": 7,
-        "interface_types": 0,
-        "public_ratio": 0.2911392405063291,
-        "loc": 1852,
         "files": 6,
+        "import_path": "github.com/usadamasa/go-arch-metrics/cmd/analyze-modularity",
+        "interface_types": 0,
+        "loc": 1848,
         "main_sequence": {
-          "zone": "excluded",
-          "distance": 0,
-          "structurally_constrained": false,
           "abstractness": 0,
-          "instability": 1,
           "afferent_coupling": 0,
-          "efferent_coupling": 0,
-          "recent_commit_count": 20,
-          "volatility": "volatile"
-        }
+          "distance": 0,
+          "efferent_coupling": 29,
+          "instability": 1,
+          "recent_commit_count": 21,
+          "structurally_constrained": false,
+          "volatility": "volatile",
+          "zone": "excluded"
+        },
+        "path": "cmd/analyze-modularity",
+        "public_ratio": 0.2875,
+        "unexported_funcs": 39,
+        "unexported_methods": 11,
+        "unexported_types": 7
       },
       {
-        "path": "cmd/arch-baseline",
-        "import_path": "github.com/usadamasa/go-arch-metrics/cmd/arch-baseline",
         "exported_funcs": 0,
-        "unexported_funcs": 28,
         "exported_methods": 0,
-        "unexported_methods": 7,
         "exported_types": 0,
-        "unexported_types": 7,
-        "interface_types": 0,
-        "public_ratio": 0,
-        "loc": 693,
         "files": 4,
+        "import_path": "github.com/usadamasa/go-arch-metrics/cmd/arch-baseline",
+        "interface_types": 0,
+        "loc": 663,
         "main_sequence": {
-          "zone": "excluded",
-          "distance": 0,
-          "structurally_constrained": false,
           "abstractness": 0,
-          "instability": 1,
           "afferent_coupling": 0,
-          "efferent_coupling": 0,
-          "recent_commit_count": 4,
-          "volatility": "non_volatile"
-        }
+          "distance": 0,
+          "efferent_coupling": 6,
+          "instability": 1,
+          "recent_commit_count": 5,
+          "structurally_constrained": false,
+          "volatility": "volatile",
+          "zone": "excluded"
+        },
+        "path": "cmd/arch-baseline",
+        "public_ratio": 0,
+        "unexported_funcs": 28,
+        "unexported_methods": 7,
+        "unexported_types": 5
       },
       {
-        "path": "cmd/vulncheck",
-        "import_path": "github.com/usadamasa/go-arch-metrics/cmd/vulncheck",
         "exported_funcs": 0,
-        "unexported_funcs": 1,
         "exported_methods": 0,
-        "unexported_methods": 0,
         "exported_types": 0,
-        "unexported_types": 0,
-        "interface_types": 0,
-        "public_ratio": 0,
-        "loc": 43,
         "files": 1,
+        "import_path": "github.com/usadamasa/go-arch-metrics/cmd/vulncheck",
+        "interface_types": 0,
+        "loc": 43,
         "main_sequence": {
-          "zone": "excluded",
-          "distance": 0,
-          "structurally_constrained": false,
           "abstractness": 0,
-          "instability": 1,
           "afferent_coupling": 0,
+          "distance": 0,
           "efferent_coupling": 0,
+          "instability": 1,
           "recent_commit_count": 1,
-          "volatility": "non_volatile"
-        }
+          "structurally_constrained": false,
+          "volatility": "non_volatile",
+          "zone": "excluded"
+        },
+        "path": "cmd/vulncheck",
+        "public_ratio": 0,
+        "unexported_funcs": 1,
+        "unexported_methods": 0,
+        "unexported_types": 0
+      },
+      {
+        "exported_funcs": 0,
+        "exported_methods": 12,
+        "exported_types": 21,
+        "files": 2,
+        "import_path": "github.com/usadamasa/go-arch-metrics/internal/schema",
+        "interface_types": 0,
+        "loc": 633,
+        "main_sequence": {
+          "abstractness": 0,
+          "afferent_coupling": 2,
+          "distance": 1,
+          "efferent_coupling": 0,
+          "instability": 0,
+          "recent_commit_count": 1,
+          "structurally_constrained": true,
+          "volatility": "non_volatile",
+          "zone": "zone_of_pain"
+        },
+        "path": "internal/schema",
+        "public_ratio": 1,
+        "test_only_exported": 0,
+        "unexported_funcs": 0,
+        "unexported_methods": 0,
+        "unexported_types": 0,
+        "unreferenced_exported": 0
       }
     ],
     "summary": {
-      "mean_loc": 829.25,
-      "stddev_loc": 650.5422257624789,
-      "mean_public_ratio": 0.08749069247952346,
-      "total_packages": 4,
-      "total_warnings": 0,
       "actionable_warnings": 0,
       "main_sequence": {
+        "actionable_count": 0,
+        "baseline_not_worsened_count": 0,
         "excluded_packages": [
           "cmd/analyze-arch-lint",
           "cmd/analyze-modularity",
           "cmd/arch-baseline",
           "cmd/vulncheck"
         ],
-        "structurally_constrained_count": 0,
-        "baseline_not_worsened_count": 0,
         "non_volatile_zone_of_pain_count": 0,
-        "actionable_count": 0,
-        "volatility_window_commits": 200,
-        "volatile_commit_threshold": 5
+        "structurally_constrained_count": 1,
+        "volatile_commit_threshold": 5,
+        "volatility_window_commits": 200
+      },
+      "mean_loc": 783.2,
+      "mean_public_ratio": 0.2692647058823529,
+      "stddev_loc": 586.7948193363674,
+      "total_packages": 5,
+      "total_warnings": 3
+    },
+    "warnings": [
+      {
+        "actionable": false,
+        "limit": 0.6,
+        "message": "public ratio が高い (1.00 > 0.60) (情報のみ。--strict の失敗には数えない)",
+        "package": "internal/schema",
+        "type": "high_public_ratio",
+        "value": 1
+      },
+      {
+        "actionable": false,
+        "limit": 0,
+        "message": "Zone of Pain: 具象的 (A=0.00) で安定 (I=0.00) (情報のみ。--strict の失敗には数えない)",
+        "package": "internal/schema",
+        "type": "zone_of_pain",
+        "value": 1
+      },
+      {
+        "actionable": false,
+        "limit": 0,
+        "message": "構造制約: Ce=0, Ca=2 のため D=1.00 はトポロジー由来 (情報のみ。--strict の失敗には数えない)",
+        "package": "internal/schema",
+        "type": "structurally_constrained",
+        "value": 1
       }
-    }
+    ]
   },
-  "govulncheck": {
-    "status": "ok",
-    "exit_code": 0
-  }
+  "project": "github.com/usadamasa/go-arch-metrics"
 }
