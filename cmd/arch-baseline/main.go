@@ -2,7 +2,6 @@
 // JSON に各ツールの生の結果を書く。数値の判断はしない (go-arch-metrics:evaluate の担当)。
 //
 // 各ツールの「指摘あり」では測定を続け、「実行そのものの失敗」では理由を stderr に出して非 0 で終わる。
-// 指摘の数を信用できない JSON を残さないため。
 package main
 
 import (
@@ -13,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -61,8 +61,6 @@ func run(args []string) error {
 		return err
 	}
 	result.Project = info.Module.Path
-	measureReference(root)
-	fmt.Println()
 
 	if err := writeJSON(output, result); err != nil {
 		return err
@@ -77,30 +75,53 @@ func run(args []string) error {
 	return nil
 }
 
-// measureAll は JSON に残すツールを順に回す。
+// measureAll は各ツールと参考値の測定を並列に回し、出力を決まった順に書き出す。
+// 最初に失敗した measure の出力までを書いて、その error を返す
 func measureAll(tools map[string]tool, root string) (baseline, error) {
 	var b baseline
-	var err error
-	if b.GolangciLint, err = measureGolangci(tools["golangci-lint"], root); err != nil {
-		return b, err
+	// 各 step は b の別のフィールドだけに書くので、ロックは要らない
+	steps := []func(*section) error{
+		func(w *section) (err error) {
+			b.GolangciLint, err = measureGolangci(w, tools["golangci-lint"], root)
+			return err
+		},
+		func(w *section) (err error) {
+			b.GoArchLint, err = measureGoArchLint(w, tools["go-arch-lint"], root)
+			return err
+		},
+		func(w *section) (err error) {
+			b.Govulncheck, err = measureVulncheck(w, tools["vulncheck"], root)
+			return err
+		},
+		func(w *section) (err error) {
+			b.Gosec, err = measureGosec(w, tools["gosec"], root)
+			return err
+		},
+		func(w *section) (err error) {
+			b.Modularity, err = measureModularity(w, tools["analyze-modularity"], root)
+			return err
+		},
+		func(w *section) error {
+			measureReference(w, root)
+			return nil
+		},
 	}
-	fmt.Println()
-	if b.GoArchLint, err = measureGoArchLint(tools["go-arch-lint"], root); err != nil {
-		return b, err
+
+	sections := make([]section, len(steps))
+	errs := make([]error, len(steps))
+	var wg sync.WaitGroup
+	for i, step := range steps {
+		wg.Go(func() { errs[i] = step(&sections[i]) })
 	}
-	fmt.Println()
-	if b.Govulncheck, err = measureVulncheck(tools["vulncheck"], root); err != nil {
-		return b, err
+	wg.Wait()
+
+	for i := range sections {
+		sections[i].flush()
+		if errs[i] != nil {
+			return b, errs[i]
+		}
+		fmt.Println()
 	}
-	fmt.Println()
-	if b.Gosec, err = measureGosec(tools["gosec"], root); err != nil {
-		return b, err
-	}
-	fmt.Println()
-	if b.Modularity, err = measureModularity(tools["analyze-modularity"], root); err != nil {
-		return b, err
-	}
-	fmt.Println()
 	return b, nil
 }
 
@@ -142,8 +163,10 @@ func missingGoMod(root string) error {
 	if len(dirs) == 0 {
 		return fmt.Errorf("go.mod が見つかりません。Go プロジェクトルートを指定してください: %s", root)
 	}
-	return fmt.Errorf("%s/go.mod が見つかりません。\n以下のサブディレクトリに go.mod があります:\n  %s\n使用方法: arch-baseline %s",
-		root, strings.Join(dirs, "\n  "), dirs[0])
+	return fmt.Errorf(`%s/go.mod が見つかりません。
+以下のサブディレクトリに go.mod があります:
+  %s
+使用方法: arch-baseline %s`, root, strings.Join(dirs, "\n  "), dirs[0])
 }
 
 // writeJSON は jq と同じく HTML の文字をエスケープせずに書く。ツールのメッセージの -> や < を読めるまま残す

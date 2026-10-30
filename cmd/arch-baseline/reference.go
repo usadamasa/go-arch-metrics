@@ -1,8 +1,6 @@
 package main
 
 import (
-	"fmt"
-	"os"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -13,26 +11,26 @@ import (
 // 失敗の理由は stderr に残す
 
 // measureReference は go list のパッケージ数と go test -cover の平均カバレッジを出す。
-func measureReference(root string) {
-	fmt.Println("--- パッケージ統計 ---")
+func measureReference(w *section, root string) {
+	w.println("--- パッケージ統計 ---")
 	if out, err := goCombined(root, "list", "./..."); err == nil {
-		fmt.Printf("  パッケージ数: %d\n", len(nonEmptyLines(out)))
+		w.printf("  パッケージ数: %d\n", len(nonEmptyLines(out)))
 	} else {
-		fmt.Println("  パッケージ数: 測定不可 (go list が失敗)")
-		fmt.Fprintf(os.Stderr, "警告: go list が失敗しました。出力の末尾:\n%s\n", tailLines(out, 5))
+		w.println("  パッケージ数: 測定不可 (go list が失敗)")
+		w.errorf("警告: go list が失敗しました。出力の末尾:\n%s\n", tailLines(out, 5))
 	}
 
-	fmt.Println("  テストカバレッジを測定中...")
+	w.println("  テストカバレッジを測定中...")
 	out, err := goCombined(root, "test", "./...", "-cover")
 	if err != nil {
-		fmt.Println("  カバレッジ: テスト失敗のため測定不可")
-		fmt.Fprintf(os.Stderr, "警告: go test が失敗したためカバレッジを測定できません。\n%s\n", testFailure(out))
+		w.println("  カバレッジ: テスト失敗のため測定不可")
+		w.errorf("警告: go test が失敗したためカバレッジを測定できません。\n%s\n", testFailure(out))
 		return
 	}
 	if mean, ok := meanCoverage(out); ok {
-		fmt.Printf("  平均カバレッジ: %.1f%%\n", mean)
+		w.printf("  平均カバレッジ: %.1f%%\n", mean)
 	} else {
-		fmt.Println("  カバレッジ: 測定不可 (カバレッジ行が出力にない)")
+		w.println("  カバレッジ: 測定不可 (カバレッジ行が出力にない)")
 	}
 }
 

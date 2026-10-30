@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -84,11 +83,11 @@ func goToolName(pkgPath string) string {
 	return last
 }
 
-// run は dir で args を付けて呼び、stdout と exit code を返す。stderr はそのまま流す
+// run は dir で args を付けて呼び、stdout と exit code を返す。stderr は stderr へ流す
 // (失敗の理由はツール自身が stderr に出す)。起動できなかったときだけ error を返す
-func (t tool) run(dir string, args ...string) ([]byte, int, error) {
+func (t tool) run(dir string, stderr io.Writer, args ...string) ([]byte, int, error) {
 	var stdout bytes.Buffer
-	rc, err := t.invoke(dir, &stdout, os.Stderr, args)
+	rc, err := t.invoke(dir, &stdout, stderr, args)
 	return stdout.Bytes(), rc, err
 }
 

@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -66,9 +67,16 @@ func newFixture(t *testing.T) *fixture {
 	f.stub("analyze-modularity", 0, modularityReport(0), "")
 	f.stub("analyze-arch-lint", 0, "", "")
 
-	f.write("go.mod", "module baseline-fixture\ngo 1.26.1\n")
-	f.write(".go-arch-lint.yml", "version: 3\nworkdir: .\n")
-	f.write("fixture.go", "package fixture\n\nfunc Answer() int { return 42 }\n")
+	f.write("go.mod", `module baseline-fixture
+go 1.26.1
+`)
+	f.write(".go-arch-lint.yml", `version: 3
+workdir: .
+`)
+	f.write("fixture.go", `package fixture
+
+func Answer() int { return 42 }
+`)
 	return f
 }
 
@@ -105,7 +113,11 @@ func (f *fixture) writeStub(name, guard string, rc int, stdout, stderr string) {
 			f.t.Fatal(err)
 		}
 	}
-	script := fmt.Sprintf("#!/bin/sh\n%scat '%s.out'\ncat '%s.err' >&2\nexit %d\n", guard, base, base, rc)
+	script := fmt.Sprintf(`#!/bin/sh
+%scat '%s.out'
+cat '%s.err' >&2
+exit %d
+`, guard, base, base, rc)
 	if err := os.WriteFile(base, []byte(script), 0o755); err != nil { // #nosec G306 -- テストのスタブは実行権限が要る
 		f.t.Fatal(err)
 	}
@@ -123,7 +135,10 @@ func (f *fixture) removeStub(name string) {
 func (f *fixture) addModuleTool(name, body string) {
 	f.t.Helper()
 	f.removeStub(name)
-	f.write(filepath.Join("cmd", name, "main.go"), "package main\n\n"+body+"\n")
+	f.write(filepath.Join("cmd", name, "main.go"), `package main
+
+`+body+`
+`)
 	gomod, err := os.ReadFile(filepath.Join(f.project, "go.mod"))
 	if err != nil {
 		f.t.Fatal(err)
@@ -155,8 +170,16 @@ func TestAnswer(t *testing.T) {
 `)
 	// go test は失敗したパッケージの後も ok 行を出し続ける。パッケージ順で後ろに
 	// 並ぶ成功パッケージを置き、FAIL 行が出力の末尾に来ない状況を作る。
-	f.write("zzlast/zzlast.go", "package zzlast\n\nfunc Noop() {}\n")
-	f.write("zzlast/zzlast_test.go", "package zzlast\n\nimport \"testing\"\n\nfunc TestNoop(t *testing.T) { Noop() }\n")
+	f.write("zzlast/zzlast.go", `package zzlast
+
+func Noop() {}
+`)
+	f.write("zzlast/zzlast_test.go", `package zzlast
+
+import "testing"
+
+func TestNoop(t *testing.T) { Noop() }
+`)
 }
 
 // run は cwd でビルド済みの arch-baseline に引数を渡し、exit code と stdout+stderr を返す。
@@ -576,8 +599,14 @@ func TestGoToolで呼ぶツールのビルドが失敗したら理由を出し�
 func TestPATHに無いツールはGoModのToolDirectiveからGoToolで呼ぶ(t *testing.T) {
 	f := newFixture(t)
 	f.writePassingTest()
-	f.addModuleTool("vulncheck", "import \"fmt\"\n\nfunc main() { fmt.Println(\"vulncheck via go tool\") }")
-	f.addModuleTool("analyze-modularity", "import \"fmt\"\n\nfunc main() {\n\tfmt.Print(`"+modularityReport(7)+"`)\n}")
+	f.addModuleTool("vulncheck", `import "fmt"
+
+func main() { fmt.Println("vulncheck via go tool") }`)
+	f.addModuleTool("analyze-modularity", `import "fmt"
+
+func main() {
+	fmt.Print(`+strconv.Quote(modularityReport(7))+`)
+}`)
 	f.addModuleTool("analyze-arch-lint", "func main() {}")
 
 	code, out := f.measure()
