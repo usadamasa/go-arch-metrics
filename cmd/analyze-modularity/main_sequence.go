@@ -1,22 +1,17 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"go/ast"
 	"go/types"
-	"io"
 	"math"
-	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"golang.org/x/tools/go/packages"
 
 	"github.com/usadamasa/go-arch-metrics/internal/schema"
+	"github.com/usadamasa/go-arch-metrics/internal/tracked"
 )
 
 // PackageMetrics は Robert C. Martin の Package Metrics (Ca/Ce/A/I/D) の 1 パッケージ分｡
@@ -83,122 +78,6 @@ func distance(a, i float64) float64 {
 	return math.Abs(a + i - 1)
 }
 
-// listedPackage は go list -json の出力のうち使うフィールド｡
-type listedPackage struct {
-	ImportPath string
-	Name       string
-	Dir        string
-	GoFiles    []string
-}
-
-// listModulePackages は moduleRoot で go list -json ./... を実行し、モジュール内の全パッケージを返す｡
-// 入れ子のモジュールと vendor は go list が除く｡GoFiles はテストファイルを含まない｡
-func listModulePackages(moduleRoot string) ([]listedPackage, error) {
-	cmd := exec.Command("go", "list", "-json=ImportPath,Name,Dir,GoFiles", "./...")
-	cmd.Dir = moduleRoot
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	out, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("go list の実行に失敗 (%s): %w\n%s", moduleRoot, err, bytes.TrimSpace(stderr.Bytes()))
-	}
-
-	dec := json.NewDecoder(bytes.NewReader(out))
-	var pkgs []listedPackage
-	for {
-		var p listedPackage
-		if err := dec.Decode(&p); err != nil {
-			if errors.Is(err, io.EOF) {
-				break
-			}
-			return nil, fmt.Errorf("go list の出力のパースに失敗: %w", err)
-		}
-		pkgs = append(pkgs, p)
-	}
-	return pkgs, nil
-}
-
-// gitIgnoredDirs は dirs のうち git が ignore するものを、実体の絶対パスの集合で返す｡
-// moduleRoot が git リポジトリでなければ ignore するものは無いとみなし、stderr にその旨を出す｡
-func gitIgnoredDirs(moduleRoot string, dirs []string) (map[string]bool, error) {
-	ignored := make(map[string]bool)
-	if len(dirs) == 0 {
-		return ignored, nil
-	}
-
-	// git が無いのは前提の欠如なので止める。git リポジトリでないのは正常な状態として続ける
-	probe := exec.Command("git", "rev-parse", "--show-toplevel")
-	probe.Dir = moduleRoot
-	if err := probe.Run(); err != nil {
-		if errors.Is(err, exec.ErrNotFound) {
-			return nil, fmt.Errorf("git が PATH に見つかりません: %w", err)
-		}
-		fmt.Fprintf(os.Stderr, "注意: %s は git リポジトリではないので .gitignore は見ません\n", moduleRoot)
-		return ignored, nil
-	}
-
-	var input bytes.Buffer
-	for _, dir := range dirs {
-		rel, err := filepath.Rel(moduleRoot, dir)
-		if err != nil {
-			return nil, fmt.Errorf("%s をモジュールルートからの相対パスにできません: %w", dir, err)
-		}
-		input.WriteString(rel)
-		input.WriteByte(0)
-	}
-
-	cmd := exec.Command("git", "check-ignore", "-z", "--stdin")
-	cmd.Dir = moduleRoot
-	cmd.Stdin = &input
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	out, err := cmd.Output()
-	if err != nil {
-		// exit 1 は「どれも ignore されない」
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
-			return ignored, nil
-		}
-		return nil, fmt.Errorf("git check-ignore の実行に失敗: %w\n%s", err, bytes.TrimSpace(stderr.Bytes()))
-	}
-
-	for rel := range bytes.SplitSeq(out, []byte{0}) {
-		if len(rel) == 0 {
-			continue
-		}
-		dir, err := canonicalDir(filepath.Join(moduleRoot, string(rel)))
-		if err != nil {
-			return nil, fmt.Errorf("git check-ignore が返したパスを解決できません: %w", err)
-		}
-		ignored[dir] = true
-	}
-	return ignored, nil
-}
-
-// dropIgnored は listed から git が ignore するパッケージを除いて返す｡
-// 構成管理の外にあるパッケージは、一覧にも Ca/Ce の辺にも入れない｡
-func dropIgnored(moduleRoot string, listed []listedPackage) ([]listedPackage, error) {
-	dirs := make([]string, 0, len(listed))
-	for _, p := range listed {
-		dirs = append(dirs, p.Dir)
-	}
-	ignored, err := gitIgnoredDirs(moduleRoot, dirs)
-	if err != nil {
-		return nil, err
-	}
-	tracked := make([]listedPackage, 0, len(listed))
-	for _, p := range listed {
-		dir, err := canonicalDir(p.Dir)
-		if err != nil {
-			return nil, fmt.Errorf("go list が返したディレクトリを解決できません: %w", err)
-		}
-		if !ignored[dir] {
-			tracked = append(tracked, p)
-		}
-	}
-	return tracked, nil
-}
-
 // selectedPackage は報告の対象に選ばれたパッケージ｡Path はモジュールルートからの相対パス (区切りは /) で、
 // 測った checkout の場所にも引数の渡し方にも依らない｡
 type selectedPackage struct {
@@ -210,7 +89,7 @@ type selectedPackage struct {
 }
 
 // selectPackages は listed のうち args のどれかの下にあり、解析する Go ファイルを持つパッケージを選ぶ｡
-func selectPackages(listed []listedPackage, moduleRoot string, args []string) ([]selectedPackage, error) {
+func selectPackages(listed []tracked.Package, moduleRoot string, args []string) ([]selectedPackage, error) {
 	base, err := canonicalDir(moduleRoot)
 	if err != nil {
 		return nil, fmt.Errorf("モジュールルートを解決できません: %w", err)
@@ -251,26 +130,26 @@ func canonicalDir(path string) (string, error) {
 	return filepath.EvalSymlinks(abs)
 }
 
-// computeCoupling は tracked のパッケージどうしの参照から Ca/Ce を数え、パッケージのディレクトリをキーに返す｡
+// computeCoupling は sel のパッケージどうしの参照から Ca/Ce を数え、パッケージのディレクトリをキーに返す｡
 // Ce はほかのパッケージを参照する自分の宣言の単位 (declarationUnits) の数 (Martin)、
 // Ca は自分を参照する宣言を持つほかのパッケージの数 (JDepend)｡
 // どちらも、自分のコードが変わらない限り動かない数え方を選ぶ｡Ce を依存先のパッケージの数にすると依存先の統合で、
 // Ca を依存元の宣言の数にすると既存の呼び手に関数を足すだけで値が動く｡
-// 標準ライブラリ・外部モジュール・テストファイルは数えない｡
-func computeCoupling(loaded []*packages.Package, tracked []listedPackage) map[string]PackageMetrics {
-	inModule := make(map[string]bool, len(tracked))
-	for _, p := range tracked {
+// 標準ライブラリ・外部モジュール・テストファイル・git が ignore するファイルは数えない｡
+func computeCoupling(loaded []*packages.Package, sel tracked.Selection) map[string]PackageMetrics {
+	inModule := make(map[string]bool, len(sel.Packages))
+	for _, p := range sel.Packages {
 		inModule[p.ImportPath] = true
 	}
 
-	efferent := make(map[string]int, len(tracked))
-	dependents := make(map[string]map[string]bool, len(tracked))
+	efferent := make(map[string]int, len(sel.Packages))
+	dependents := make(map[string]map[string]bool, len(sel.Packages))
 	for _, p := range loaded {
 		// テストを含む変種 (p [p.test]、p_test、p.test) は数えない
 		if p.ID != p.PkgPath || !inModule[p.PkgPath] {
 			continue
 		}
-		for _, targets := range declarationUnits(p) {
+		for _, targets := range declarationUnits(p, sel) {
 			referenced := false
 			for target := range targets {
 				if !inModule[target] {
@@ -288,8 +167,8 @@ func computeCoupling(loaded []*packages.Package, tracked []listedPackage) map[st
 		}
 	}
 
-	byDir := make(map[string]PackageMetrics, len(tracked))
-	for _, p := range tracked {
+	byDir := make(map[string]PackageMetrics, len(sel.Packages))
+	for _, p := range sel.Packages {
 		byDir[p.Dir] = PackageMetrics{
 			Name:             p.Name,
 			Path:             p.ImportPath,
@@ -303,7 +182,8 @@ func computeCoupling(loaded []*packages.Package, tracked []listedPackage) map[st
 // declarationUnits は p のトップレベル宣言を単位に分け、単位ごとに参照するほかのパッケージのパスを返す｡
 // 単位は Martin の Ce が数えるクラスに当たるもの: 型とそのメソッドで 1 つ、それ以外の関数は 1 つずつ、
 // var/const/type は spec ごとに 1 つ｡メソッドを型へ寄せるのは、メソッドの多い型で Ce が膨らまないようにするため｡
-func declarationUnits(p *packages.Package) map[any]map[string]bool {
+// git が ignore するファイルの宣言は単位にしない｡
+func declarationUnits(p *packages.Package, sel tracked.Selection) map[any]map[string]bool {
 	units := make(map[any]map[string]bool)
 	add := func(unit any, node ast.Node) {
 		if units[unit] == nil {
@@ -322,6 +202,9 @@ func declarationUnits(p *packages.Package) map[any]map[string]bool {
 	}
 
 	for _, file := range p.Syntax {
+		if sel.Ignored(p.Fset.File(file.Pos()).Name()) {
+			continue
+		}
 		for _, decl := range file.Decls {
 			switch decl := decl.(type) {
 			case *ast.FuncDecl:

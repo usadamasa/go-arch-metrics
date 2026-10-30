@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/usadamasa/go-arch-metrics/internal/schema"
+	"github.com/usadamasa/go-arch-metrics/internal/tracked"
 )
 
 // Report はレポートの最上位構造｡キーは schema が決める
@@ -148,20 +149,19 @@ func main() {
 	}
 }
 
-// collectPackages は測る対象を決めて読む｡測るのは構成管理の対象だけ: go list が列挙するパッケージ
-// (入れ子のモジュールと vendor を含まない) から git が ignore するものを落とし、args の下にあるものを
-// 解析する｡返す Ca/Ce はディレクトリをキーにし、ignore されたパッケージからの参照も向けた参照も数えない｡
+// collectPackages は測る対象を決めて読む｡測るのは構成管理の対象だけ: internal/tracked が git の ignore する
+// ファイルとパッケージを落とし、args の下にあるものを解析する｡返す Ca/Ce はディレクトリをキーにし、
+// ignore されたファイルからの参照も、そこへ向けた参照も数えない｡型検査は ignore されたファイルも含めて行う｡
 func collectPackages(args []string) (map[string]PackageMetrics, []PackageResult, error) {
 	moduleRoot := inferModuleRoot(args)
-	listed, err := listModulePackages(moduleRoot)
+	sel, err := tracked.List(moduleRoot, nil)
 	if err != nil {
 		return nil, nil, err
 	}
-	tracked, err := dropIgnored(moduleRoot, listed)
-	if err != nil {
-		return nil, nil, err
+	if sel.NotRepository {
+		fmt.Fprintf(os.Stderr, "注意: %s は git リポジトリではないので .gitignore は見ません\n", moduleRoot)
 	}
-	selected, err := selectPackages(tracked, moduleRoot, args)
+	selected, err := selectPackages(sel.Packages, moduleRoot, args)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -169,7 +169,7 @@ func collectPackages(args []string) (map[string]PackageMetrics, []PackageResult,
 	if err != nil {
 		return nil, nil, err
 	}
-	usages := analyzeExportedReferences(loaded, tracked)
+	usages := analyzeExportedReferences(loaded, sel)
 
 	var packages []PackageResult
 	for _, s := range selected {
@@ -197,7 +197,7 @@ func collectPackages(args []string) (map[string]PackageMetrics, []PackageResult,
 	if len(packages) == 0 {
 		return nil, nil, fmt.Errorf("解析可能な Go パッケージが見つかりません")
 	}
-	return computeCoupling(loaded, tracked), packages, nil
+	return computeCoupling(loaded, sel), packages, nil
 }
 
 // enrichMainSequence は coupling (computeCoupling の Ca/Ce) と AST の型カウントから出す A で
