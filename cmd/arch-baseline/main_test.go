@@ -34,7 +34,6 @@ func TestMain(m *testing.M) {
 
 const (
 	emptyGolangci   = `{"Issues":[],"Report":{}}`
-	emptyGosec      = `{"Golang errors":{},"Issues":[],"Stats":{"files":1,"lines":3,"nosec":0,"found":0}}`
 	emptyGoArchLint = `{"Type":"models.Check","Payload":{"ArchHasWarnings":false,"ArchWarningsDeps":[],"ArchWarningsNotMatched":[],"ArchWarningsDeepScan":[]}}`
 )
 
@@ -50,7 +49,7 @@ type fixture struct {
 	project string
 }
 
-// newFixture は全ツールのスタブを「指摘なし」で置き、測定対象のモジュールを作る。
+// newFixture は外部ツールのスタブを「指摘なし」で置き、測定対象のモジュールを作る。
 // PATH はスタブと go と標準コマンドだけに絞る。開発機の PATH にある本物の vulncheck などを拾わないため。
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
@@ -62,7 +61,6 @@ func newFixture(t *testing.T) *fixture {
 		}
 	}
 	f.stub("golangci-lint", 0, emptyGolangci, "")
-	f.stub("gosec", 0, emptyGosec, "")
 	f.stubGoArchLint(0, emptyGoArchLint, "")
 	f.stub("vulncheck", 0, "", "")
 	f.stub("analyze-modularity", 0, modularityReport(0), "")
@@ -567,43 +565,43 @@ func TestGolangciLintが対象コードをコンパイルできなければ理�
 func TestGosecが対象コードをコンパイルできなければ理由を出して止まる(t *testing.T) {
 	f := newFixture(t)
 	f.writePassingTest()
-	// コンパイルできないと "Golang errors" に理由を入れて exit 1 する。そのパッケージは解析しない
-	f.stub("gosec", 1, `{"Golang errors":{"/p/a.go":[{"line":2,"column":23,"error":"undefined: undefinedThing"}]},"Issues":[],"Stats":{"files":1,"lines":2,"nosec":0,"found":0}}`, "")
+	// コンパイルできないパッケージは解析されず、指摘が少なく見える
+	f.write("broken.go", "package fixture\n\nfunc Broken() { undefinedThing() }\n")
 
 	code, out := f.measure()
 
 	assertFailed(t, code, out)
-	assertContains(t, out, "gosec が対象のコードをコンパイルできませんでした", "/p/a.go:2:23: undefined: undefinedThing")
+	assertContains(t, out, "gosec が対象のコードをコンパイルできませんでした", "broken.go:3:17: undefined: undefinedThing")
 	f.assertNoDefaultJSON()
 }
 
 func TestGosecの指摘は件数で出しJSONに残して測定を続ける(t *testing.T) {
 	f := newFixture(t)
 	f.writePassingTest()
-	// 指摘があると gosec は JSON を出したうえで exit 1 する
-	f.stub("gosec", 1, `{"Golang errors":{},"Issues":[{"rule_id":"G204","details":"Subprocess launched with variable"}],"Stats":{"files":1,"lines":3,"nosec":0,"found":1}}`, "")
+	f.write("sec.go", "package fixture\n\nimport \"crypto/md5\"\n\nfunc Sum() [16]byte { return md5.Sum(nil) }\n")
 
 	code, out := f.measure()
 
 	assertCode(t, code, 0, out)
-	assertContains(t, out, "セキュリティ指摘数: 1", "G204: 1")
+	assertContains(t, out, "セキュリティ指摘数: 2", "G401: 1", "G501: 1")
 	issues, _ := f.result(f.defaultJSON(), "gosec", "Issues").([]any)
-	if len(issues) != 1 {
-		t.Errorf("gosec.Issues = %v, want 1 件", issues)
+	if len(issues) != 2 {
+		t.Errorf("gosec.Issues = %v, want 2 件", issues)
+	}
+	// gosec は plugin に組み込んだ版で回すので、その版を JSON に残す
+	if version, _ := f.result(f.defaultJSON(), "gosec", "GosecVersion").(string); !strings.HasPrefix(version, "v2.") {
+		t.Errorf("gosec.GosecVersion = %q, want v2.x", version)
 	}
 }
 
-func TestGosecが実行に失敗したら理由を出して止まる(t *testing.T) {
+func TestGosecはPATHに無くても組み込みで回す(t *testing.T) {
 	f := newFixture(t)
 	f.writePassingTest()
-	// 指摘ありと同じ exit 1 だが、stdout にレポートが出ず理由は stderr に出る
-	f.stub("gosec", 1, "", "[gosec] No packages found")
 
 	code, out := f.measure()
 
-	assertFailed(t, code, out)
-	assertContains(t, out, "gosec の実行に失敗しました (exit 1)", "No packages found")
-	f.assertNoDefaultJSON()
+	assertCode(t, code, 0, out)
+	assertContains(t, out, "セキュリティ指摘数: 0")
 }
 
 func TestGoToolで呼ぶツールのビルドが失敗したら理由を出して止まる(t *testing.T) {
@@ -657,9 +655,9 @@ func ignoredFixture(t *testing.T) *fixture {
 	f := newFixture(t)
 	f.writePassingTest()
 	f.initGit("/work/\n/extra.go\n")
-	f.write("work/w.go", "package work\n\nfunc W() {}\n")
+	f.write("work/w.go", "package work\n\nimport \"crypto/md5\"\n\nfunc W() [16]byte { return md5.Sum(nil) }\n")
 	f.write("work/w_test.go", "package work\n\nimport \"testing\"\n\nfunc TestW(t *testing.T) { t.Fatal(\"ignored\") }\n")
-	f.write("extra.go", "package fixture\n\nfunc Extra() int { return Answer() }\n")
+	f.write("extra.go", "package fixture\n\nimport \"crypto/sha1\"\n\nfunc Extra() [20]byte { _ = Answer(); return sha1.Sum(nil) }\n")
 	return f
 }
 
@@ -669,7 +667,7 @@ func Test測定はGitが追跡するパッケージだけをツールへ渡す(t
 	code, out := f.measure()
 
 	assertCode(t, code, 0, out)
-	for _, name := range []string{"golangci-lint", "gosec", "vulncheck"} {
+	for _, name := range []string{"golangci-lint", "vulncheck"} {
 		args := f.args(name)
 		if !slices.Contains(args, ".") || slices.Contains(args, "./...") || slices.Contains(args, "./work") {
 			t.Errorf("%s の引数 = %v, want 追跡するパッケージ (.) だけ", name, args)
@@ -694,10 +692,9 @@ func Test追跡パッケージ内でignoreされたファイルの指摘は数�
 		`{"FromLinter":"gocognit","Text":"cognitive complexity 31 > 20","Pos":{"Filename":"fixture.go"}},`+
 		`{"FromLinter":"funlen","Text":"ignored file","Pos":{"Filename":"extra.go"}},`+
 		`{"FromLinter":"funlen","Text":"ignored dir","Pos":{"Filename":"work/w.go"}}],"Report":{}}`, "")
-	f.stub("gosec", 1, `{"Golang errors":{},"Issues":[`+
-		`{"rule_id":"G204","file":"`+filepath.Join(f.project, "fixture.go")+`"},`+
-		`{"rule_id":"G401","file":"`+filepath.Join(f.project, "extra.go")+`"}],`+
-		`"Stats":{"files":2,"lines":6,"nosec":0,"found":2}}`, "")
+	// gosec は組み込みで、追跡される sec.go の md5 (G401、G501) だけを数える。
+	// ignore された extra.go の sha1 (G401、G505) と work/w.go の md5 は数えない
+	f.write("sec.go", "package fixture\n\nimport \"crypto/md5\"\n\nfunc Sum() [16]byte { return md5.Sum(nil) }\n")
 	f.stubGoArchLint(1, `{"Type":"models.Check","Payload":{"ArchHasWarnings":true,"ArchWarningsDeps":[`+
 		`{"ComponentName":"domain","FileAbsolutePath":"`+filepath.Join(f.project, "fixture.go")+`","ResolvedImportName":"example.com/infra"},`+
 		`{"ComponentName":"domain","FileAbsolutePath":"`+filepath.Join(f.project, "extra.go")+`","ResolvedImportName":"example.com/ignored"}],`+
@@ -707,10 +704,11 @@ func Test追跡パッケージ内でignoreされたファイルの指摘は数�
 	code, out := f.measure()
 
 	assertCode(t, code, 0, out)
-	assertContains(t, out, "合計違反数: 1", "gocognit: 1", "セキュリティ指摘数: 1", "G204: 1",
+	assertContains(t, out, "合計違反数: 1", "gocognit: 1", "セキュリティ指摘数: 2", "G401: 1", "G501: 1",
 		"依存方向違反数: 1", "どの component にも属さないファイル: 0", "deepScan 違反数: 0")
 	assertNotContains(t, out, "funlen")
 	assertNotContains(t, out, "example.com/ignored")
+	assertNotContains(t, out, "G505")
 
 	if issues, _ := f.result(f.defaultJSON(), "golangci_lint", "Issues").([]any); len(issues) != 1 {
 		t.Errorf("golangci_lint.Issues = %v, want 1 件", issues)
@@ -719,11 +717,15 @@ func Test追跡パッケージ内でignoreされたファイルの指摘は数�
 	if raw, _ := os.ReadFile(f.defaultJSON()); !bytes.Contains(raw, []byte("31 > 20")) {
 		t.Errorf("JSON の > がエスケープされている\n%s", raw)
 	}
-	if issues, _ := f.result(f.defaultJSON(), "gosec", "Issues").([]any); len(issues) != 1 {
-		t.Errorf("gosec.Issues = %v, want 1 件", issues)
+	if issues, _ := f.result(f.defaultJSON(), "gosec", "Issues").([]any); len(issues) != 2 {
+		t.Errorf("gosec.Issues = %v, want 2 件", issues)
 	}
-	if found := f.result(f.defaultJSON(), "gosec", "Stats", "found"); found != 1.0 {
-		t.Errorf("gosec.Stats.found = %v, want 1 (Issues の件数とそろえる)", found)
+	if found := f.result(f.defaultJSON(), "gosec", "Stats", "found"); found != 2.0 {
+		t.Errorf("gosec.Stats.found = %v, want 2 (Issues の件数とそろえる)", found)
+	}
+	// 解析したファイルは追跡される fixture.go と sec.go だけ。テストファイルは CLI の既定どおり解析しない
+	if files := f.result(f.defaultJSON(), "gosec", "Stats", "files"); files != 2.0 {
+		t.Errorf("gosec.Stats.files = %v, want 2 (ignore された extra.go を数えない)", files)
 	}
 	payload := []string{"go_arch_lint", "Payload"}
 	if deps, _ := f.result(f.defaultJSON(), append(payload, "ArchWarningsDeps")...).([]any); len(deps) != 1 {
