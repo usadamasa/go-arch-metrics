@@ -1,5 +1,11 @@
 # Changelog
 
+## [2026.1031.0](https://github.com/usadamasa/go-arch-metrics/compare/2026.1030.0...2026.1031.0) - 2026-10-31
+
+### Other Changes
+- 測定対象から git が ignore するディレクトリとファイルを除く by @usadamasa in https://github.com/usadamasa/go-arch-metrics/pull/90
+- 文書で説明が付かない結果は実装を読まず issue にする方針を evaluate skill に書く by @usadamasa in https://github.com/usadamasa/go-arch-metrics/pull/92
+
 ## [2026.1030.0](https://github.com/usadamasa/go-arch-metrics/compare/2026.1028.0...2026.1030.0) - 2026-10-30
 
 ### Other Changes
