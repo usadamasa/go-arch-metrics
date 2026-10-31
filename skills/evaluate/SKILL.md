@@ -13,6 +13,36 @@ description: >-
 `go-arch-metrics:measure` が出した数値をしきい値と照らし、違反を分類して
 優先順位を付ける。具体的な直し方は `go-arch-metrics:remediate`。
 
+## 判断に使う情報
+
+結果の読み方は、次の情報だけで決める。
+
+- JSON の値。`analyze-modularity` の警告は `message` と `actionable` を読む
+- この skill の本文 (下の表) と `references/` の判定条件
+- `analyze-arch-lint --metrics` の出力
+- `go-arch-metrics:measure` の `references/baseline.schema.json` と `references/output-examples.md`
+
+この plugin の実装 (`cmd/` の Go ソース。module cache や plugin cache にあるものを含む) は読まない。
+測定対象のプロジェクトのコードを読むことは、この制約の対象外。
+実装から得た理解は版が変わると古くなり、memory に残ると後の判断を誤らせる。
+文書に無い条件は memory に書かない。
+
+上の情報で説明が付かない結果は、`usadamasa/go-arch-metrics` へ issue を立てる。
+評価そのものは止めず、その結果は「文書で説明できない」と報告に書いて、ほかの結果の評価を続ける。
+
+```bash
+gh issue create -R usadamasa/go-arch-metrics --title "<ツール名>: <説明の付かない出力を 1 行で>" --body-file <path>
+```
+
+issue の本文に書くもの:
+
+- plugin の版 (`claude plugin list` の `go-arch-metrics@usadamasa` の `version`)
+- 説明の付かない出力。JSON ならキーのパスと値 (`modularity.warnings[].message` など)、標準出力なら
+  その行
+- 照らした文書の場所 (skill 名とファイル名、節の名前) と、そこに書かれた判定条件
+- 出力と文書がどう合わないか (出るはずの警告が無い、無いはずの警告が出る、値の説明が付かない、
+  文書に無いキーがある)
+
 ## 違反の分類
 
 | カテゴリ | 影響 | 代表的な違反 |
@@ -99,7 +129,7 @@ analyze-arch-lint --strict <project-dir>   # しきい値超過で exit 1 (CI �
 analyze-arch-lint --metrics                # 指標の一覧・しきい値・意味・対処
 ```
 
-指標の一覧はドキュメント側に置かない。`--metrics` が正本。
+指標の一覧はドキュメント側に置かない。一覧は `--metrics` の出力で見る。
 
 ## リファレンス
 
