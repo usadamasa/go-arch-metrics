@@ -1,5 +1,16 @@
 # Changelog
 
+## [2026.1107.0](https://github.com/usadamasa/go-arch-metrics/compare/2026.1030.0...2026.1107.0) - 2026-11-07
+
+### Dependencies
+- chore(deps): Bump nixpkgs from `02c087f` to `31ecbac` by @dependabot[bot] in https://github.com/usadamasa/go-arch-metrics/pull/95
+### Other Changes
+- 測定対象から git が ignore するディレクトリとファイルを除く by @usadamasa in https://github.com/usadamasa/go-arch-metrics/pull/90
+- 文書で説明が付かない結果は実装を読まず issue にする方針を evaluate skill に書く by @usadamasa in https://github.com/usadamasa/go-arch-metrics/pull/92
+- ci: pull_request の types から edited を外す by @usadamasa in https://github.com/usadamasa/go-arch-metrics/pull/96
+- ci: actions.lock の検証を gh-manage の verify-actions-lock に置き換える by @usadamasa in https://github.com/usadamasa/go-arch-metrics/pull/97
+- analyze-modularity: any を使う interface 実装メソッドを未参照に数えない by @usadamasa in https://github.com/usadamasa/go-arch-metrics/pull/98
+
 ## [2026.1030.0](https://github.com/usadamasa/go-arch-metrics/compare/2026.1028.0...2026.1030.0) - 2026-10-30
 
 ### Other Changes
