@@ -73,6 +73,15 @@ func GetAlias() Alias { return Alias{} }
 type XOut struct{}
 
 func ForXTest() XOut { return XOut{} }
+
+// Doc のメソッドは app の interface と any / interface{} の書き方だけが違う
+type Doc struct{}
+
+func (Doc) MarshalYAML() (any, error)  { return nil, nil }
+func (Doc) Items() []any               { return nil }
+func (Doc) Fields() map[string]any     { return nil }
+func (Doc) Each(func(any) bool)        {}
+func (Doc) Raw() interface{}           { return nil }
 `,
 		"internal/lib/lib_internal_test.go": "package lib\n\nimport \"testing\"\n\nfunc TestOwn(t *testing.T) { OnlyOwnTests() }\n",
 		"internal/lib/lib_test.go":          "package lib_test\n\nimport (\n\t\"testing\"\n\n\t\"example.com/ref/internal/lib\"\n)\n\nfunc TestX(t *testing.T) {\n\tlib.OnlyTests()\n\t_ = lib.ForXTest()\n}\n",
@@ -90,7 +99,17 @@ type visitor interface{ Visit(depth int) bool }
 // visitor2 は名前だけ同じで型が違う
 type visitor2 interface{ Visit2(n int) int }
 
+// marshaler は lib.Doc のメソッドを any ではなく interface{} で、Raw だけ逆に any で書く
+type marshaler interface {
+	MarshalYAML() (interface{}, error)
+	Items() []interface{}
+	Fields() map[string]interface{}
+	Each(func(interface{}) bool)
+	Raw() any
+}
+
 func Run() int {
+	var _ lib.Doc
 	var w lib.Widget
 	w.Called()
 	w.Promoted()
