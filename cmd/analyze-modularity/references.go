@@ -317,22 +317,12 @@ func symbolKey(obj types.Object) (string, bool) {
 }
 
 // methodSignature はメソッドを「名前 + 引数と戻り値の型」の文字列にする｡レシーバと引数の名前は含めない｡
-// ソースから読んだ型と export data から読んだ型は別のオブジェクトになるので、パッケージのパスで書いた文字列で比べる｡
+// ソースから読んだ型と export data から読んだ型は別のオブジェクトになるので、typeKey の文字列で比べる｡
 func methodSignature(method *types.Func) string {
-	qualifier := func(p *types.Package) string { return p.Path() }
-	typesOf := func(tuple *types.Tuple) string {
-		names := make([]string, 0, tuple.Len())
-		for v := range tuple.Variables() {
-			names = append(names, types.TypeString(v.Type(), qualifier))
-		}
-		return strings.Join(names, ", ")
-	}
-	sig := method.Signature()
-	variadic := ""
-	if sig.Variadic() {
-		variadic = " variadic"
-	}
-	return method.Name() + "(" + typesOf(sig.Params()) + variadic + ") (" + typesOf(sig.Results()) + ")"
+	var b strings.Builder
+	b.WriteString(method.Name())
+	writeSignatureKey(&b, method.Signature())
+	return b.String()
 }
 
 // interfaceMethods は読み込んだパッケージとその import 先 (標準ライブラリを含む) にある interface のメソッドを集める｡
