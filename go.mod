@@ -9,7 +9,7 @@ go 1.26.1
 toolchain go1.26.10
 
 require (
-	github.com/securego/gosec/v2 v2.29.0
+	github.com/securego/gosec/v2 v2.30.0
 	golang.org/x/crypto/x509roots/fallback v0.0.0-20261020153306-9f2b28d4331a
 	golang.org/x/tools v0.52.0
 	golang.org/x/vuln v1.9.0
