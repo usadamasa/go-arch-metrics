@@ -11,6 +11,10 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      # tag の無い module で、Dependabot は親の x/crypto の tag を当てて解決に失敗する。
+      # 代わりに .github/workflows/update-x509roots.yaml が上げる
+      - dependency-name: golang.org/x/crypto/x509roots/fallback
 
   # Dependabot は `uses:` のタグと actions.lock の SHA を同じ commit で上げるので、
   # CI の actions-lock ジョブ (`gh actions-lock --verify`) を通る。
