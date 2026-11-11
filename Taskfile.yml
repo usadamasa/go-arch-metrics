@@ -36,7 +36,7 @@ tasks:
       - go run ./cmd/analyze-arch-lint --strict .
       - task: vulncheck
       - gosec ./...
-      - go run ./cmd/analyze-modularity --strict .
+      - go run ./cmd/analyze-modularity --strict --quiet .
 
   vulncheck:
     desc: govulncheck を symbol と module の両方で実行 (lint と週次の vulncheck workflow が呼ぶ)
