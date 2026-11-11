@@ -2,7 +2,8 @@
 
 Go アーキテクチャメトリクスの Claude Code plugin。skill と CLI を持つ。
 
-この plugin の利用者は usadamasa 本人だけ。不特定多数の利用者の手元環境 (Go のバージョン、`GOTOOLCHAIN` の設定など) との互換は考慮しない。
+この plugin の利用者は usadamasa 本人だけ。
+不特定多数の利用者の手元環境 (Go のバージョン、`GOTOOLCHAIN` の設定など) との互換は考慮しない。
 
 ## レイアウト
 
