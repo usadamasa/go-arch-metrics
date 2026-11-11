@@ -21,7 +21,7 @@ Go と lint のツール (`shellcheck` を含む) は `flake.nix` の devShell �
 `.envrc` (nix-direnv の `use flake`) が読み込む。
 版は `flake.lock` が固定する nixpkgs で決まり、上げるときは `nix flake update`。
 `flake.lock`・`go.mod`・GitHub Actions の更新 PR は Dependabot が週次で出す (`.github/dependabot.yml`)。
-devShell の go は `go.mod` の `go` 行と同じ系列 (`go_1_26`) にし、`GOTOOLCHAIN=local` でずれを即座に落とす。
+devShell の go は `go.mod` の `go` 行と同じバージョン (`go_1_27`) にし、`GOTOOLCHAIN=local` でずれを即座に落とす。
 
 この plugin の CLI (`cmd/` 配下) は devShell に入れない。`task lint` が `go run ./cmd/...` で
 このリポジトリのソースから動かす。

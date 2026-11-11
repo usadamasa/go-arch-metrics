@@ -13,26 +13,23 @@
       ];
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
 
-      # devShell の go は nixpkgs の Go 製ツール (gosec など) をビルドした系列 (pkgs.go = go_1_26) に揃える。
-      # 新しい系列の go を並べると、gosec が export data を読めず SSA の解析を飛ばして exit 1 になる。
-      # nixos-unstable の go_1_26 は 1.26.9 で、crypto/x509 の脆弱性 (GO-2026-6809、1.26.10 で修正) が
-      # cmd/analyze-modularity から届くため vulncheck が exit 3 を返す。channel に 1.26.10 が降りるまで、
-      # go だけソースを差し替える (#33)。
-      # 差し替えは channel の go_1_26 が 1.26.10 より古いときだけ効く。Dependabot の nix PR が 1.26.10 以上の
-      # nixpkgs を取り込んだ時点で channel の go_1_26 に戻り、以後のパッチ更新は flake.lock と一緒に上がる。
-      # 戻った後の差し替えの分岐は使われないので、そのとき消す
-      devGo =
-        pkgs:
-        if pkgs.lib.versionOlder pkgs.go_1_26.version "1.26.10" then
-          pkgs.go_1_26.overrideAttrs (old: rec {
-            version = "1.26.10";
+      # nixos-unstable の go_1_27 は 1.27.3 で、net/http の MaxBytesReader のデータ競合 (CVE-2026-97054) と
+      # cgo 経由でビルド時に任意コードが実行される cmd/go などの脆弱性 (CVE-2026-97033〜97043) が残る。
+      # 渡した Go が 1.27.4 より古いときだけソースを差し替える。Dependabot の nix PR が 1.27.4 以上の
+      # nixpkgs を取り込んだら差し替えは外れ、以後のパッチ更新は flake.lock と一緒に上がる。そのときこの分岐ごと消す
+      patchGo =
+        pkgs: base:
+        if pkgs.lib.versionOlder base.version "1.27.4" then
+          base.overrideAttrs (old: rec {
+            version = "1.27.4";
             src = pkgs.fetchurl {
               url = "https://go.dev/dl/go${version}.src.tar.gz";
-              hash = "sha256-/WPog7ovK/ypPBZGsx6+9j4rHk0rMXyXidl2po2B828=";
+              hash = "sha256-c8+4VxrsDAEXdofbhxY9Rqog6XeWcncokaoXZU2aYJk=";
             };
           })
         else
-          pkgs.go_1_26;
+          base;
+      devGo = pkgs: patchGo pkgs pkgs.go_1_27;
     in
     {
       packages = forAllSystems (
@@ -40,8 +37,9 @@
         let
           # vulncheck は自分をビルドした Go より新しい go 行のモジュールを測れない
           # (package requires newer Go version)。pkgs.go は一つ前の系列に留まるので go_latest でビルドする。
-          # 利用側が nixpkgs を follows させれば、利用側の nixpkgs の go_latest でビルドされる
-          buildGoModule = pkgs.buildGoModule.override { go = pkgs.go_latest; };
+          # 利用側が nixpkgs を follows させれば、利用側の nixpkgs の go_latest でビルドされる。
+          # go_latest が 1.27.4 より古いあいだは devShell と同じ差し替えを当てる
+          buildGoModule = pkgs.buildGoModule.override { go = patchGo pkgs pkgs.go_latest; };
         in
         {
           default = buildGoModule {
@@ -77,7 +75,7 @@
           # この plugin の CLI はこのリポジトリ自身のソースを go run するので含めない
           packages =
             [
-              # go.mod の go 行と同じ系列。ずれたら GOTOOLCHAIN=local で即座に失敗させる
+              # go.mod の go 行と同じバージョン。ずれたら GOTOOLCHAIN=local で即座に失敗させる
               (devGo pkgs)
             ]
             ++ (with pkgs; [
