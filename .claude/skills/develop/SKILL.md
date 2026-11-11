@@ -23,6 +23,9 @@ Go と lint のツール (`shellcheck` を含む) は `flake.nix` の devShell �
 `flake.lock`・`go.mod`・GitHub Actions の更新 PR は Dependabot が週次で出す (`.github/dependabot.yml`)。
 devShell の go は `go.mod` の `go` 行と同じバージョン (`go_1_27`) にし、`GOTOOLCHAIN=local` でずれを即座に落とす。
 
+`golang.org/x/crypto/x509roots/fallback` (vulncheck が埋め込む roots) は Dependabot が解決できないので、
+`.github/workflows/update-x509roots.yaml` が週次で最新へ上げる PR を開く。
+
 この plugin の CLI (`cmd/` 配下) は devShell に入れない。`task lint` が `go run ./cmd/...` で
 このリポジトリのソースから動かす。
 

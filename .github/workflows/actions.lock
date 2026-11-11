@@ -11,6 +11,10 @@ workflows:
         - 'actions/checkout@v7.0.1'
         - 'actions/create-github-app-token@v3.3.0'
         - 'songmu/tagpr@v1.22.0'
+    '.github/workflows/update-x509roots.yaml':
+        - 'actions/checkout@v7.0.1'
+        - 'actions/create-github-app-token@v3.3.0'
+        - 'usadamasa/gh-manage@main'
     '.github/workflows/vulncheck.yaml':
         - 'actions/checkout@v7.0.1'
         - 'usadamasa/gh-manage@main'
@@ -52,7 +56,7 @@ dependencies:
         repo_id: 524603982
     'usadamasa/gh-manage@main':
         ref: 'main'
-        commit: 'sha1-70163a8e097b340d9347b51db77140e94f253249'
+        commit: 'sha1-9db1a15cab947db3d057cc29631d5da08ff1fc2e'
         owner_id: 513226
         repo_id: 1390013800
         uses:

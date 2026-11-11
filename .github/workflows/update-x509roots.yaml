@@ -1,0 +1,46 @@
+name: update-x509roots
+
+# golang.org/x/crypto/x509roots/fallback は tag の無い module で Dependabot が解決できない
+# (dependabot.yml で ignore している)。代わりに週次で最新へ上げる PR を開く
+on:
+  schedule:
+    - cron: '0 0 * * 2'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: usadamasa/gh-manage/actions/setup-nix@main
+
+      - name: Update fallback roots and vendorHash
+        id: update
+        run: .github/scripts/update-x509roots.sh
+
+      # GITHUB_TOKEN で開いた PR では ci が走らず ci-status-check が付かないので、tagpr と同じ App のトークンを使う
+      - uses: actions/create-github-app-token@v3.3.0
+        if: steps.update.outputs.changed == 'true'
+        id: app-token
+        with:
+          client-id: ${{ vars.TAGPR_CLIENT_ID }}
+          private-key: ${{ secrets.TAGPR_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Open or update the PR
+        if: steps.update.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: .github/scripts/open-x509roots-pr.sh
