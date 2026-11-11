@@ -24,6 +24,8 @@ jobs:
           persist-credentials: false
 
       - uses: usadamasa/gh-manage/actions/setup-nix@main
+        with:
+          cache: false
 
       - name: Update fallback roots and vendorHash
         id: update
