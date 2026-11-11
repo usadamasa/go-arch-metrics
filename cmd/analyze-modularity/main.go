@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -50,7 +51,8 @@ func main() {
 	maxPublicRatio := flag.Float64("max-public-ratio", 0.6, "high_public_ratio (参考情報) を出すしきい値。--strict の判定には効かない")
 	sigma := flag.Float64("sigma", 2.0, "LOC 外れ値検出の σ 倍数。しきい値は max(mean + sigma*stddev, 1000) で、下限 1000 は固定")
 	minSymbols := flag.Int("min-symbols", defaultMinSymbols, "high_public_ratio (参考情報) を出す最小シンボル数。--strict の判定には効かない")
-	strict := flag.Bool("strict", false, "actionable な警告 (コードを直して消せるもの) がある場合に exit code 1 を返す")
+	strict := flag.Bool("strict", false, "actionable な警告 (コードを直して消せるもの) がある場合に、その警告を stderr に出して exit code 1 を返す")
+	quiet := flag.Bool("quiet", false, "stdout にレポートを出さない。--strict と併用し、判定の結果だけを受け取る")
 	volatilityWindow := flag.Int("volatility-window", defaultVolatilityWindow, "揮発性を数える直近の commit 数 (merge を除く)")
 	volatileCommits := flag.Int("volatile-commits", defaultVolatileCommits, "窓の中でこの数以上の commit に触られたパッケージを揮発とみなす")
 	baselinePath := flag.String("baseline", "", "base の commit で同じ版の analyze-modularity が出したレポート。base にあるパッケージは D が base より大きくなったときだけ Main Sequence の警告を actionable にする")
@@ -65,6 +67,10 @@ func main() {
 	// 窓 0 だと全パッケージが 0 commit になり、Zone of Pain がすべて非揮発に倒れて --strict が緩む
 	if *volatilityWindow < 1 || *volatileCommits < 1 {
 		fmt.Fprintf(os.Stderr, "エラー: --volatility-window と --volatile-commits は 1 以上を指定する\n")
+		os.Exit(1)
+	}
+	if *quiet && !*strict {
+		fmt.Fprintf(os.Stderr, "エラー: --quiet は --strict と併用する (単独では何も出力しない)\n")
 		os.Exit(1)
 	}
 
@@ -98,24 +104,7 @@ func main() {
 	locThreshold := NewLOCThreshold(locStats, *sigma)
 	outliers := DetectOutliers(packages, locThreshold)
 
-	// 警告生成
-	var allWarnings []Warning
-	for _, p := range packages {
-		astWarnings := GenerateWarnings(p, *maxPublicRatio, locThreshold, *minSymbols)
-		mainSequenceWarnings := GenerateMainSequenceWarnings(p)
-		crossWarnings := GenerateCrossWarnings(p, astWarnings)
-		allWarnings = append(allWarnings, astWarnings...)
-		allWarnings = append(allWarnings, GenerateExportedReferenceWarnings(p)...)
-		allWarnings = append(allWarnings, mainSequenceWarnings...)
-		allWarnings = append(allWarnings, crossWarnings...)
-	}
-
-	actionableWarnings := 0
-	for _, w := range allWarnings {
-		if w.Actionable {
-			actionableWarnings++
-		}
-	}
+	allWarnings := generateAllWarnings(packages, *maxPublicRatio, locThreshold, *minSymbols)
 
 	summary := Summary{
 		MeanLOC:            locStats.Mean,
@@ -124,7 +113,7 @@ func main() {
 		OutlierPackages:    outliers,
 		TotalPackages:      len(packages),
 		TotalWarnings:      len(allWarnings),
-		ActionableWarnings: actionableWarnings,
+		ActionableWarnings: countActionable(allWarnings),
 		MainSequence:       *buildMainSequenceSummary(packages, history, *volatilityWindow, *volatileCommits),
 	}
 
@@ -137,16 +126,59 @@ func main() {
 		report.Packages[i] = p.schemaPackage()
 	}
 
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-	if err := enc.Encode(report); err != nil {
-		fmt.Fprintf(os.Stderr, "JSON 出力エラー: %v\n", err)
-		os.Exit(1)
+	if !*quiet {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(report); err != nil {
+			fmt.Fprintf(os.Stderr, "JSON 出力エラー: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	if *strict && report.Summary.ActionableWarnings > 0 {
+		if err := writeActionableWarnings(os.Stderr, report.Warnings); err != nil {
+			fmt.Fprintf(os.Stderr, "警告の出力エラー: %v\n", err)
+		}
 		os.Exit(1)
 	}
+}
+
+// generateAllWarnings は全パッケージの警告を、パッケージごとに AST・exported の参照・Main Sequence・
+// その組み合わせの順で並べて返す｡
+func generateAllWarnings(packages []PackageResult, maxPublicRatio float64, locThreshold LOCThreshold, minSymbols int) []Warning {
+	var all []Warning
+	for _, p := range packages {
+		astWarnings := GenerateWarnings(p, maxPublicRatio, locThreshold, minSymbols)
+		all = append(all, astWarnings...)
+		all = append(all, GenerateExportedReferenceWarnings(p)...)
+		all = append(all, GenerateMainSequenceWarnings(p)...)
+		all = append(all, GenerateCrossWarnings(p, astWarnings)...)
+	}
+	return all
+}
+
+// countActionable は --strict が失敗に数える警告の件数を返す｡
+func countActionable(warnings []Warning) int {
+	n := 0
+	for _, w := range warnings {
+		if w.Actionable {
+			n++
+		}
+	}
+	return n
+}
+
+// writeActionableWarnings は --strict が失敗に数える警告を 1 行 1 件で w へ書く｡
+func writeActionableWarnings(w io.Writer, warnings []Warning) error {
+	for _, warning := range warnings {
+		if !warning.Actionable {
+			continue
+		}
+		if _, err := fmt.Fprintf(w, "%s: %s (%s)\n", warning.Package, warning.Message, warning.Type); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // collectPackages は測る対象を決めて読む｡測るのは構成管理の対象だけ: internal/tracked が git の ignore する

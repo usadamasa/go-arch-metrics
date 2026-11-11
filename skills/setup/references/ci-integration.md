@@ -10,12 +10,14 @@ go-arch-lint check
 analyze-arch-lint --strict .
 vulncheck ./...
 gosec ./...
-analyze-modularity --strict .
+analyze-modularity --strict --quiet .
 go test -coverprofile=coverage.out ./...
 ```
 
 `analyze-modularity --strict` がどの警告で exit 1 にするかは、
 `go-arch-metrics:evaluate` の「`--strict` で exit 1 になる警告」。
+落ちたときはその警告を 1 行 1 件 (`<package>: <message> (<type>)`) で stderr に出す。
+`--quiet` は stdout の全レポートを止め、ゲートの出力を判定の結果だけにする。
 
 揮発性は git の履歴から測るので、`analyze-modularity` を回す job は履歴をすべて取得する。
 付けないと shallow clone になり、揮発性の判定は効かない (すべて揮発として扱い、stderr に案内が出る)。
@@ -54,7 +56,7 @@ merge した ref) を前提に、`base.sha` と比べる。`pull_request.head.sh
     git worktree add --detach "$RUNNER_TEMP/base" "$BASE_SHA"
     go tool analyze-modularity "$RUNNER_TEMP/base" > "$RUNNER_TEMP/base.json"
     echo "args=--baseline $RUNNER_TEMP/base.json" >> "$GITHUB_OUTPUT"
-- run: go tool analyze-modularity --strict ${{ steps.base.outputs.args }} .
+- run: go tool analyze-modularity --strict --quiet ${{ steps.base.outputs.args }} .
 ```
 
 base の commit を checkout するので、この job も `fetch-depth: 0` が要る。

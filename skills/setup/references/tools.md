@@ -279,8 +279,11 @@ analyze-modularity --max-public-ratio 0.6 --sigma 2.0 --min-symbols 10 .
 analyze-modularity . | jq '.summary'
 analyze-modularity . | jq '.warnings'
 
-# CI ゲート (actionable な警告があれば exit 1)
+# CI ゲート (actionable な警告があれば、その警告を stderr に出して exit 1)
 analyze-modularity --strict .
+
+# 判定の結果だけを受け取る (stdout にレポートを出さない。通れば無出力)
+analyze-modularity --strict --quiet .
 
 # 揮発性の窓としきい値 (既定は直近 200 commit で 5 回以上触られたら揮発)
 analyze-modularity --volatility-window 200 --volatile-commits 5 .
