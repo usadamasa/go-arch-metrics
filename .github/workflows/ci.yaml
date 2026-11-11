@@ -18,6 +18,7 @@ permissions:
   contents: read
 
 # Go と lint・テストのツールは flake.nix の devShell から取る (usadamasa/gh-manage の setup-nix)。
+# devShell は binary cache から取れ、nix store の cache を戻す方が遅いので cache: false にする
 jobs:
   go-test:
     name: go test
@@ -26,6 +27,8 @@ jobs:
       - uses: actions/checkout@v7.0.1
 
       - uses: usadamasa/gh-manage/actions/setup-nix@main
+        with:
+          cache: false
 
       - name: go vet
         run: go vet ./...
@@ -49,6 +52,8 @@ jobs:
           fetch-depth: 0
 
       - uses: usadamasa/gh-manage/actions/setup-nix@main
+        with:
+          cache: false
 
       - name: Run all linters
         run: task lint
@@ -60,6 +65,8 @@ jobs:
       - uses: actions/checkout@v7.0.1
 
       - uses: usadamasa/gh-manage/actions/setup-nix@main
+        with:
+          cache: false
 
       - name: Run shellcheck
         run: shellcheck .github/scripts/*.sh
@@ -73,6 +80,8 @@ jobs:
 
       # smoke は devShell の go と lint ツールを PATH に要るので devShell も入れる
       - uses: usadamasa/gh-manage/actions/setup-nix@main
+        with:
+          cache: false
 
       - name: Build packages.default
         run: nix build .#default --out-link result -L
