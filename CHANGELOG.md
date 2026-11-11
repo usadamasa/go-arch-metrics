@@ -1,5 +1,15 @@
 # Changelog
 
+## [2026.1111.0](https://github.com/usadamasa/go-arch-metrics/compare/2026.1107.0...2026.1111.0) - 2026-11-11
+
+### Dependencies
+- chore(deps): Bump nixpkgs from `31ecbac` to `1d06008` by @dependabot[bot] in https://github.com/usadamasa/go-arch-metrics/pull/100
+- chore(deps): Bump Songmu/tagpr from 1.21.3 to 1.22.0 by @dependabot[bot] in https://github.com/usadamasa/go-arch-metrics/pull/99
+- chore(deps): Bump github.com/securego/gosec/v2 from 2.29.0 to 2.30.0 by @dependabot[bot] in https://github.com/usadamasa/go-arch-metrics/pull/93
+### Other Changes
+- Go を 1.27.4 に上げる (devShell・go.mod・配布 CLI) by @usadamasa in https://github.com/usadamasa/go-arch-metrics/pull/102
+- analyze-modularity: --quiet で --strict の判定結果だけを受け取れるようにする by @usadamasa in https://github.com/usadamasa/go-arch-metrics/pull/105
+
 ## [2026.1107.0](https://github.com/usadamasa/go-arch-metrics/compare/2026.1030.0...2026.1107.0) - 2026-11-07
 
 ### Dependencies
