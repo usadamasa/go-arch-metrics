@@ -1,12 +1,8 @@
 module github.com/usadamasa/go-arch-metrics
 
-// GO-2026-4602 (FileInfo can escape from a Root in os) は go1.26.1 で修正された｡
-// os.ReadDir を呼ぶので、go1.26.0 でビルドすると govulncheck が拾う｡
-go 1.26.1
-
-// GO-2026-6809 (crypto/x509) は go1.26.10 で修正された。clone してビルドするときに
-// GOTOOLCHAIN=auto なら古い go がこの版へ切り替える。go 行は利用側の要求になるので上げない
-toolchain go1.26.10
+// go1.27.4 で net/http と cmd/go などの脆弱性 (CVE-2026-97054、CVE-2026-97033〜97043) が直った。
+// GOTOOLCHAIN=local の手元ビルドでも、これより古い Go では失敗させる
+go 1.27.4
 
 require (
 	github.com/securego/gosec/v2 v2.30.0

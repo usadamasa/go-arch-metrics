@@ -69,10 +69,9 @@ go get -tool github.com/usadamasa/go-arch-metrics/cmd/arch-baseline@"$VERSION"
 pseudo-version (`v0.0.0-<日時>-<commit の先頭 12 桁>`) に解決され、go.mod の require はその commit に固定される。
 CI のコマンドは `go tool vulncheck ./...` のように `go tool` を前に付けて書く。
 
-- 対象プロジェクトの go.mod の `go` 行は 1.26.1 以上が要る (この plugin のモジュールの要求)。
+- 対象プロジェクトの go.mod の `go` 行は 1.27.4 以上が要る (この plugin のモジュールの要求)。
   `golang.org/x/vuln` などの依存も indirect の require として入る
-- CLI は対象プロジェクトの go でビルドされる (この plugin の go.mod の `toolchain` 行は依存側では効かない)。
-  crypto/x509 の GO-2026-6809 が直った go1.26.10 / go1.27.3 以上で動かす
+- CLI は対象プロジェクトの go でビルドされる
 - `go-arch-lint` は PATH に置く。`analyze-arch-lint` が PATH から呼ぶので、tool directive に入れると
   `arch-baseline` は動いても `analyze-arch-lint` が見つけられない
 

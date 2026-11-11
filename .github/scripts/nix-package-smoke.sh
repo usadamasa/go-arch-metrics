@@ -34,10 +34,11 @@ PATH="${BIN_DIR}:${PATH}" "${BIN_DIR}/arch-baseline" . "${work}/baseline.json"
 jq -e '.modularity.summary.total_packages > 0 and (.golangci_lint | has("Issues"))' "${work}/baseline.json"
 
 printf '%s\n' "--- vulncheck ---"
-# fmt.Println を呼ぶモジュールを testdata の DB で測り、標準ライブラリの脆弱性 (GO-9999-0001) を拾えるかを見る
+# fmt.Println を呼ぶモジュールを testdata の DB で測り、標準ライブラリの脆弱性 (GO-9999-0001) を拾えるかを見る。
+# go 行は利用側と同じ 1.27.4 にする。vulncheck は自分をビルドした Go より新しい go 行を測れない
 fixture="${work}/fixture"
 mkdir "$fixture"
-printf '%s\n' "module example.com/fixture" "" "go 1.26" >"${fixture}/go.mod"
+printf '%s\n' "module example.com/fixture" "" "go 1.27.4" >"${fixture}/go.mod"
 printf '%s\n' "package main" "" 'import "fmt"' "" 'func main() { fmt.Println("hello") }' >"${fixture}/main.go"
 
 rc=0
