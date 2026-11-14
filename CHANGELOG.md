@@ -1,5 +1,10 @@
 # Changelog
 
+## [2026.1114.1](https://github.com/usadamasa/go-arch-metrics/compare/2026.1114.0...2026.1114.1) - 2026-11-14
+
+### Dependencies
+- chore(deps): Bump nixpkgs from `1d06008` to `f9a75f4` by @dependabot[bot] in https://github.com/usadamasa/go-arch-metrics/pull/103
+
 ## [2026.1114.0](https://github.com/usadamasa/go-arch-metrics/compare/2026.1111.1...2026.1114.0) - 2026-11-14
 
 ### Other Changes
