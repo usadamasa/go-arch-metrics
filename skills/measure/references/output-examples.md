@@ -114,7 +114,7 @@ exit code は指摘ありでも実行の失敗でも 1 なので、arch-baseline
     {
       "type": "structurally_constrained", "package": "internal/config",
       "value": 1, "limit": 0,
-      "message": "構造制約: Ce=0, Ca=4 のため D=1.00 はトポロジー由来 (情報のみ。--strict の失敗には数えない)",
+      "message": "構造制約: Ce=0, Ca=4 のため D=1.00 はトポロジー由来 (--strict でも exit 1 にならない)",
       "actionable": false
     }
   ]

@@ -581,7 +581,7 @@
       {
         "actionable": false,
         "limit": 0.6,
-        "message": "public ratio が高い (1.00 > 0.60) (情報のみ。--strict の失敗には数えない)",
+        "message": "public ratio が高い (1.00 > 0.60) (--strict でも exit 1 にならない)",
         "package": "internal/schema",
         "type": "high_public_ratio",
         "value": 1
@@ -589,7 +589,7 @@
       {
         "actionable": false,
         "limit": 0,
-        "message": "Zone of Pain: 具象的 (A=0.00) で安定 (I=0.00) (情報のみ。--strict の失敗には数えない)",
+        "message": "Zone of Pain: 具象的 (A=0.00) で安定 (I=0.00) (--strict でも exit 1 にならない)",
         "package": "internal/schema",
         "type": "zone_of_pain",
         "value": 1
@@ -597,7 +597,7 @@
       {
         "actionable": false,
         "limit": 0,
-        "message": "構造制約: Ce=0, Ca=2 のため D=1.00 はトポロジー由来 (情報のみ。--strict の失敗には数えない)",
+        "message": "構造制約: Ce=0, Ca=2 のため D=1.00 はトポロジー由来 (--strict でも exit 1 にならない)",
         "package": "internal/schema",
         "type": "structurally_constrained",
         "value": 1
