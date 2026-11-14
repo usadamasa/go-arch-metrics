@@ -125,7 +125,7 @@
         "outlier_packages": { "type": "array", "items": { "type": "string" } },
         "total_packages": { "type": "integer" },
         "total_warnings": { "type": "integer" },
-        "actionable_warnings": { "type": "integer", "description": "--strict が失敗に数える警告の数" },
+        "actionable_warnings": { "type": "integer", "description": "--strict で exit 1 になる警告の数" },
         "main_sequence": { "$ref": "#/$defs/main_sequence_summary" }
       }
     },
@@ -161,7 +161,7 @@
         "limit_source": { "enum": ["statistical", "minimum"], "description": "LOC の警告にだけ付く" },
         "statistical_limit": { "type": "number", "description": "LOC の警告にだけ付く" },
         "message": { "type": "string" },
-        "actionable": { "type": "boolean", "description": "true だけが --strict の失敗に数えられる" }
+        "actionable": { "type": "boolean", "description": "true の警告だけが --strict で exit 1 になる" }
       }
     }
   }

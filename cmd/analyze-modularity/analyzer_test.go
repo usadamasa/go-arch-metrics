@@ -655,8 +655,8 @@ func TestGenerateMainSequenceWarnings(t *testing.T) {
 			if w.Actionable {
 				t.Errorf("%s: actionable=true, want false (トポロジー由来で直す手が無い)", w.Type)
 			}
-			if !strings.Contains(w.Message, "--strict") {
-				t.Errorf("%s: Message に --strict で数えない旨が無い: %q", w.Type, w.Message)
+			if !strings.HasSuffix(w.Message, "(--strict でも exit 1 にならない)") {
+				t.Errorf("%s: Message に --strict で exit 1 にならない旨が無い: %q", w.Type, w.Message)
 			}
 		}
 	})
@@ -678,8 +678,8 @@ func TestGenerateMainSequenceWarnings(t *testing.T) {
 		if warnings[0].Actionable {
 			t.Error("非揮発の zone_of_pain: actionable=true, want false")
 		}
-		if !strings.Contains(warnings[0].Message, "非揮発") || !strings.Contains(warnings[0].Message, "--strict") {
-			t.Errorf("Message に非揮発と --strict で数えない旨が無い: %q", warnings[0].Message)
+		if !strings.Contains(warnings[0].Message, "非揮発") || !strings.HasSuffix(warnings[0].Message, "(--strict でも exit 1 にならない)") {
+			t.Errorf("Message に非揮発と --strict で exit 1 にならない旨が無い: %q", warnings[0].Message)
 		}
 	})
 

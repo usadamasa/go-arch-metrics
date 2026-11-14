@@ -418,7 +418,7 @@ func (j *Package) UnmarshalJSON(value []byte) error {
 }
 
 type Summary struct {
-	// --strict が失敗に数える警告の数
+	// --strict で exit 1 になる警告の数
 	ActionableWarnings int `json:"actionable_warnings"`
 
 	// MainSequence corresponds to the JSON schema field "main_sequence".
@@ -541,7 +541,7 @@ func (j *VulncheckResult) UnmarshalJSON(value []byte) error {
 }
 
 type Warning struct {
-	// true だけが --strict の失敗に数えられる
+	// true の警告だけが --strict で exit 1 になる
 	Actionable bool `json:"actionable"`
 
 	// Limit corresponds to the JSON schema field "limit".
