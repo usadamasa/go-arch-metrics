@@ -777,7 +777,7 @@ func TestAnalyzeModularityのMainSequence集計をサマリに出す(t *testing.
 		"アクション可能 Distance > 0.5: 1 件",
 		"構造制約パッケージ数: 1",
 		"非揮発の Zone of Pain (直近 200 commit で 5 回未満): 2 件",
-		"警告数: 3 (うち --strict が失敗に数えるもの: 1)",
+		"警告数: 3 (うち --strict で exit 1 になるもの: 1)",
 		"最大 Distance (アクション可能): 0.7",
 	)
 	if got := f.result(f.defaultJSON(), "modularity", "summary", "main_sequence", "actionable_count"); got != 1.0 {

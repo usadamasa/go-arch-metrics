@@ -157,7 +157,7 @@ func generateAllWarnings(packages []PackageResult, maxPublicRatio float64, locTh
 	return all
 }
 
-// countActionable は --strict が失敗に数える警告の件数を返す｡
+// countActionable は --strict で exit 1 になる警告の件数を返す｡
 func countActionable(warnings []Warning) int {
 	n := 0
 	for _, w := range warnings {
@@ -168,7 +168,7 @@ func countActionable(warnings []Warning) int {
 	return n
 }
 
-// writeActionableWarnings は --strict が失敗に数える警告を 1 行 1 件で w へ書く｡
+// writeActionableWarnings は --strict で exit 1 になる警告を 1 行 1 件で w へ書く｡
 func writeActionableWarnings(w io.Writer, warnings []Warning) error {
 	for _, warning := range warnings {
 		if !warning.Actionable {

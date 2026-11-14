@@ -230,7 +230,7 @@ func printModularity(w *section, s *schema.Summary) {
 	w.printf("パッケージ数: %d\n", s.TotalPackages)
 	w.printf("平均 LOC: %d\n", int(s.MeanLOC))
 	w.printf("平均 public ratio: %d%%\n", int(s.MeanPublicRatio*100))
-	w.printf("警告数: %d (うち --strict が失敗に数えるもの: %d)\n", s.TotalWarnings, s.ActionableWarnings)
+	w.printf("警告数: %d (うち --strict で exit 1 になるもの: %d)\n", s.TotalWarnings, s.ActionableWarnings)
 	if len(s.OutlierPackages) > 0 {
 		w.printf("外れ値パッケージ: %s\n", strings.Join(s.OutlierPackages, ", "))
 	}

@@ -98,7 +98,7 @@ type Stats struct {
 }
 
 // Warning は閾値超過の警告を表す｡
-// Actionable はコードを直せば消せる警告かどうかで、--strict は true のものだけを失敗に数える｡
+// Actionable はコードを直せば消せる警告かどうかで、--strict は true のものがあるときだけ exit 1 になる｡
 // LimitSource と StatisticalLimit は LOC の警告だけが持つ｡Limit が統計値と下限のどちらから来たかを示す
 type Warning = schema.Warning
 
@@ -377,8 +377,8 @@ func GenerateMainSequenceWarnings(pkg PackageResult) []Warning {
 	return warnings
 }
 
-// nonActionableSuffix は --strict が失敗に数えない警告の Message に付ける｡
-const nonActionableSuffix = " (情報のみ。--strict の失敗には数えない)"
+// nonActionableSuffix は --strict で exit 1 にならない警告の Message に付ける｡
+const nonActionableSuffix = " (--strict でも exit 1 にならない)"
 
 // isMainSequenceActionable は Zone と Distance の警告を、コードを直して消せるものとして扱うかを返す｡
 // summary.main_sequence.actionable_* の集計と同じ基準｡actionableWithoutBaseline の除外に加え、
