@@ -1,5 +1,10 @@
 # Changelog
 
+## [2026.1114.0](https://github.com/usadamasa/go-arch-metrics/compare/2026.1111.1...2026.1114.0) - 2026-11-14
+
+### Other Changes
+- --strict で exit 1 にならない警告の文言を分かる形に直す by @usadamasa in https://github.com/usadamasa/go-arch-metrics/pull/111
+
 ## [2026.1111.1](https://github.com/usadamasa/go-arch-metrics/compare/2026.1111.0...2026.1111.1) - 2026-11-11
 
 ### Dependencies
