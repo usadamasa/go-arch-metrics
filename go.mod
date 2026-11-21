@@ -7,17 +7,17 @@ go 1.27.4
 require (
 	github.com/securego/gosec/v2 v2.30.0
 	golang.org/x/crypto/x509roots/fallback v0.0.0-20261111072342-6c966a7517bf
-	golang.org/x/tools v0.52.0
-	golang.org/x/vuln v1.9.0
+	golang.org/x/tools v0.53.0
+	golang.org/x/vuln v1.10.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
 	github.com/ccojocar/zxcvbn-go v1.0.4 // indirect
-	golang.org/x/mod v0.42.0 // indirect
-	golang.org/x/sync v0.24.0 // indirect
-	golang.org/x/sys v0.49.0 // indirect
-	golang.org/x/telemetry v0.0.0-20261010193011-f71dc92da45e // indirect
+	golang.org/x/mod v0.43.0 // indirect
+	golang.org/x/sync v0.25.0 // indirect
+	golang.org/x/sys v0.50.0 // indirect
+	golang.org/x/telemetry v0.0.0-20261116191925-e77a43154acb // indirect
 )
 
 tool (
