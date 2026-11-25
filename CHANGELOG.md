@@ -1,5 +1,14 @@
 # Changelog
 
+## [2026.1125.0](https://github.com/usadamasa/go-arch-metrics/compare/2026.1114.0...2026.1125.0) - 2026-11-25
+
+### Dependencies
+- chore(deps): Bump nixpkgs from `1d06008` to `f9a75f4` by @dependabot[bot] in https://github.com/usadamasa/go-arch-metrics/pull/103
+- chore(deps): Bump nixpkgs from `f9a75f4` to `0490633` by @dependabot[bot] in https://github.com/usadamasa/go-arch-metrics/pull/119
+- chore(deps): Bump actions/create-github-app-token from 3.3.0 to 3.4.0 by @dependabot[bot] in https://github.com/usadamasa/go-arch-metrics/pull/116
+- chore(deps): Bump golang.org/x/tools from 0.52.0 to 0.53.0 by @dependabot[bot] in https://github.com/usadamasa/go-arch-metrics/pull/118
+- chore(deps): Bump golang.org/x/vuln from 1.9.0 to 1.10.0 by @dependabot[bot] in https://github.com/usadamasa/go-arch-metrics/pull/117
+
 ## [2026.1114.0](https://github.com/usadamasa/go-arch-metrics/compare/2026.1111.1...2026.1114.0) - 2026-11-14
 
 ### Other Changes
