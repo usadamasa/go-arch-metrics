@@ -8,7 +8,7 @@ require (
 	github.com/securego/gosec/v2 v2.30.0
 	golang.org/x/crypto/x509roots/fallback v0.0.0-20261111072342-6c966a7517bf
 	golang.org/x/tools v0.53.0
-	golang.org/x/vuln v1.9.0
+	golang.org/x/vuln v1.10.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
